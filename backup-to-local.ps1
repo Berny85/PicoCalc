@@ -1,5 +1,5 @@
 # Backup vom NUC auf lokalen Rechner ziehen
-$NUC_IP = "192.168.1.101"
+$NUC_IP = "192.168.50.8"
 $BACKUP_DIR = "$env:USERPROFILE\Documents\PicoCalc-Backups"
 $DATE = Get-Date -Format "yyyy-MM-dd_HH-mm"
 

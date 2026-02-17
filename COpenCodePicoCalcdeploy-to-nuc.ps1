@@ -1,4 +1,4 @@
-﻿# Deployment Script für PicoCalc
+# Deployment Script für PicoCalc
 # Dieses Script pusht den Code zu GitHub und deployed auf den NUC
 
 $NUC_IP = "192.168.50.8"
@@ -53,8 +53,8 @@ Write-Host "      Deployment erfolgreich" -ForegroundColor Green
 # 3. Status prüfen
 Write-Host "[3/3] Prüfe Container-Status..." -ForegroundColor Yellow
 Start-Sleep -Seconds 2
-$status = ssh root@$NUC_IP "docker compose -f $NUC_PATH/docker-compose.prod.yml ps --services --filter 'status=running' | wc -l"
-$status = [int]$status.Trim()
+$statusOutput = ssh root@$NUC_IP "docker compose -f $NUC_PATH/docker-compose.prod.yml ps --services --filter 'status=running' 2>/dev/null | wc -l"
+$status = [int]$statusOutput.Trim()
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
@@ -62,9 +62,12 @@ Write-Host "Deployment erfolgreich!" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "Services:" -ForegroundColor Yellow
-Write-Host "  PicoCalc App: http://$NUC_IP`:5000" -ForegroundColor Cyan
-Write-Host "  Portainer:    http://$NUC_IP`:9000" -ForegroundColor Cyan
-Write-Host "  Dozzle:       http://$NUC_IP`:8080" -ForegroundColor Cyan
+$appUrl = "http://" + $NUC_IP + ":5000"
+$portainerUrl = "http://" + $NUC_IP + ":9000"
+$dozzleUrl = "http://" + $NUC_IP + ":8080"
+Write-Host "  PicoCalc App: $appUrl" -ForegroundColor Cyan
+Write-Host "  Portainer:    $portainerUrl" -ForegroundColor Cyan
+Write-Host "  Dozzle:       $dozzleUrl" -ForegroundColor Cyan
 Write-Host ""
 
 if ($status -ge 3) {
