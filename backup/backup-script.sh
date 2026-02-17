@@ -5,7 +5,7 @@
 set -e
 
 CONTAINER_NAME="picocalc-db"
-BACKUP_DIR="/mnt/user/backups/print-calculator"
+BACKUP_DIR="/mnt/user/backups/picocalc"
 DATE=$(date +%Y%m%d_%H%M%S)
 DB_NAME="printcalc"
 DB_USER="printuser"
@@ -27,7 +27,7 @@ find "$BACKUP_DIR" -name "base_*.dump.gz" -mtime +14 -delete
 
 # WAL-Archive bereinigen (älter als 14 Tage)
 echo "[$(date)] Bereinige WAL-Archive..."
-find "/mnt/user/backups/print-calculator/wal" -type f -mtime +14 -delete
+find "/mnt/user/backups/picocalc/wal" -type f -mtime +14 -delete
 
 echo "[$(date)] Backup abgeschlossen: base_$DATE.dump.gz"
 echo "[$(date)] Backup-Größe: $(du -h "$BACKUP_DIR/base_$DATE.dump.gz" | cut -f1)"

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Maschinen - Produkt Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2>Maschinen-Verwaltung</h2>
+        <a href="/machines/new" class="btn btn-primary">+ Neue Maschine</a>
+    </div>
+    
+    {% if machines %}
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Typ</th>
+                <th>Abschreibung</th>
+                <th>Abschreibung (€)</th>
+                <th>Lebensdauer (h)</th>
+                <th>Strom (kW)</th>
+                <th>Kosten/Std (€)</th>
+                <th>Aktionen</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for m in machines %}
+            <tr>
+                <td><strong>{{ m.name }}</strong></td>
+                <td>{{ m.machine_type }}</td>
+                <td>{{ m.description or '-' }}</td>
+                <td><strong>{{ m.depreciation_euro }} €</strong></td>
+                <td><strong>{{ m.lifespan_hours }} h</strong></td>
+                <td><strong>{{ m.power_kw }} kW</strong></td>
+                <td><strong>{{ "%.3f"|format(m.calculate_cost_per_hour()) }} €</strong></td>
+                <td>
+                    <a href="/machines/{{ m.id }}/edit" class="btn btn-primary" 
+                       style="padding: 6px 12px; font-size: 14px;">Bearbeiten</a>
+                    <form method="POST" action="/machines/{{ m.id }}/delete" style="display: inline;" 
+                          onsubmit="return confirm('Möchtest du diese Maschine wirklich löschen?');">
+                        <button type="submit" class="btn btn-danger" 
+                                style="padding: 6px 12px; font-size: 14px;">Löschen</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; padding: 40px; color: #666;">
+        Noch keine Maschinen vorhanden. <br>
+        <a href="/machines/new">Erste Maschine anlegen</a>
+    </p>
+    {% endif %}
+    
+    <div style="margin-top: 20px;">
+        <a href="/" class="btn btn-secondary">← Zurück zum Dashboard</a>
+    </div>
+</div>
+{% endblock %}

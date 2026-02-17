@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Produkt Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>{{ title }}</h2>
+    
+    <form method="POST" action="{% if material %}/materials/{{ material.id }}/update{% else %}/materials{% endif %}">
+        <div class="grid">
+            <div>
+                <div class="form-group">
+                    <label for="name">Materialname *</label>
+                    <input type="text" id="name" name="name" required 
+                           value="{{ material.name if material else '' }}"
+                           placeholder="z.B. PLA Filament, A4 Papier, Stickerbogen">
+                </div>
+                
+                <div class="form-group">
+                    <label for="material_type">Materialtyp *</label>
+                    <select id="material_type" name="material_type" required>
+                        {% for type_key, type_name in material_types %}
+                        <option value="{{ type_key }}" {% if material and material.material_type == type_key %}selected{% endif %}>
+                            {{ type_name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="brand">Marke (optional)</label>
+                    <input type="text" id="brand" name="brand" 
+                           value="{{ material.brand if material else '' }}"
+                           placeholder="z.B. Prusament, Xerox">
+                </div>
+            </div>
+            
+            <div>
+                <div class="form-group">
+                    <label for="color">Farbe (optional)</label>
+                    <input type="text" id="color" name="color" 
+                           value="{{ material.color if material else '' }}"
+                           placeholder="z.B. Schwarz, Weiß">
+                </div>
+                
+                <div class="form-group">
+                    <label for="unit">Einheit *</label>
+                    <select id="unit" name="unit" required>
+                        <option value="kg" {% if material and material.unit == 'kg' %}selected{% endif %}>Kilogramm (kg)</option>
+                        <option value="sheet" {% if material and material.unit == 'sheet' %}selected{% endif %}>Bogen (sheet)</option>
+                        <option value="piece" {% if material and material.unit == 'piece' %}selected{% endif %}>Stück (piece)</option>
+                        <option value="pack" {% if material and material.unit == 'pack' %}selected{% endif %}>Packung (pack)</option>
+                        <option value="m" {% if material and material.unit == 'm' %}selected{% endif %}>Meter (m)</option>
+                        <option value="m2" {% if material and material.unit == 'm2' %}selected{% endif %}>Quadratmeter (m²)</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="price_per_unit">Preis pro Einheit (€) *</label>
+                    <input type="number" id="price_per_unit" name="price_per_unit" 
+                           step="0.01" min="0" required
+                           value="{{ material.price_per_unit if material else '' }}">
+                </div>
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label for="description">Beschreibung (optional)</label>
+            <textarea id="description" name="description">{{ material.description if material else '' }}</textarea>
+        </div>
+        
+        <div class="actions">
+            <button type="submit" class="btn btn-primary">
+                {% if material %}Aktualisieren{% else %}Material speichern{% endif %}
+            </button>
+            <a href="/materials" class="btn btn-secondary">Abbrechen</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

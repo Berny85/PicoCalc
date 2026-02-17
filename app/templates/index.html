@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Produkt Kalkulator{% endblock %}
+
+{% block content %}
+<div class="stats-grid">
+    <div class="stat-card">
+        <h3>{{ total_products }}</h3>
+        <p>Gesamte Produkte</p>
+    </div>
+    <div class="stat-card">
+        <h3>{{ total_materials }}</h3>
+        <p>Materialien</p>
+    </div>
+    <div class="stat-card">
+        <h3>{{ total_machines }}</h3>
+        <p>Maschinen</p>
+    </div>
+    <div class="stat-card">
+        <h3>{{ avg_cost }} €</h3>
+        <p>Durchschnittskosten</p>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Neues Produkt anlegen</h2>
+    <div class="actions" style="margin-top: 20px;">
+        <a href="/products/3d-print/new" class="btn btn-primary">+ 3D-Druck</a>
+        <a href="/products/sticker-sheet/new" class="btn btn-primary">+ Stickerbogen</a>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Letzte Produkte</h2>
+    {% if products %}
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Typ</th>
+                <th>Material</th>
+                <th>Maschine</th>
+                <th>Einkaufspreis</th>
+                <th>Verkauf (50%)</th>
+                <th>Aktionen</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for product in products %}
+            {% set calc = product.calculate_costs() %}
+            <tr>
+                <td>{{ product.name }}</td>
+                <td>
+                    <span class="category-badge category-{{ product.product_type }}">
+                        {{ product.product_type }}
+                    </span>
+                </td>
+                <td>{{ product.get_material_summary() }}</td>
+                <td>{{ product.machine.name if product.machine else '-' }}</td>
+                <td>{{ calc.total_cost }} €</td>
+                <td>{{ calc.selling_price_50 }} €</td>
+                <td>
+                    <a href="/products/{{ product.id }}" class="btn btn-primary" style="padding: 6px 12px; font-size: 14px;">Anzeigen</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div style="margin-top: 20px;">
+        <a href="/products" class="btn btn-secondary">Alle Produkte anzeigen</a>
+    </div>
+    {% else %}
+    <p>Noch keine Produkte vorhanden.</p>
+    {% endif %}
+</div>
+
+<div class="grid">
+    <div class="card">
+        <h2>Schnellzugriff</h2>
+        <div class="actions">
+            <a href="/products" class="btn btn-secondary">Produktliste</a>
+            <a href="/materials" class="btn btn-secondary">Materialien</a>
+            <a href="/machines" class="btn btn-secondary">Maschinen</a>
+        </div>
+    </div>
+    
+    <div class="card">
+        <h2>Kategorien</h2>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px;">
+            {% for category in categories %}
+            <a href="/products?category={{ category }}" class="category-badge category-{{ category|lower }}">
+                {{ category }}
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

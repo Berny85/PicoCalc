@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Produkt Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>{{ title }}</h2>
+    
+    <form method="POST" action="{% if product %}/products/{{ product.id }}/update{% else %}/products/sticker-sheet{% endif %}">
+        <div class="grid">
+            <div>
+                <div class="form-group">
+                    <label for="name">Produktname *</label>
+                    <input type="text" id="name" name="name" required 
+                           value="{{ product.name if product else '' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="category">Kategorie</label>
+                    <select id="category" name="category">
+                        {% for cat in categories %}
+                        <option value="{{ cat }}" {% if product and product.category == cat %}selected{% endif %}>
+                            {{ cat }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            
+            <div>
+                <div class="form-group">
+                    <label for="sheet_material_id">Material (Bogen) *</label>
+                    <select id="sheet_material_id" name="sheet_material_id" required>
+                        <option value="">-- Bitte wählen --</option>
+                        {% for s in sticker_sheets %}
+                        <option value="{{ s.id }}" 
+                                {% if product and product.sheet_material_id == s.id %}selected{% endif %}>
+                            {{ s.name }} {% if s.brand %}({{ s.brand }}){% endif %} - {{ s.price_per_unit }}€/{{ s.unit }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <small style="color: #666;">
+                        <a href="/materials/new" target="_blank">Neues Material anlegen →</a>
+                    </small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="sheet_count">Anzahl Bögen *</label>
+                    <input type="number" id="sheet_count" name="sheet_count" 
+                           step="0.1" min="0" required
+                           value="{{ product.sheet_count if product else '' }}"
+                           placeholder="z.B. 10">
+                </div>
+            </div>
+        </div>
+        
+        <h3 style="margin-top: 30px; color: #667eea;">Maschine</h3>
+        <div class="grid">
+            <div>
+                <div class="form-group">
+                    <label for="machine_id">Genutzte Maschine *</label>
+                    <select id="machine_id" name="machine_id" required>
+                        {% if not machines or not product %}
+                        <option value="">-- Bitte wählen --</option>
+                        {% endif %}
+                        {% for m in machines %}
+                        <option value="{{ m.id }}" 
+                                data-cost="{{ m.calculate_cost_per_hour() }}"
+                                {% if product and product.machine_id == m.id %}selected{% endif %}
+                                {% if not product and loop.first %}selected{% endif %}>
+                            {{ m.name }} ({{ "%.3f"|format(m.calculate_cost_per_hour()) }} €/h)
+                            {% if m.machine_type == '3d_printer' %}- Drucker{% endif %}
+                            {% if m.machine_type == 'cutter_plotter' %}- Plotter{% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <small style="color: #666;">
+                        <a href="/machines" target="_blank">Maschinen verwalten →</a>
+                    </small>
+                </div>
+            </div>
+            
+            <div>
+                <div class="form-group">
+                    <label>Berechnete Kosten pro Stunde</label>
+                    <div id="machine-cost-display" style="padding: 10px; background: #f8f9fa; border-radius: 4px;">
+                        {% if product and product.machine %}
+                            {{ "%.2f"|format(product.machine.calculate_cost_per_hour()) }} €/h
+                            {% if product.cut_time_hours > 0 %}
+                                (Schneiden: {{ product.cut_time_hours }}h × {{ "%.2f"|format(product.machine.calculate_cost_per_hour()) }} €/h)
+                            {% endif %}
+                        {% else %}
+                            Maschine auswählen...
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <h3 style="margin-top: 30px; color: #667eea;">Produktion</h3>
+        <div class="grid">
+            <div>
+                <div class="form-group">
+                    <label for="cut_time_hours">Schneidezeit (Stunden)</label>
+                    <input type="number" id="cut_time_hours" name="cut_time_hours" 
+                           step="0.1" min="0"
+                           value="{{ product.cut_time_hours if product else '0' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="labor_hours">Arbeitsstunden</label>
+                    <input type="number" id="labor_hours" name="labor_hours" 
+                           step="0.1" min="0"
+                           value="{{ product.labor_hours if product else '0' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="labor_rate_per_hour">Stundensatz (€/h)</label>
+                    <input type="number" id="labor_rate_per_hour" name="labor_rate_per_hour" 
+                           step="0.01" min="0"
+                           value="{{ product.labor_rate_per_hour if product else '20.00' }}">
+                </div>
+            </div>
+            
+            <div>
+                <div class="form-group">
+                    <label for="packaging_cost">Verpackungskosten (€)</label>
+                    <input type="number" id="packaging_cost" name="packaging_cost" 
+                           step="0.01" min="0"
+                           value="{{ product.packaging_cost if product else '0' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="shipping_cost">Versandkosten (€)</label>
+                    <input type="number" id="shipping_cost" name="shipping_cost" 
+                           step="0.01" min="0"
+                           value="{{ product.shipping_cost if product else '0' }}">
+                </div>
+            </div>
+        </div>
+        
+        <div class="form-group" style="margin-top: 20px;">
+            <label for="notes">Notizen</label>
+            <textarea id="notes" name="notes">{{ product.notes if product else '' }}</textarea>
+        </div>
+        
+        <div class="actions">
+            <button type="submit" class="btn btn-primary">
+                {% if product %}Aktualisieren{% else %}Stickerbogen anlegen{% endif %}
+            </button>
+            <a href="{% if product %}/products/{{ product.id }}{% else %}/products{% endif %}" 
+               class="btn btn-secondary">Abbrechen</a>
+        </div>
+    </form>
+</div>
+
+<script>
+const machineSelect = document.getElementById('machine_id');
+const costDisplay = document.getElementById('machine-cost-display');
+const cutTimeInput = document.getElementById('cut_time_hours');
+
+function updateMachineCost() {
+    if (!machineSelect) return;
+    
+    const selectedOption = machineSelect.options[machineSelect.selectedIndex];
+    const selectedMachineId = machineSelect.value;
+    
+    {% if not product %}if (selectedMachineId) {
+        const options = machineSelect.options;
+        for (let i = 0; i < options.length; i++) {
+            if (options[i].value === selectedMachineId) {
+                const cost = parseFloat(options[i].getAttribute('data-cost'));
+                const cutHours = parseFloat(cutTimeInput.value) || 0;
+                costDisplay.innerHTML = cost ? (cutHours > 0 ? 
+                    cost.toFixed(2) + ' €/h' : 
+                    cost.toFixed(2) + ' €/h<br> Schneidzeit: ' + cutHours + 'h × ' + cost.toFixed(2) + ' €/h' : 
+                    'Maschine auswählen...');
+                break;
+            }
+        }
+    }{% endif %}
+}
+
+machineSelect.addEventListener('change', updateMachineCost);
+cutTimeInput.addEventListener('input', updateMachineCost);
+
+// Initial update on page load
+updateMachineCost();
+</script>
+{% endblock %}

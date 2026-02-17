@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Produkte - Produkt Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2>Alle Produkte</h2>
+        <div>
+            <a href="/products/3d-print/new" class="btn btn-primary">+ 3D-Druck</a>
+            <a href="/products/sticker-sheet/new" class="btn btn-primary">+ Stickerbogen</a>
+        </div>
+    </div>
+    
+    <form method="GET" action="/products" class="search-box">
+        <input type="text" name="search" placeholder="Produkt suchen..." 
+               value="{{ search }}">
+        <select name="category">
+            <option value="">Alle Kategorien</option>
+            {% for cat in categories %}
+            <option value="{{ cat }}" {% if category == cat %}selected{% endif %}>
+                {{ cat }}
+            </option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-primary">Suchen</button>
+        {% if search or category %}
+        <a href="/products" class="btn btn-secondary">Zurücksetzen</a>
+        {% endif %}
+    </form>
+    
+    {% if products %}
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Typ</th>
+                <th>Material</th>
+                <th>Einkaufspreis</th>
+                <th>Verkauf (30%)</th>
+                <th>Verkauf (50%)</th>
+                <th>Verkauf (100%)</th>
+                <th>Aktionen</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in products %}
+            <tr>
+                <td><strong>{{ item.product.name }}</strong></td>
+                <td>
+                    <span class="category-badge category-{{ item.product.product_type }}">
+                        {{ item.product.product_type }}
+                    </span>
+                </td>
+                <td>{{ item.product.get_material_summary() }}</td>
+                <td><strong>{{ item.calc.total_cost }} €</strong></td>
+                <td>{{ item.calc.selling_price_30 }} €</td>
+                <td>{{ item.calc.selling_price_50 }} €</td>
+                <td>{{ item.calc.selling_price_100 }} €</td>
+                <td>
+                    <a href="/products/{{ item.product.id }}" class="btn btn-primary" 
+                       style="padding: 6px 12px; font-size: 14px;">Details</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; padding: 40px; color: #666;">
+        {% if search or category %}
+        Keine Produkte gefunden. <a href="/products">Filter zurücksetzen</a>
+        {% else %}
+        Noch keine Produkte vorhanden. 
+        <a href="/products/3d-print/new">Erstes Produkt anlegen</a>
+        {% endif %}
+    </p>
+    {% endif %}
+</div>
+{% endblock %}

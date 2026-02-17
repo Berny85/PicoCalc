@@ -10,6 +10,6 @@ echo "Aktualisiere Code..."
 git pull origin main
 
 echo "Starte Container neu..."
-docker-compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml up -d
 
 echo "Fertig!"

@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}{{ product.name }} - Produkt Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: start;">
+        <div>
+            <h2>{{ product.name }}</h2>
+            <span class="category-badge category-{{ product.category|lower }}">
+                {{ product.category }}
+            </span>
+            <span class="category-badge category-{{ product.product_type }}" style="margin-left: 10px;">
+                {{ product.product_type }}
+            </span>
+        </div>
+        <div class="actions">
+            <a href="/products/{{ product.id }}/edit" class="btn btn-primary">Bearbeiten</a>
+            <form method="POST" action="/products/{{ product.id }}/delete" style="display: inline;" 
+                  onsubmit="return confirm('Möchtest du dieses Produkt wirklich löschen?');">
+                <button type="submit" class="btn btn-danger">Löschen</button>
+            </form>
+        </div>
+    </div>
+    
+    {% if product.notes %}
+    <div style="margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 4px;">
+        <strong>Notizen:</strong><br>
+        {{ product.notes }}
+    </div>
+    {% endif %}
+</div>
+
+<div class="grid">
+    <div class="card">
+        <h2>Material</h2>
+        
+        {% if product.product_type == '3d_print' %}
+        <table>
+            <tr>
+                <td>Filament:</td>
+                <td><strong>{{ product.filament_material.name if product.filament_material else '-' }}</strong></td>
+            </tr>
+            <tr>
+                <td>Gewicht:</td>
+                <td><strong>{{ product.filament_weight_g }} g</strong></td>
+            </tr>
+            <tr>
+                <td>Preis/kg:</td>
+                <td><strong>{{ product.filament_material.price_per_unit if product.filament_material else '0' }} €</strong></td>
+            </tr>
+            <tr style="border-top: 2px solid #667eea;">
+                <td>Materialkosten:</td>
+                <td><strong>{{ calc.material_cost }} €</strong></td>
+            </tr>
+        </table>
+        {% elif product.product_type == 'sticker_sheet' %}
+        <table>
+            <tr>
+                <td>Material:</td>
+                <td><strong>{{ product.sheet_material.name if product.sheet_material else '-' }}</strong></td>
+            </tr>
+            <tr>
+                <td>Anzahl Bögen:</td>
+                <td><strong>{{ product.sheet_count }}</strong></td>
+            </tr>
+            <tr>
+                <td>Preis/Bogen:</td>
+                <td><strong>{{ product.sheet_material.price_per_unit if product.sheet_material else '0' }} €</strong></td>
+            </tr>
+            <tr style="border-top: 2px solid #667eea;">
+                <td>Materialkosten:</td>
+                <td><strong>{{ calc.material_cost }} €</strong></td>
+            </tr>
+        </table>
+        {% endif %}
+        
+        <h3 style="margin-top: 30px;">Weitere Kosten</h3>
+        <table>
+            <tr>
+                <td>Verpackung:</td>
+                <td><strong>{{ product.packaging_cost }} €</strong></td>
+            </tr>
+            <tr>
+                <td>Versand:</td>
+                <td><strong>{{ product.shipping_cost }} €</strong></td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="card">
+        <h2>Produktion & Arbeit</h2>
+        <table>
+            {% if product.product_type == '3d_print' %}
+            <tr style="border-bottom: 2px solid #667eea;">
+                <td>Druckzeit:</td>
+                <td><strong>{{ product.print_time_hours }} h</strong></td>
+            </tr>
+            {% elif product.product_type == 'sticker_sheet' %}
+            <tr style="border-bottom: 2px solid #667eea;">
+                <td>Schneidezeit:</td>
+                <td><strong>{{ product.cut_time_hours }} h</strong></td>
+            </tr>
+            {% endif %}
+            <tr>
+                <td>Genutzte Maschine:</td>
+                <td><strong>{{ product.machine.name if product.machine else '-' }}</strong></td>
+            </tr>
+            <tr>
+                <td>Maschinenkosten/Std:</td>
+                <td><strong>{{ calc.machine_cost_per_hour }} €/h</strong></td>
+            </tr>
+            <tr>
+                <td>Maschinenkosten:</td>
+                <td><strong>{{ calc.machine_cost }} €</strong></td>
+            </tr>
+            <tr style="border-top: 2px solid #667eea;">
+                <td>Arbeitsstunden:</td>
+                <td><strong>{{ product.labor_hours }} h</strong></td>
+            </tr>
+            <tr>
+                <td>Stundensatz:</td>
+                <td><strong>{{ product.labor_rate_per_hour }} €/h</strong></td>
+            </tr>
+            <tr>
+                <td>Arbeitskosten:</td>
+                <td><strong>{{ calc.labor_cost }} €</strong></td>
+            </tr>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Kalkulation</h2>
+    <div class="calculation-box">
+        <h3>Einkaufspreis (Selbstkosten)</h3>
+        <div class="price-item" style="margin-bottom: 20px;">
+            <div class="label">Gesamtkosten</div>
+            <div class="value" style="font-size: 2rem;">{{ calc.total_cost }} €</div>
+        </div>
+        
+        <div style="margin: 20px 0; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 4px;">
+            <strong>Kostenaufschlüsselung:</strong><br>
+            Material: {{ calc.material_cost }} € | 
+            Maschine: {{ calc.machine_cost }} € | 
+            Arbeit: {{ calc.labor_cost }} € | 
+            Verpackung/Versand: {{ calc.packaging_shipping }} €
+        </div>
+        
+        <h3 style="margin-top: 30px;">Verkaufspreise</h3>
+        <div class="price-grid">
+            <div class="price-item">
+                <div class="label">Mit 30% Marge</div>
+                <div class="value">{{ calc.selling_price_30 }} €</div>
+            </div>
+            <div class="price-item">
+                <div class="label">Mit 50% Marge</div>
+                <div class="value">{{ calc.selling_price_50 }} €</div>
+            </div>
+            <div class="price-item">
+                <div class="label">Mit 100% Marge</div>
+                <div class="value">{{ calc.selling_price_100 }} €</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Metadaten</h2>
+    <table>
+        <tr>
+            <td>Erstellt am:</td>
+            <td>{{ product.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
+        </tr>
+        <tr>
+            <td>Zuletzt bearbeitet:</td>
+            <td>{{ product.updated_at.strftime('%d.%m.%Y %H:%M') }}</td>
+        </tr>
+    </table>
+</div>
+
+<div class="actions">
+    <a href="/products" class="btn btn-secondary">← Zurück zur Liste</a>
+</div>
+{% endblock %}

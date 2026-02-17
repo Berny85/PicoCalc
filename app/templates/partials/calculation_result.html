@@ -1,0 +1,22 @@
+<div class="calculation-box" id="calculation-result">
+    <h3>Berechnete Preise</h3>
+    <div class="price-item" style="margin-bottom: 20px;">
+        <div class="label">Einkaufspreis (Selbstkosten)</div>
+        <div class="value" style="font-size: 1.8rem;">{{ calc.total_cost }} €</div>
+    </div>
+    
+    <div class="price-grid">
+        <div class="price-item">
+            <div class="label">Mit 30% Marge</div>
+            <div class="value">{{ calc.selling_price_30 }} €</div>
+        </div>
+        <div class="price-item">
+            <div class="label">Mit 50% Marge</div>
+            <div class="value">{{ calc.selling_price_50 }} €</div>
+        </div>
+        <div class="price-item">
+            <div class="label">Mit 100% Marge</div>
+            <div class="value">{{ calc.selling_price_100 }} €</div>
+        </div>
+    </div>
+</div>

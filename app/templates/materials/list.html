@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Materialien - Produkt Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2>Material-Datenbank</h2>
+        <a href="/materials/new" class="btn btn-primary">+ Neues Material</a>
+    </div>
+    
+    <form method="GET" action="/materials" class="search-box">
+        <select name="material_type" onchange="this.form.submit()">
+            <option value="">Alle Materialtypen</option>
+            {% for type_key, type_name in material_types %}
+            <option value="{{ type_key }}" {% if material_type == type_key %}selected{% endif %}>
+                {{ type_name }}
+            </option>
+            {% endfor %}
+        </select>
+        {% if material_type %}
+        <a href="/materials" class="btn btn-secondary">Zurücksetzen</a>
+        {% endif %}
+    </form>
+    
+    {% if materials %}
+    <table>
+        <thead>
+            <tr>
+                <th>Typ</th>
+                <th>Name</th>
+                <th>Marke</th>
+                <th>Farbe</th>
+                <th>Preis/Einheit</th>
+                <th>Einheit</th>
+                <th>Aktionen</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for m in materials %}
+            <tr>
+                <td>
+                    <span class="category-badge category-{{ m.material_type }}">
+                        {{ m.material_type }}
+                    </span>
+                </td>
+                <td><strong>{{ m.name }}</strong></td>
+                <td>{{ m.brand or '-' }}</td>
+                <td>{{ m.color or '-' }}</td>
+                <td><strong>{{ m.price_per_unit }} €</strong></td>
+                <td>{{ m.unit }}</td>
+                <td>
+                    <a href="/materials/{{ m.id }}/edit" class="btn btn-primary" 
+                       style="padding: 6px 12px; font-size: 14px;">Bearbeiten</a>
+                    <form method="POST" action="/materials/{{ m.id }}/delete" 
+                          style="display: inline;" 
+                          onsubmit="return confirm('Möchtest du dieses Material wirklich löschen?');">
+                        <button type="submit" class="btn btn-danger" 
+                                style="padding: 6px 12px; font-size: 14px;">Löschen</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; padding: 40px; color: #666;">
+        Noch keine Materialien vorhanden. <br>
+        <a href="/materials/new">Erstes Material anlegen</a>
+    </p>
+    {% endif %}
+    
+    <div style="margin-top: 20px;">
+        <a href="/" class="btn btn-secondary">← Zurück zum Dashboard</a>
+    </div>
+</div>
+{% endblock %}

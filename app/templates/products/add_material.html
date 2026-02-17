@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Material hinzufügen - {{ product.name }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Material zu "{{ product.name }}" hinzufügen</h2>
+    
+    <form method="POST" action="/products/{{ product.id }}/materials/add">
+        <div class="form-group">
+            <label for="material_id">Material auswählen *</label>
+            <select id="material_id" name="material_id" required>
+                <option value="">-- Bitte wählen --</option>
+                {% for material in materials %}
+                <option value="{{ material.id }}" data-unit="{{ material.unit }}">
+                    {{ material.name }} 
+                    {% if material.brand %}({{ material.brand }}){% endif %}
+                    - {{ material.price_per_unit }} €/{{ material.unit }}
+                </option>
+                {% endfor %}
+            </select>
+            <small style="color: #666; display: block; margin-top: 5px;">
+                <a href="/materials/new" target="_blank">Neues Material anlegen →</a>
+            </small>
+        </div>
+        
+        <div class="form-group">
+            <label for="quantity">Menge *</label>
+            <input type="number" id="quantity" name="quantity" 
+                   step="0.01" min="0.01" required
+                   placeholder="z.B. 0.5 für 500g Filament oder 10 für 10 Bogen">
+            <small id="unit-hint" style="color: #666;">Einheit wird nach Materialauswahl angezeigt</small>
+        </div>
+        
+        <div class="actions">
+            <button type="submit" class="btn btn-primary">Material hinzufügen</button>
+            <a href="/products/{{ product.id }}" class="btn btn-secondary">Abbrechen</a>
+        </div>
+    </form>
+</div>
+
+<script>
+document.getElementById('material_id').addEventListener('change', function() {
+    const selectedOption = this.options[this.selectedIndex];
+    const unit = selectedOption.getAttribute('data-unit');
+    if (unit) {
+        document.getElementById('unit-hint').textContent = 'Einheit: ' + unit;
+    } else {
+        document.getElementById('unit-hint').textContent = 'Einheit wird nach Materialauswahl angezeigt';
+    }
+});
+</script>
+{% endblock %}

@@ -6,7 +6,7 @@ set -e
 
 CONTAINER_NAME="picocalc-db"
 APP_CONTAINER="picocalc-app"
-BACKUP_DIR="/mnt/user/backups/print-calculator"
+BACKUP_DIR="/mnt/user/backups/picocalc"
 DB_NAME="printcalc"
 DB_USER="printuser"
 

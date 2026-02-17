@@ -15,13 +15,13 @@ echo "[1/4] Aktualisiere Code aus GitHub..."
 git pull origin main
 
 echo "[2/4] Stoppe alte Container..."
-docker-compose -f docker-compose.prod.yml down
+docker compose -f docker-compose.prod.yml down
 
 echo "[3/4] Baue und starte neue Container..."
-docker-compose -f docker-compose.prod.yml up --build -d
+docker compose -f docker-compose.prod.yml up --build -d
 
 echo "[4/4] Prüfe Status..."
-docker-compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml ps
 
 echo ""
 echo "========================================"

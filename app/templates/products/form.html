@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Produkt Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>{{ title }}</h2>
+    
+    <form method="POST" action="{% if product %}/products/{{ product.id }}/update{% else %}/products{% endif %}">
+        <div class="grid">
+            <div>
+                <div class="form-group">
+                    <label for="name">Produktname *</label>
+                    <input type="text" id="name" name="name" required 
+                           value="{{ product.name if product else '' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="category">Kategorie</label>
+                    <select id="category" name="category">
+                        {% for cat in categories %}
+                        <option value="{{ cat }}" {% if product and product.category == cat %}selected{% endif %}>
+                            {{ cat }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="product_type">Produkttyp</label>
+                    <select id="product_type" name="product_type">
+                        {% for type_key, type_name in product_types %}
+                        <option value="{{ type_key }}" {% if product and product.product_type == type_key %}selected{% endif %}>
+                            {{ type_name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            
+            <div>
+                <div class="form-group">
+                    <label for="production_time_hours">Produktionszeit (Stunden)</label>
+                    <input type="number" id="production_time_hours" name="production_time_hours" 
+                           step="0.1" min="0"
+                           value="{{ product.production_time_hours if product else '0' }}">
+                    <small style="color: #666;">Druckzeit, Schneidezeit, etc.</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="packaging_cost">Verpackungskosten (€)</label>
+                    <input type="number" id="packaging_cost" name="packaging_cost" 
+                           step="0.01" min="0"
+                           value="{{ product.packaging_cost if product else '0' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="shipping_cost">Versandkosten (€)</label>
+                    <input type="number" id="shipping_cost" name="shipping_cost" 
+                           step="0.01" min="0"
+                           value="{{ product.shipping_cost if product else '0' }}">
+                </div>
+            </div>
+        </div>
+        
+        <div class="grid">
+            <div>
+                <div class="form-group">
+                    <label for="labor_hours">Arbeitsstunden</label>
+                    <input type="number" id="labor_hours" name="labor_hours" 
+                           step="0.1" min="0"
+                           value="{{ product.labor_hours if product else '0' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="labor_rate_per_hour">Stundensatz (€/h)</label>
+                    <input type="number" id="labor_rate_per_hour" name="labor_rate_per_hour" 
+                           step="0.01" min="0"
+                           value="{{ product.labor_rate_per_hour if product else '20.00' }}">
+                </div>
+            </div>
+            
+            <div>
+                <div class="form-group">
+                    <label for="machine_depreciation_euro">Maschinen-Abschreibung (€)</label>
+                    <input type="number" id="machine_depreciation_euro" name="machine_depreciation_euro" 
+                           step="0.01" min="0"
+                           value="{{ product.machine_depreciation_euro if product else '350' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="machine_lifespan_hours">Maschinen-Lebensdauer (h)</label>
+                    <input type="number" id="machine_lifespan_hours" name="machine_lifespan_hours" 
+                           step="1" min="0"
+                           value="{{ product.machine_lifespan_hours if product else '3000' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="machine_power_kw">Stromverbrauch (kW)</label>
+                    <input type="number" id="machine_power_kw" name="machine_power_kw" 
+                           step="0.001" min="0"
+                           value="{{ product.machine_power_kw if product else '0.1' }}">
+                    <small style="color: #666;">z.B. 0.1 für 100W</small>
+                </div>
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label for="notes">Notizen</label>
+            <textarea id="notes" name="notes">{{ product.notes if product else '' }}</textarea>
+        </div>
+        
+        <div class="actions">
+            <button type="submit" class="btn btn-primary">
+                {% if product %}Aktualisieren{% else %}Produkt anlegen{% endif %}
+            </button>
+            <a href="{% if product %}/products/{{ product.id }}{% else %}/products{% endif %}" 
+               class="btn btn-secondary">Abbrechen</a>
+        </div>
+    </form>
+</div>
+
+{% if product %}
+<div class="card" style="margin-top: 30px;">
+    <h2>Zugewiesene Materialien</h2>
+    
+    {% if product.materials %}
+    <table>
+        <thead>
+            <tr>
+                <th>Material</th>
+                <th>Typ</th>
+                <th>Menge</th>
+                <th>Einheit</th>
+                <th>Preis/Einheit</th>
+                <th>Kosten</th>
+                <th>Aktionen</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for pm in product.materials %}
+            <tr>
+                <td><strong>{{ pm.material.name }}</strong></td>
+                <td>{{ pm.material.material_type }}</td>
+                <td>{{ pm.quantity }}</td>
+                <td>{{ pm.material.unit }}</td>
+                <td>{{ pm.material.price_per_unit }} €</td>
+                <td>{{ "%.2f"|format(pm.quantity * pm.material.price_per_unit|float) }} €</td>
+                <td>
+                    <form method="POST" action="/products/{{ product.id }}/materials/{{ pm.id }}/remove" 
+                          style="display: inline;"
+                          onsubmit="return confirm('Material entfernen?');">
+                        <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;">Entfernen</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>Noch keine Materialien zugewiesen.</p>
+    {% endif %}
+    
+    <div style="margin-top: 15px;">
+        <a href="/products/{{ product.id }}/materials/add" class="btn btn-success">+ Material hinzufügen</a>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
