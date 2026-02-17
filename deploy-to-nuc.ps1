@@ -65,12 +65,13 @@ Write-Host "Services:" -ForegroundColor Yellow
 Write-Host "  PicoCalc App: http://$NUC_IP`:5000" -ForegroundColor Cyan
 Write-Host "  Portainer:    http://$NUC_IP`:9000" -ForegroundColor Cyan
 Write-Host "  Dozzle:       http://$NUC_IP`:8080" -ForegroundColor Cyan
+Write-Host "  pgAdmin:      http://$NUC_IP`:5050" -ForegroundColor Cyan
 Write-Host ""
 
-if ($status -ge 3) {
-    Write-Host "Container Status: $status/4 laufen" -ForegroundColor Green
+if ($status -ge 4) {
+    Write-Host "Container Status: $status/5 laufen" -ForegroundColor Green
 } else {
-    Write-Host "Container Status: $status/4 laufen" -ForegroundColor Red
+    Write-Host "Container Status: $status/5 laufen" -ForegroundColor Red
 }
 
 Write-Host ""
