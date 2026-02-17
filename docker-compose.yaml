@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  web:
+    build: ./app
+    ports:
+      - "5000:5000"
+    environment:
+      - DATABASE_URL=postgresql://printuser:printpass@db:5432/printcalc
+      - SECRET_KEY=dev-secret-key
+    depends_on:
+      - db
+    volumes:
+      - ./app:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 5000 --reload
+
+  db:
+    image: postgres:16-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=printcalc
+      - POSTGRES_USER=printuser
+      - POSTGRES_PASSWORD=printpass
+    ports:
+      - "5432:5432"
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    ports:
+      - "5050:80"
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@admin.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+
+volumes:
+  postgres_data:

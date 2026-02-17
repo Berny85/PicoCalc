@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: picocalc-db
+    volumes:
+      - /mnt/user/appdata/picocalc/db:/var/lib/postgresql/data
+      - /mnt/user/backups/picocalc/wal:/var/lib/postgresql/wal
+      - /mnt/user/appdata/picocalc/postgresql.conf:/etc/postgresql/postgresql.conf
+    environment:
+      - POSTGRES_DB=printcalc
+      - POSTGRES_USER=printuser
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U printuser -d printcalc"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: 
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: picocalc-app
+    ports:
+      - "5000:5000"
+    environment:
+      - DATABASE_URL=postgresql://printuser:${DB_PASSWORD}@db:5432/printcalc
+      - SECRET_KEY=${SECRET_KEY}
+    depends_on:
+      - db
+    restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  backup:
+    image: offen/docker-volume-backup:latest
+    container_name: picocalc-backup
+    volumes:
+      - /mnt/user/backups/picocalc:/backup
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - BACKUP_CRON_EXPRESSION=0 6,12,18 * * *
+      - BACKUP_RETENTION_DAYS=14
+      - BACKUP_FILENAME=backup-%Y-%m-%dT%H-%M-%S.tar.gz
+      - BACKUP_ARCHIVE=/backup
+      - BACKUP_STOP_CONTAINER_LABEL=picocalc-db
+      - BACKUP_STOP_CONTAINER_TIMEOUT=120
+      - BACKUP_PRUNING_PREFIX=backup-
+      - AWS_S3_BUCKET_NAME=
+      - BACKUP_NOTIFICATION_URL=
+    restart: unless-stopped
+    depends_on:
+      - db
+
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "8080:8080"
+    environment:
+      - DOZZLE_BASE=/
+      - DOZZLE_LEVEL=info
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  backup_data:
