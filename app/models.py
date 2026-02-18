@@ -146,12 +146,10 @@ class Product(Base):
         costs['material_cost'] = round(material_cost, 2)
         costs['sheet_count'] = float(self.sheet_count or 0)
         
-        # Schneidekosten
-        machine_cost_per_h = self.get_machine_cost_per_hour()
-        cut_cost = float(self.cut_time_hours or 0) * machine_cost_per_h
-        costs['machine_cost'] = round(cut_cost, 2)
-        costs['machine_cost_per_hour'] = round(machine_cost_per_h, 3)
-        costs['cut_time_hours'] = float(self.cut_time_hours or 0)
+        # Keine Maschinenkosten bei Stickerbögen (manuelle Arbeit)
+        costs['machine_cost'] = 0
+        costs['machine_cost_per_hour'] = 0
+        costs['cut_time_hours'] = 0
         
         return costs
     

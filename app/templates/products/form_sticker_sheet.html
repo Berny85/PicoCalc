@@ -54,49 +54,6 @@
             </div>
         </div>
         
-        <h3 style="margin-top: 30px; color: #667eea;">Maschine</h3>
-        <div class="grid">
-            <div>
-                <div class="form-group">
-                    <label for="machine_id">Genutzte Maschine *</label>
-                    <select id="machine_id" name="machine_id" required>
-                        {% if not machines or not product %}
-                        <option value="">-- Bitte wählen --</option>
-                        {% endif %}
-                        {% for m in machines %}
-                        <option value="{{ m.id }}" 
-                                data-cost="{{ m.calculate_cost_per_hour() }}"
-                                {% if product and product.machine_id == m.id %}selected{% endif %}
-                                {% if not product and loop.first %}selected{% endif %}>
-                            {{ m.name }} ({{ "%.3f"|format(m.calculate_cost_per_hour()) }} €/h)
-                            {% if m.machine_type == '3d_printer' %}- Drucker{% endif %}
-                            {% if m.machine_type == 'cutter_plotter' %}- Plotter{% endif %}
-                        </option>
-                        {% endfor %}
-                    </select>
-                    <small style="color: #666;">
-                        <a href="/machines" target="_blank">Maschinen verwalten →</a>
-                    </small>
-                </div>
-            </div>
-            
-            <div>
-                <div class="form-group">
-                    <label>Berechnete Kosten pro Stunde</label>
-                    <div id="machine-cost-display" style="padding: 10px; background: #f8f9fa; border-radius: 4px;">
-                        {% if product and product.machine %}
-                            {{ "%.2f"|format(product.machine.calculate_cost_per_hour()) }} €/h
-                            {% if product.cut_time_hours > 0 %}
-                                (Schneiden: {{ product.cut_time_hours }}h × {{ "%.2f"|format(product.machine.calculate_cost_per_hour()) }} €/h)
-                            {% endif %}
-                        {% else %}
-                            Maschine auswählen...
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-        </div>
-        
         <h3 style="margin-top: 30px; color: #667eea;">Produktion</h3>
         <div class="grid">
             <div>
@@ -154,37 +111,5 @@
     </form>
 </div>
 
-<script>
-const machineSelect = document.getElementById('machine_id');
-const costDisplay = document.getElementById('machine-cost-display');
-const cutTimeInput = document.getElementById('cut_time_hours');
 
-function updateMachineCost() {
-    if (!machineSelect) return;
-    
-    const selectedOption = machineSelect.options[machineSelect.selectedIndex];
-    const selectedMachineId = machineSelect.value;
-    
-    {% if not product %}if (selectedMachineId) {
-        const options = machineSelect.options;
-        for (let i = 0; i < options.length; i++) {
-            if (options[i].value === selectedMachineId) {
-                const cost = parseFloat(options[i].getAttribute('data-cost'));
-                const cutHours = parseFloat(cutTimeInput.value) || 0;
-                costDisplay.innerHTML = cost ? (cutHours > 0 ? 
-                    cost.toFixed(2) + ' €/h' : 
-                    cost.toFixed(2) + ' €/h<br> Schneidzeit: ' + cutHours + 'h × ' + cost.toFixed(2) + ' €/h' : 
-                    'Maschine auswählen...');
-                break;
-            }
-        }
-    }{% endif %}
-}
-
-machineSelect.addEventListener('change', updateMachineCost);
-cutTimeInput.addEventListener('input', updateMachineCost);
-
-// Initial update on page load
-updateMachineCost();
-</script>
 {% endblock %}

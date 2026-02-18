@@ -410,14 +410,12 @@ async def create_3d_print(
 async def new_sticker_sheet_form(request: Request, db: Session = Depends(get_db)):
     """Formular für neues Stickerbogen Produkt"""
     sticker_sheets = db.query(Material).filter(Material.material_type == "sticker_sheet").order_by(Material.name).all()
-    machines = db.query(Machine).filter(Machine.machine_type == "cutter_plotter").order_by(Machine.name).all()
     
     return templates.TemplateResponse("products/form_sticker_sheet.html", {
         "request": request,
         "product": None,
         "categories": CATEGORIES,
         "sticker_sheets": sticker_sheets,
-        "machines": machines,
         "title": "Neuer Stickerbogen"
     })
 
@@ -428,8 +426,6 @@ async def create_sticker_sheet(
     category: str = Form("Sonstiges"),
     sheet_material_id: int = Form(...),
     sheet_count: float = Form(...),
-    cut_time_hours: float = Form(0),
-    machine_id: int = Form(...),
     labor_hours: float = Form(0),
     labor_rate_per_hour: float = Form(20.00),
     packaging_cost: float = Form(0),
@@ -444,8 +440,6 @@ async def create_sticker_sheet(
         category=category,
         sheet_material_id=sheet_material_id,
         sheet_count=sheet_count,
-        cut_time_hours=cut_time_hours,
-        machine_id=machine_id,
         labor_hours=labor_hours,
         labor_rate_per_hour=labor_rate_per_hour,
         packaging_cost=packaging_cost,
@@ -478,12 +472,10 @@ async def view_product(product_id: int, request: Request, db: Session = Depends(
     elif product.product_type == "sticker_sheet":
         sticker_sheets = db.query(Material).filter(Material.material_type == "sticker_sheet").order_by(Material.name).all()
     
-    # Lade Maschinen je nach Typ
+    # Lade Maschinen je nach Typ (nur für 3D-Druck)
     machines = []
     if product.product_type == "3d_print":
         machines = db.query(Machine).filter(Machine.machine_type == "3d_printer").order_by(Machine.name).all()
-    elif product.product_type == "sticker_sheet":
-        machines = db.query(Machine).filter(Machine.machine_type == "cutter_plotter").order_by(Machine.name).all()
     
     return templates.TemplateResponse("products/detail.html", {
         "request": request,
@@ -506,12 +498,10 @@ async def edit_product_form(product_id: int, request: Request, db: Session = Dep
     filaments = db.query(Material).filter(Material.material_type == "filament").order_by(Material.name).all()
     sticker_sheets = db.query(Material).filter(Material.material_type == "sticker_sheet").order_by(Material.name).all()
     
-    # Lade entsprechende Maschinen
+    # Lade entsprechende Maschinen (nur für 3D-Druck)
     machines = []
     if product.product_type == "3d_print":
         machines = db.query(Machine).filter(Machine.machine_type == "3d_printer").order_by(Machine.name).all()
-    elif product.product_type == "sticker_sheet":
-        machines = db.query(Machine).filter(Machine.machine_type == "cutter_plotter").order_by(Machine.name).all()
     
     # Wähle das richtige Template je nach Produkttyp
     if product.product_type == "3d_print":
@@ -573,7 +563,8 @@ async def update_product(
         product.cut_time_hours = cut_time_hours
     
     # Gemeinsame Felder
-    product.machine_id = machine_id
+    if product.product_type == "3d_print":
+        product.machine_id = machine_id
     product.labor_hours = labor_hours
     product.labor_rate_per_hour = labor_rate_per_hour
     product.packaging_cost = packaging_cost
