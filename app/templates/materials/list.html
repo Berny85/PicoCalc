@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Materialien - Produkt Kalkulator{% endblock %}
+{% block title %}Materialien - Picobellu Kalkulator{% endblock %}
 
 {% block content %}
 <div class="card">
@@ -12,15 +12,16 @@
     <form method="GET" action="/materials" class="search-box">
         <select name="material_type" onchange="this.form.submit()">
             <option value="">Alle Materialtypen</option>
-            {% for type_key, type_name in material_types %}
-            <option value="{{ type_key }}" {% if material_type == type_key %}selected{% endif %}>
-                {{ type_name }}
+            {% for mt in material_types %}
+            <option value="{{ mt.key }}" {% if material_type == mt.key %}selected{% endif %}>
+                {{ mt.name }}
             </option>
             {% endfor %}
         </select>
         {% if material_type %}
         <a href="/materials" class="btn btn-secondary">Zurücksetzen</a>
         {% endif %}
+        <a href="/material-types" class="btn btn-success" style="margin-left: 10px;">Materialtypen verwalten</a>
     </form>
     
     {% if materials %}
@@ -40,9 +41,13 @@
             {% for m in materials %}
             <tr>
                 <td>
-                    <span class="category-badge category-{{ m.material_type }}">
-                        {{ m.material_type }}
-                    </span>
+                    {% for mt in material_types %}
+                        {% if mt.key == m.material_type %}
+                        <span class="category-badge category-{{ m.material_type }}">
+                            {{ mt.name }}
+                        </span>
+                        {% endif %}
+                    {% endfor %}
                 </td>
                 <td><strong>{{ m.name }}</strong></td>
                 <td>{{ m.brand or '-' }}</td>
@@ -64,7 +69,7 @@
         </tbody>
     </table>
     {% else %}
-    <p style="text-align: center; padding: 40px; color: #666;">
+    <p style="text-align: center; padding: 40px; color: var(--color-text-light);">
         Noch keine Materialien vorhanden. <br>
         <a href="/materials/new">Erstes Material anlegen</a>
     </p>
@@ -75,3 +80,5 @@
     </div>
 </div>
 {% endblock %}
+
+

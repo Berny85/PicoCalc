@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Picobellu Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>{{ title }}</h2>
+    
+    <form method="POST" action="{% if material_type %}/material-types/{{ material_type.id }}/update{% else %}/material-types{% endif %}">
+        <div class="grid">
+            <div>
+                <div class="form-group">
+                    <label for="key">Schlüssel (intern) *</label>
+                    <input type="text" id="key" name="key" required 
+                           value="{{ material_type.key if material_type else '' }}"
+                           placeholder="z.B. filament, sticker_sheet"
+                           {% if material_type %}readonly style="background-color: var(--color-bg-hover);"{% endif %}>
+                    <small style="color: var(--color-text-light);">
+                        Eindeutiger technischer Name (nur Kleinbuchstaben, Zahlen und Unterstriche). 
+                        {% if material_type %}Kann nicht geändert werden, da Materialien diesen Schlüssel verwenden.{% endif %}
+                    </small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="name">Anzeigename *</label>
+                    <input type="text" id="name" name="name" required 
+                           value="{{ material_type.name if material_type else '' }}"
+                           placeholder="z.B. 3D-Filament (€/kg)">
+                    <small style="color: var(--color-text-light);">Name wie er in Dropdown-Menüs angezeigt wird</small>
+                </div>
+            </div>
+            
+            <div>
+                <div class="form-group">
+                    <label for="sort_order">Sortierreihenfolge</label>
+                    <input type="number" id="sort_order" name="sort_order" 
+                           value="{{ material_type.sort_order if material_type else '0' }}"
+                           step="1" min="0">
+                    <small style="color: var(--color-text-light);">Niedrigere Zahlen erscheinen zuerst (0, 1, 2...)</small>
+                </div>
+                
+                {% if material_type %}
+                <div class="form-group">
+                    <label for="is_active">Status</label>
+                    <select id="is_active" name="is_active">
+                        <option value="1" {% if material_type.is_active == 1 %}selected{% endif %}>Aktiv</option>
+                        <option value="0" {% if material_type.is_active == 0 %}selected{% endif %}>Inaktiv</option>
+                    </select>
+                    <small style="color: var(--color-text-light);">Inaktive Typen werden in neuen Dropdowns nicht mehr angezeigt</small>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label for="description">Beschreibung</label>
+            <textarea id="description" name="description" rows="3">{{ material_type.description if material_type else '' }}</textarea>
+        </div>
+        
+        <div class="actions">
+            <button type="submit" class="btn btn-primary">
+                {% if material_type %}Aktualisieren{% else %}Materialtyp anlegen{% endif %}
+            </button>
+            <a href="/material-types" class="btn btn-secondary">Abbrechen</a>
+        </div>
+    </form>
+</div>
+
+<style>
+input[readonly] {
+    cursor: not-allowed;
+}
+</style>
+{% endblock %}
+
+

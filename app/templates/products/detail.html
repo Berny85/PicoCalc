@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ product.name }} - Produkt Kalkulator{% endblock %}
+{% block title %}{{ product.name }} - Picobellu Kalkulator{% endblock %}
 
 {% block content %}
 <div class="card">
@@ -24,7 +24,7 @@
     </div>
     
     {% if product.notes %}
-    <div style="margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 4px;">
+    <div style="margin-top: 20px; padding: 15px; background-color: var(--color-bg-hover); border-radius: 4px;">
         <strong>Notizen:</strong><br>
         {{ product.notes }}
     </div>
@@ -49,7 +49,7 @@
                 <td>Preis/kg:</td>
                 <td><strong>{{ product.filament_material.price_per_unit if product.filament_material else '0' }} €</strong></td>
             </tr>
-            <tr style="border-top: 2px solid #667eea;">
+            <tr style="border-top: 2px solid var(--color-primary-dark);">
                 <td>Materialkosten:</td>
                 <td><strong>{{ calc.material_cost }} €</strong></td>
             </tr>
@@ -68,10 +68,49 @@
                 <td>Preis/Bogen:</td>
                 <td><strong>{{ product.sheet_material.price_per_unit if product.sheet_material else '0' }} €</strong></td>
             </tr>
-            <tr style="border-top: 2px solid #667eea;">
+            <tr style="border-top: 2px solid var(--color-primary-dark);">
                 <td>Materialkosten:</td>
                 <td><strong>{{ calc.material_cost }} €</strong></td>
             </tr>
+        </table>
+        {% elif product.product_type == 'laser_engraving' %}
+        <table>
+            <tr>
+                <td>Material:</td>
+                <td><strong>{{ product.laser_material.name if product.laser_material else '-' }}</strong></td>
+            </tr>
+            <tr>
+                <td>Design:</td>
+                <td><strong>{{ product.laser_design_name or '-' }}</strong></td>
+            </tr>
+            <tr>
+                <td>Preis/Material:</td>
+                <td><strong>{{ product.laser_material.price_per_unit if product.laser_material else '0' }} €</strong></td>
+            </tr>
+            <tr style="border-top: 2px solid var(--color-primary-dark);">
+                <td>Materialkosten:</td>
+                <td><strong>{{ calc.material_cost }} €</strong></td>
+            </tr>
+        </table>
+        
+        <h3 style="margin-top: 30px;">Laser-Layer</h3>
+        <table>
+            <tr>
+                <td><strong>Layer 1:</strong></td>
+                <td>{{ calc.layer1.type }} | {{ calc.layer1.power }}% | {{ calc.layer1.speed }} mm/s | {{ calc.layer1.passes }}x</td>
+            </tr>
+            {% if calc.layer2 %}
+            <tr>
+                <td><strong>Layer 2:</strong></td>
+                <td>{{ calc.layer2.type }} | {{ calc.layer2.power }}% | {{ calc.layer2.speed }} mm/s | {{ calc.layer2.passes }}x</td>
+            </tr>
+            {% endif %}
+            {% if calc.layer3 %}
+            <tr>
+                <td><strong>Layer 3:</strong></td>
+                <td>{{ calc.layer3.type }} | {{ calc.layer3.power }}% | {{ calc.layer3.speed }} mm/s | {{ calc.layer3.passes }}x</td>
+            </tr>
+            {% endif %}
         </table>
         {% endif %}
         
@@ -92,12 +131,12 @@
         <h2>Produktion & Arbeit</h2>
         <table>
             {% if product.product_type == '3d_print' %}
-            <tr style="border-bottom: 2px solid #667eea;">
+            <tr style="border-bottom: 2px solid var(--color-primary-dark);">
                 <td>Druckzeit:</td>
                 <td><strong>{{ product.print_time_hours }} h</strong></td>
             </tr>
             {% elif product.product_type == 'sticker_sheet' %}
-            <tr style="border-bottom: 2px solid #667eea;">
+            <tr style="border-bottom: 2px solid var(--color-primary-dark);">
                 <td>Schneidezeit:</td>
                 <td><strong>{{ product.cut_time_hours }} h</strong></td>
             </tr>
@@ -114,7 +153,7 @@
                 <td>Maschinenkosten:</td>
                 <td><strong>{{ calc.machine_cost }} €</strong></td>
             </tr>
-            <tr style="border-top: 2px solid #667eea;">
+            <tr style="border-top: 2px solid var(--color-primary-dark);">
                 <td>Arbeitsstunden:</td>
                 <td><strong>{{ product.labor_hours }} h</strong></td>
             </tr>
@@ -183,3 +222,5 @@
     <a href="/products" class="btn btn-secondary">← Zurück zur Liste</a>
 </div>
 {% endblock %}
+
+

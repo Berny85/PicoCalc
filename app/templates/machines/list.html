@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Maschinen - Produkt Kalkulator{% endblock %}
+{% block title %}Maschinen - Picobellu Kalkulator{% endblock %}
 
 {% block content %}
 <div class="card">
@@ -47,7 +47,7 @@
         </tbody>
     </table>
     {% else %}
-    <p style="text-align: center; padding: 40px; color: #666;">
+    <p style="text-align: center; padding: 40px; color: var(--color-text-light);">
         Noch keine Maschinen vorhanden. <br>
         <a href="/machines/new">Erste Maschine anlegen</a>
     </p>
@@ -58,3 +58,5 @@
     </div>
 </div>
 {% endblock %}
+
+

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Produkte - Produkt Kalkulator{% endblock %}
+{% block title %}Produkte - Picobellu Kalkulator{% endblock %}
 
 {% block content %}
 <div class="card">
@@ -66,7 +66,7 @@
         </tbody>
     </table>
     {% else %}
-    <p style="text-align: center; padding: 40px; color: #666;">
+    <p style="text-align: center; padding: 40px; color: var(--color-text-light);">
         {% if search or category %}
         Keine Produkte gefunden. <a href="/products">Filter zurücksetzen</a>
         {% else %}
@@ -77,3 +77,5 @@
     {% endif %}
 </div>
 {% endblock %}
+
+

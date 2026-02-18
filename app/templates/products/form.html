@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ title }} - Produkt Kalkulator{% endblock %}
+{% block title %}{{ title }} - Picobellu Kalkulator{% endblock %}
 
 {% block content %}
 <div class="card">
@@ -44,7 +44,7 @@
                     <input type="number" id="production_time_hours" name="production_time_hours" 
                            step="0.1" min="0"
                            value="{{ product.production_time_hours if product else '0' }}">
-                    <small style="color: #666;">Druckzeit, Schneidezeit, etc.</small>
+                    <small style="color: var(--color-text-light);">Druckzeit, Schneidezeit, etc.</small>
                 </div>
                 
                 <div class="form-group">
@@ -100,7 +100,7 @@
                     <input type="number" id="machine_power_kw" name="machine_power_kw" 
                            step="0.001" min="0"
                            value="{{ product.machine_power_kw if product else '0.1' }}">
-                    <small style="color: #666;">z.B. 0.1 für 100W</small>
+                    <small style="color: var(--color-text-light);">z.B. 0.1 für 100W</small>
                 </div>
             </div>
         </div>
@@ -167,3 +167,5 @@
 </div>
 {% endif %}
 {% endblock %}
+
+

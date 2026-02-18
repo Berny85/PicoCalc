@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ title }} - Produkt Kalkulator{% endblock %}
+{% block title %}{{ title }} - Picobellu Kalkulator{% endblock %}
 
 {% block content %}
 <div class="card">
@@ -19,12 +19,15 @@
                 <div class="form-group">
                     <label for="material_type">Materialtyp *</label>
                     <select id="material_type" name="material_type" required>
-                        {% for type_key, type_name in material_types %}
-                        <option value="{{ type_key }}" {% if material and material.material_type == type_key %}selected{% endif %}>
-                            {{ type_name }}
+                        {% for mt in material_types %}
+                        <option value="{{ mt.key }}" {% if material and material.material_type == mt.key %}selected{% endif %}>
+                            {{ mt.name }}
                         </option>
                         {% endfor %}
                     </select>
+                    <small style="color: var(--color-text-light);">
+                        <a href="/material-types" target="_blank">Materialtypen verwalten →</a>
+                    </small>
                 </div>
                 
                 <div class="form-group">
@@ -74,7 +77,10 @@
                 {% if material %}Aktualisieren{% else %}Material speichern{% endif %}
             </button>
             <a href="/materials" class="btn btn-secondary">Abbrechen</a>
+            <a href="/material-types" class="btn btn-success" style="margin-left: auto;">Materialtypen verwalten</a>
         </div>
     </form>
 </div>
 {% endblock %}
+
+

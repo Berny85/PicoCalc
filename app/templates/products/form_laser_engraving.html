@@ -1,0 +1,422 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Picobellu Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>{{ title }}</h2>
+    
+    <form method="POST" action="{% if product %}/products/{{ product.id }}/update{% else %}/products/laser-engraving{% endif %}">
+        <div class="grid">
+            <div>
+                <div class="form-group">
+                    <label for="name">Produktname *</label>
+                    <input type="text" id="name" name="name" required 
+                           value="{{ product.name if product else '' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="category">Kategorie</label>
+                    <select id="category" name="category">
+                        {% for cat in categories %}
+                        <option value="{{ cat }}" {% if product and product.category == cat %}selected{% endif %}>
+                            {{ cat }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            
+            <div>
+                <div class="form-group">
+                    <label for="laser_material_id">Material *</label>
+                    <select id="laser_material_id" name="laser_material_id" required>
+                        <option value="">-- Bitte wählen --</option>
+                        {% for m in laser_materials %}
+                        <option value="{{ m.id }}" 
+                                {% if product and product.laser_material_id == m.id %}selected{% endif %}>
+                            {{ m.name }} {% if m.brand %}({{ m.brand }}){% endif %} - {{ m.price_per_unit }}€/{{ m.unit }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <small style="color: var(--color-text-light);">
+                        <a href="/materials/new" target="_blank">Neues Material anlegen →</a>
+                    </small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="laser_design_name">Design-Name *</label>
+                    <input type="text" id="laser_design_name" name="laser_design_name" required
+                           value="{{ product.laser_design_name if product else '' }}"
+                           placeholder="z.B. Logo Pico">
+                    <small style="color: var(--color-text-light);">
+                        Name oder Beschreibung des zu gravierenden Designs
+                    </small>
+                </div>
+            </div>
+        </div>
+        
+        <div id="layers-container">
+            <!-- Layer 1 (immer vorhanden) -->
+            <div class="layer-section" data-layer="1">
+                <h3 style="margin-top: 30px; color: var(--color-primary-dark);">
+                    Layer 1 (Haupt-Gravur) *
+                </h3>
+                <div class="grid">
+                    <div>
+                        <div class="form-group">
+                            <label for="laser1_type">Laser-Typ *</label>
+                            <select id="laser1_type" name="laser1_type" required>
+                                <option value="">-- Bitte wählen --</option>
+                                <option value="blau" {% if product and product.laser1_type == 'blau' %}selected{% endif %}>Blau (450nm, für Holz/Kunststoff)</option>
+                                <option value="ir" {% if product and product.laser1_type == 'ir' %}selected{% endif %}>IR (1064nm, für Metall)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="laser1_power_percent">Power (%)</label>
+                            <input type="number" id="laser1_power_percent" name="laser1_power_percent" 
+                                   step="0.1" min="0" max="100"
+                                   value="{{ product.laser1_power_percent if product else '80.0' }}">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="laser1_speed_mm_s">Geschwindigkeit (mm/s)</label>
+                            <input type="number" id="laser1_speed_mm_s" name="laser1_speed_mm_s" 
+                                   step="1" min="0"
+                                   value="{{ product.laser1_speed_mm_s if product else '200' }}">
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div class="form-group">
+                            <label for="laser1_passes">Durchläufe</label>
+                            <input type="number" id="laser1_passes" name="laser1_passes" 
+                                   step="1" min="1"
+                                   value="{{ product.laser1_passes if product else '1' }}">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="laser1_dpi">DPI</label>
+                            <input type="number" id="laser1_dpi" name="laser1_dpi" 
+                                   step="1" min="0"
+                                   value="{{ product.laser1_dpi if product else '300' }}">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="laser1_lines_per_cm">Lines per cm</label>
+                            <input type="number" id="laser1_lines_per_cm" name="laser1_lines_per_cm" 
+                                   step="1" min="0"
+                                   value="{{ product.laser1_lines_per_cm if product else '60' }}">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Layer 2 (optional) -->
+            <div class="layer-section" data-layer="2" style="display: {% if product and product.laser2_type %}block{% else %}none{% endif %};">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 30px;">
+                    <h3 style="color: var(--color-primary-dark); margin: 0;">Layer 2</h3>
+                    <button type="button" class="btn btn-danger btn-sm" onclick="removeLayer(2)" style="padding: 4px 12px; font-size: 0.85rem;">
+                        − Layer entfernen
+                    </button>
+                </div>
+                <div class="grid">
+                    <div>
+                        <div class="form-group">
+                            <label for="laser2_type">Laser-Typ</label>
+                            <select id="laser2_type" name="laser2_type">
+                                <option value="">-- Bitte wählen --</option>
+                                <option value="blau" {% if product and product.laser2_type == 'blau' %}selected{% endif %}>Blau (450nm, für Holz/Kunststoff)</option>
+                                <option value="ir" {% if product and product.laser2_type == 'ir' %}selected{% endif %}>IR (1064nm, für Metall)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="laser2_power_percent">Power (%)</label>
+                            <input type="number" id="laser2_power_percent" name="laser2_power_percent" 
+                                   step="0.1" min="0" max="100"
+                                   value="{{ product.laser2_power_percent if product else '100.0' }}">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="laser2_speed_mm_s">Geschwindigkeit (mm/s)</label>
+                            <input type="number" id="laser2_speed_mm_s" name="laser2_speed_mm_s" 
+                                   step="1" min="0"
+                                   value="{{ product.laser2_speed_mm_s if product else '100' }}">
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div class="form-group">
+                            <label for="laser2_passes">Durchläufe</label>
+                            <input type="number" id="laser2_passes" name="laser2_passes" 
+                                   step="1" min="1"
+                                   value="{{ product.laser2_passes if product else '1' }}">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="laser2_dpi">DPI</label>
+                            <input type="number" id="laser2_dpi" name="laser2_dpi" 
+                                   step="1" min="0"
+                                   value="{{ product.laser2_dpi if product else '300' }}">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="laser2_lines_per_cm">Lines per cm</label>
+                            <input type="number" id="laser2_lines_per_cm" name="laser2_lines_per_cm" 
+                                   step="1" min="0"
+                                   value="{{ product.laser2_lines_per_cm if product else '60' }}">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Layer 3 (optional) -->
+            <div class="layer-section" data-layer="3" style="display: {% if product and product.laser3_type %}block{% else %}none{% endif %};">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 30px;">
+                    <h3 style="color: var(--color-primary-dark); margin: 0;">Layer 3</h3>
+                    <button type="button" class="btn btn-danger btn-sm" onclick="removeLayer(3)" style="padding: 4px 12px; font-size: 0.85rem;">
+                        − Layer entfernen
+                    </button>
+                </div>
+                <div class="grid">
+                    <div>
+                        <div class="form-group">
+                            <label for="laser3_type">Laser-Typ</label>
+                            <select id="laser3_type" name="laser3_type">
+                                <option value="">-- Bitte wählen --</option>
+                                <option value="blau" {% if product and product.laser3_type == 'blau' %}selected{% endif %}>Blau (450nm, für Holz/Kunststoff)</option>
+                                <option value="ir" {% if product and product.laser3_type == 'ir' %}selected{% endif %}>IR (1064nm, für Metall)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="laser3_power_percent">Power (%)</label>
+                            <input type="number" id="laser3_power_percent" name="laser3_power_percent" 
+                                   step="0.1" min="0" max="100"
+                                   value="{{ product.laser3_power_percent if product else '50.0' }}">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="laser3_speed_mm_s">Geschwindigkeit (mm/s)</label>
+                            <input type="number" id="laser3_speed_mm_s" name="laser3_speed_mm_s" 
+                                   step="1" min="0"
+                                   value="{{ product.laser3_speed_mm_s if product else '300' }}">
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div class="form-group">
+                            <label for="laser3_passes">Durchläufe</label>
+                            <input type="number" id="laser3_passes" name="laser3_passes" 
+                                   step="1" min="1"
+                                   value="{{ product.laser3_passes if product else '1' }}">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="laser3_dpi">DPI</label>
+                            <input type="number" id="laser3_dpi" name="laser3_dpi" 
+                                   step="1" min="0"
+                                   value="{{ product.laser3_dpi if product else '600' }}">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="laser3_lines_per_cm">Lines per cm</label>
+                            <input type="number" id="laser3_lines_per_cm" name="laser3_lines_per_cm" 
+                                   step="1" min="0"
+                                   value="{{ product.laser3_lines_per_cm if product else '120' }}">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Button zum Hinzufügen von Layern -->
+        <div style="margin-top: 20px;">
+            <button type="button" id="add-layer-btn" class="btn btn-secondary" onclick="addLayer()">
+                + Layer hinzufügen
+            </button>
+        </div>
+        
+        <h3 style="margin-top: 30px; color: var(--color-primary-dark);">Produktion</h3>
+        <div class="grid">
+            <div>
+                <div class="form-group">
+                    <label for="labor_hours">Arbeitsstunden</label>
+                    <input type="number" id="labor_hours" name="labor_hours" 
+                           step="0.1" min="0"
+                           value="{{ product.labor_hours if product else '0' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="labor_rate_per_hour">Stundensatz (€/h)</label>
+                    <input type="number" id="labor_rate_per_hour" name="labor_rate_per_hour" 
+                           step="0.01" min="0"
+                           value="{{ product.labor_rate_per_hour if product else '20.00' }}">
+                </div>
+            </div>
+            
+            <div>
+                <div class="form-group">
+                    <label for="packaging_cost">Verpackungskosten (€)</label>
+                    <input type="number" id="packaging_cost" name="packaging_cost" 
+                           step="0.01" min="0"
+                           value="{{ product.packaging_cost if product else '0' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="shipping_cost">Versandkosten (€)</label>
+                    <input type="number" id="shipping_cost" name="shipping_cost" 
+                           step="0.01" min="0"
+                           value="{{ product.shipping_cost if product else '0' }}">
+                </div>
+            </div>
+        </div>
+        
+        <div class="form-group" style="margin-top: 20px;">
+            <label for="notes">Notizen</label>
+            <textarea id="notes" name="notes">{{ product.notes if product else '' }}</textarea>
+        </div>
+        
+        <div class="actions">
+            <button type="submit" class="btn btn-primary">
+                {% if product %}Aktualisieren{% else %}Laser-Gravur anlegen{% endif %}
+            </button>
+            <a href="{% if product %}/products/{{ product.id }}{% else %}/products{% endif %}" 
+               class="btn btn-secondary">Abbrechen</a>
+        </div>
+    </form>
+</div>
+
+<script>
+    // Anzahl der sichtbaren Layer tracken
+    let visibleLayers = 1;
+    
+    // Initial beim Laden prüfen, wie viele Layer sichtbar sein müssen
+    document.addEventListener('DOMContentLoaded', function() {
+        const layer2 = document.querySelector('[data-layer="2"]');
+        const layer3 = document.querySelector('[data-layer="3"]');
+        
+        if (layer2 && layer2.style.display !== 'none') {
+            visibleLayers = 2;
+        }
+        if (layer3 && layer3.style.display !== 'none') {
+            visibleLayers = 3;
+        }
+        
+        updateAddButton();
+    });
+    
+    function addLayer() {
+        if (visibleLayers >= 3) {
+            return; // Maximum erreicht
+        }
+        
+        visibleLayers++;
+        const layerSection = document.querySelector('[data-layer="' + visibleLayers + '"]');
+        if (layerSection) {
+            layerSection.style.display = 'block';
+        }
+        
+        updateAddButton();
+    }
+    
+    function removeLayer(layerNum) {
+        if (layerNum <= 1) {
+            return; // Layer 1 kann nicht entfernt werden
+        }
+        
+        const layerSection = document.querySelector('[data-layer="' + layerNum + '"]');
+        if (layerSection) {
+            // Layer ausblenden
+            layerSection.style.display = 'none';
+            
+            // Felder zurücksetzen
+            const typeSelect = layerSection.querySelector('select[name="laser' + layerNum + '_type"]');
+            if (typeSelect) {
+                typeSelect.value = '';
+            }
+            
+            // Layer-Nummern neu anordnen: Wenn Layer 2 entfernt wird, wird Layer 3 zu Layer 2
+            reorderLayers();
+        }
+        
+        visibleLayers--;
+        updateAddButton();
+    }
+    
+    function reorderLayers() {
+        // Finde alle sichtbaren Layer (außer Layer 1)
+        const visibleLayerElements = [];
+        for (let i = 2; i <= 3; i++) {
+            const layer = document.querySelector('[data-layer="' + i + '"]');
+            if (layer && layer.style.display !== 'none') {
+                visibleLayerElements.push({
+                    num: i,
+                    element: layer
+                });
+            }
+        }
+        
+        // Wenn Layer 2 ausgeblendet ist aber Layer 3 sichtbar ist,
+        // müssen wir die Daten von Layer 3 nach Layer 2 verschieben
+        const layer2 = document.querySelector('[data-layer="2"]');
+        const layer3 = document.querySelector('[data-layer="3"]');
+        
+        if (layer2 && layer3 && layer2.style.display === 'none' && layer3.style.display !== 'none') {
+            // Kopiere Werte von Layer 3 zu Layer 2
+            copyLayerValues(3, 2);
+            
+            // Layer 2 anzeigen, Layer 3 ausblenden
+            layer2.style.display = 'block';
+            layer3.style.display = 'none';
+            
+            // Layer 3 Felder zurücksetzen
+            resetLayerFields(3);
+        }
+    }
+    
+    function copyLayerValues(fromLayer, toLayer) {
+        const fields = ['type', 'power_percent', 'speed_mm_s', 'passes', 'dpi', 'lines_per_cm'];
+        
+        fields.forEach(function(field) {
+            const fromEl = document.querySelector('[name="laser' + fromLayer + '_' + field + '"]');
+            const toEl = document.querySelector('[name="laser' + toLayer + '_' + field + '"]');
+            
+            if (fromEl && toEl) {
+                toEl.value = fromEl.value;
+            }
+        });
+    }
+    
+    function resetLayerFields(layerNum) {
+        const defaults = {
+            'type': '',
+            'power_percent': layerNum === 2 ? '100.0' : '50.0',
+            'speed_mm_s': layerNum === 2 ? '100' : '300',
+            'passes': '1',
+            'dpi': layerNum === 2 ? '300' : '600',
+            'lines_per_cm': layerNum === 2 ? '60' : '120'
+        };
+        
+        Object.keys(defaults).forEach(function(field) {
+            const el = document.querySelector('[name="laser' + layerNum + '_' + field + '"]');
+            if (el) {
+                el.value = defaults[field];
+            }
+        });
+    }
+    
+    function updateAddButton() {
+        const btn = document.getElementById('add-layer-btn');
+        if (visibleLayers >= 3) {
+            btn.style.display = 'none';
+        } else {
+            btn.style.display = 'inline-block';
+        }
+    }
+</script>
+{% endblock %}
+
+

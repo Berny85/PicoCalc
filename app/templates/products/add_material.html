@@ -19,7 +19,7 @@
                 </option>
                 {% endfor %}
             </select>
-            <small style="color: #666; display: block; margin-top: 5px;">
+            <small style="color: var(--color-text-light); display: block; margin-top: 5px;">
                 <a href="/materials/new" target="_blank">Neues Material anlegen →</a>
             </small>
         </div>
@@ -29,7 +29,7 @@
             <input type="number" id="quantity" name="quantity" 
                    step="0.01" min="0.01" required
                    placeholder="z.B. 0.5 für 500g Filament oder 10 für 10 Bogen">
-            <small id="unit-hint" style="color: #666;">Einheit wird nach Materialauswahl angezeigt</small>
+            <small id="unit-hint" style="color: var(--color-text-light);">Einheit wird nach Materialauswahl angezeigt</small>
         </div>
         
         <div class="actions">
@@ -51,3 +51,5 @@ document.getElementById('material_id').addEventListener('change', function() {
 });
 </script>
 {% endblock %}
+
+

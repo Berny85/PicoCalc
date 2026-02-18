@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ title }} - Produkt Kalkulator{% endblock %}
+{% block title %}{{ title }} - Picobellu Kalkulator{% endblock %}
 
 {% block content %}
 <div class="card">
@@ -39,7 +39,7 @@
                         </option>
                         {% endfor %}
                     </select>
-                    <small style="color: #666;">
+                    <small style="color: var(--color-text-light);">
                         <a href="/materials/new" target="_blank">Neues Filament anlegen →</a>
                     </small>
                 </div>
@@ -54,7 +54,7 @@
             </div>
         </div>
         
-        <h3 style="margin-top: 30px; color: #667eea;">Maschine</h3>
+        <h3 style="margin-top: 30px; color: var(--color-primary-dark);">Maschine</h3>
         <div class="grid">
             <div>
                 <div class="form-group">
@@ -74,7 +74,7 @@
                         </option>
                         {% endfor %}
                     </select>
-                    <small style="color: #666;">
+                    <small style="color: var(--color-text-light);">
                         <a href="/machines" target="_blank">Maschinen verwalten →</a>
                     </small>
                 </div>
@@ -83,7 +83,7 @@
             <div>
                 <div class="form-group">
                     <label>Berechnete Kosten pro Stunde</label>
-                    <div id="machine-cost-display" style="padding: 10px; background: #f8f9fa; border-radius: 4px;">
+                    <div id="machine-cost-display" style="padding: 10px; background: var(--color-bg-hover); border-radius: 4px;">
                         {% if product and product.machine %}
                             {{ "%.2f"|format(product.machine.calculate_cost_per_hour()) }} €/h
                             {% if product.print_time_hours > 0 %}
@@ -97,7 +97,7 @@
             </div>
         </div>
         
-        <h3 style="margin-top: 30px; color: #667eea;">Produktion</h3>
+        <h3 style="margin-top: 30px; color: var(--color-primary-dark);">Produktion</h3>
         <div class="grid">
             <div>
                 <div class="form-group">
@@ -185,3 +185,5 @@ machineSelect.addEventListener('change', updateMachineCost);
 updateMachineCost();
 </script>
 {% endblock %}
+
+

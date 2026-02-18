@@ -6,7 +6,7 @@
 <div class="card">
     <h2>{{ title }}</h2>
     
-    <form method="POST" action="{% if product %}/products/{{ product.id }}/update{% else %}/products/sticker-sheet{% endif %}">
+    <form method="POST" action="{% if product %}/products/{{ product.id }}/update{% else %}/products/diecut-sticker{% endif %}">
         <div class="grid">
             <div>
                 <div class="form-group">
@@ -29,7 +29,7 @@
             
             <div>
                 <div class="form-group">
-                    <label for="sheet_material_id">Material (Bogen) *</label>
+                    <label for="sheet_material_id">Material (Stickerbogen) *</label>
                     <select id="sheet_material_id" name="sheet_material_id" required>
                         <option value="">-- Bitte wählen --</option>
                         {% for s in sticker_sheets %}
@@ -49,7 +49,7 @@
                     <input type="number" id="sheet_count" name="sheet_count" 
                            step="0.1" min="0" required
                            value="{{ product.sheet_count if product else '' }}"
-                           placeholder="z.B. 10">
+                           placeholder="z.B. 1">
                 </div>
             </div>
         </div>
@@ -58,13 +58,13 @@
         <div class="grid">
             <div>
                 <div class="form-group">
-                    <label for="units_per_sheet">Bögen pro Materialbogen *</label>
+                    <label for="units_per_sheet">Sticker pro Materialbogen *</label>
                     <input type="number" id="units_per_sheet" name="units_per_sheet" 
                            step="1" min="1" required
-                           value="{{ product.units_per_sheet if product else '3' }}"
-                           placeholder="z.B. 3">
+                           value="{{ product.units_per_sheet if product else '6' }}"
+                           placeholder="z.B. 6">
                     <small style="color: var(--color-text-light);">
-                        Wie viele Stickerbögen kommen aus einem Materialbogen? (Meist 3)
+                        Wie viele Sticker können aus einem Materialbogen geschnitten werden? (Meist 6-9)
                     </small>
                 </div>
             </div>
@@ -73,7 +73,7 @@
                 <div class="form-group">
                     <label>Berechnung</label>
                     <div style="padding: 10px; background: var(--color-bg-hover); border-radius: 4px; font-size: 0.9em;">
-                        Materialkosten ÷ Anzahl Bögen = Kosten pro Bogen
+                        Materialkosten ÷ Anzahl Sticker = Kosten pro Sticker
                     </div>
                 </div>
             </div>
@@ -82,13 +82,6 @@
         <h3 style="margin-top: 30px; color: var(--color-primary-dark);">Produktion</h3>
         <div class="grid">
             <div>
-                <div class="form-group">
-                    <label for="cut_time_hours">Schneidezeit (Stunden)</label>
-                    <input type="number" id="cut_time_hours" name="cut_time_hours" 
-                           step="0.1" min="0"
-                           value="{{ product.cut_time_hours if product else '0' }}">
-                </div>
-                
                 <div class="form-group">
                     <label for="labor_hours">Arbeitsstunden</label>
                     <input type="number" id="labor_hours" name="labor_hours" 
@@ -128,15 +121,13 @@
         
         <div class="actions">
             <button type="submit" class="btn btn-primary">
-                {% if product %}Aktualisieren{% else %}Stickerbogen anlegen{% endif %}
+                {% if product %}Aktualisieren{% else %}Die-Cut Sticker anlegen{% endif %}
             </button>
             <a href="{% if product %}/products/{{ product.id }}{% else %}/products{% endif %}" 
                class="btn btn-secondary">Abbrechen</a>
         </div>
     </form>
 </div>
-
-
 {% endblock %}
 
 

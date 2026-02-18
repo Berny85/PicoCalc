@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Picobellu Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2>{{ title }}</h2>
+        <a href="/material-types/new" class="btn btn-success">+ Neuer Materialtyp</a>
+    </div>
+    
+    <p style="color: var(--color-text-light); margin: 15px 0;">
+        Hier kannst du die verfügbaren Materialtypen verwalten. Diese werden in Dropdown-Menüs beim Erstellen von Materialien angezeigt.
+    </p>
+</div>
+
+<div class="card">
+    {% if material_types %}
+    <table>
+        <thead>
+            <tr>
+                <th>Sortierung</th>
+                <th>Schlüssel</th>
+                <th>Name</th>
+                <th>Beschreibung</th>
+                <th>Status</th>
+                <th>Aktionen</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for mt in material_types %}
+            <tr>
+                <td>{{ mt.sort_order }}</td>
+                <td><code>{{ mt.key }}</code></td>
+                <td><strong>{{ mt.name }}</strong></td>
+                <td>{{ mt.description or '-' }}</td>
+                <td>
+                    {% if mt.is_active %}
+                    <span class="badge badge-success">Aktiv</span>
+                    {% else %}
+                    <span class="badge badge-secondary">Inaktiv</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <div style="display: flex; gap: 5px;">
+                        <a href="/material-types/{{ mt.id }}/edit" class="btn btn-primary" style="padding: 4px 12px; font-size: 0.85rem;">Bearbeiten</a>
+                        <form method="POST" action="/material-types/{{ mt.id }}/delete" style="display: inline;" 
+                              onsubmit="return confirm('Möchtest du diesen Materialtyp wirklich löschen?');">
+                            <button type="submit" class="btn btn-danger" style="padding: 4px 12px; font-size: 0.85rem;">Löschen</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>Keine Materialtypen vorhanden.</p>
+    {% endif %}
+</div>
+
+<div class="actions">
+    <a href="/materials" class="btn btn-secondary">← Zurück zu Materialien</a>
+</div>
+
+<style>
+.badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+.badge-success {
+    background-color: var(--color-btn-success);
+    color: white;
+}
+.badge-secondary {
+    background-color: var(--color-btn-secondary);
+    color: white;
+}
+code {
+    background-color: var(--color-bg-hover);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: monospace;
+}
+</style>
+{% endblock %}
+
+

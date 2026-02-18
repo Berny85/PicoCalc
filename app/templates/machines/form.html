@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ title }} - Produkt Kalkulator{% endblock %}
+{% block title %}{{ title }} - Picobellu Kalkulator{% endblock %}
 
 {% block content %}
 <div class="card">
@@ -40,7 +40,7 @@
             </div>
         </div>
         
-        <h3 style="margin-top: 30px; color: #667eea;">Kosten-Parameter</h3>
+        <h3 style="margin-top: 30px; color: var(--color-primary-dark);">Kosten-Parameter</h3>
         <div class="grid">
             <div>
                 <div class="form-group">
@@ -64,18 +64,18 @@
                     <input type="number" id="power_kw" name="power_kw" 
                            step="0.001" min="0" required
                            value="{{ machine.power_kw if machine else '0.1' }}">
-                    <small style="color: #666;">z.B. 0.1 für 100W</small>
+                    <small style="color: var(--color-text-light);">z.B. 0.1 für 100W</small>
                 </div>
                 
                 <div class="form-group">
                     <label>Berechnete Kosten pro Stunde</label>
-                    <div id="calculated-cost-display" style="padding: 10px; background: #f8f9fa; border-radius: 4px;">
+                    <div id="calculated-cost-display" style="padding: 10px; background: var(--color-bg-hover); border-radius: 4px;">
                         <strong>{% if machine %}{{ "%.2f"|format(machine.calculate_cost_per_hour()) }} €{% else %}- €{% endif %}</strong>
                         {% if machine %}
                         {% set power_kw_float = machine.power_kw | float %}
                         {% set depreciation_float = machine.depreciation_euro | float %}
                         {% set lifespan_float = machine.lifespan_hours | float %}
-                        <small style="color: #666; display: block; margin-top: 5px;">
+                        <small style="color: var(--color-text-light); display: block; margin-top: 5px;">
                             (Strom: {{ "%.3f"|format(STROM_PREIS_KWH * power_kw_float) }} €/h + Abschreibung: {{ "%.3f"|format(depreciation_float/lifespan_float) }} €/h)
                         </small>
                         {% endif %}
@@ -110,7 +110,7 @@ function updateCalculatedCost() {
     
     const costElement = document.getElementById('calculated-cost-display');
     costElement.innerHTML = '<strong>' + costPerHour.toFixed(2) + ' €</strong>';
-    costElement.innerHTML += '<small style="color: #666; display: block; margin-top: 5px;">';
+    costElement.innerHTML += '<small style="color: var(--color-text-light); display: block; margin-top: 5px;">';
     costElement.innerHTML += '(Strom: ' + stromKosten.toFixed(3) + ' €/h + Abschreibung: ' + abschreibung.toFixed(3) + ' €/h)';
     costElement.innerHTML += '</small>';
 }
@@ -120,3 +120,5 @@ lifespanInput.addEventListener('input', updateCalculatedCost);
 powerKwInput.addEventListener('input', updateCalculatedCost);
 </script>
 {% endblock %}
+
+
