@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Picobellu Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2>{{ title }}</h2>
+        <span style="color: var(--color-text-light); font-size: 0.9rem;">
+            {{ feedbacks|length }} Einträge
+        </span>
+    </div>
+    
+    <p style="color: var(--color-text-light); margin: 15px 0;">
+        Hier siehst du alle eingegangenen Feedback-Einträge. 
+        Du kannst den Status ändern, um den Bearbeitungsstand zu markieren.
+    </p>
+</div>
+
+{% if feedbacks %}
+    {% for f in feedbacks %}
+    <div class="card" style="border-left: 4px solid 
+        {% if f.category == 'bug' %}#dc3545
+        {% elif f.category == 'feature' %}#28a745
+        {% elif f.category == 'improvement' %}#17a2b8
+        {% else %}#6c757d{% endif %}">
+        <div style="display: flex; justify-content: space-between; align-items: start; flex-wrap: wrap; gap: 10px;">
+            <div>
+                <span class="badge badge-{{ f.category }}" style="
+                    padding: 4px 10px;
+                    border-radius: 12px;
+                    font-size: 0.8rem;
+                    font-weight: 600;
+                    {% if f.category == 'bug' %}background: #fee; color: #c33;
+                    {% elif f.category == 'feature' %}background: #efe; color: #2a2;
+                    {% elif f.category == 'improvement' %}background: #eef; color: #27b;
+                    {% else %}background: #eee; color: #666;{% endif %}
+                ">
+                    {% if f.category == 'bug' %}🐛 Fehler
+                    {% elif f.category == 'feature' %}✨ Funktion
+                    {% elif f.category == 'improvement' %}💡 Verbesserung
+                    {% else %}📝 Sonstiges{% endif %}
+                </span>
+                
+                <span class="badge badge-status" style="
+                    padding: 4px 10px;
+                    border-radius: 12px;
+                    font-size: 0.8rem;
+                    margin-left: 10px;
+                    {% if f.status == 'new' %}background: #fff3cd; color: #856404;
+                    {% elif f.status == 'in_progress' %}background: #cce5ff; color: #004085;
+                    {% elif f.status == 'done' %}background: #d4edda; color: #155724;
+                    {% else %}background: #f8d7da; color: #721c24;{% endif %}
+                ">
+                    {% if f.status == 'new' %}Neu
+                    {% elif f.status == 'in_progress' %}In Bearbeitung
+                    {% elif f.status == 'done' %}Erledigt
+                    {% else %}Abgelehnt{% endif %}
+                </span>
+            </div>
+            
+            <small style="color: var(--color-text-light);">
+                {{ f.created_at.strftime('%d.%m.%Y %H:%M') }}
+            </small>
+        </div>
+        
+        <div style="margin: 15px 0; padding: 15px; background: var(--color-bg-hover); border-radius: 8px;">
+            {{ f.message }}
+        </div>
+        
+        <div style="font-size: 0.85rem; color: var(--color-text-light); margin-bottom: 15px;">
+            <strong>Seite:</strong> <a href="{{ f.page_url }}" target="_blank">{{ f.page_title or f.page_url }}</a>
+        </div>
+        
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <form method="POST" action="/feedback/{{ f.id }}/status" style="display: flex; gap: 5px; align-items: center;">
+                <span style="font-size: 0.9rem; color: var(--color-text-light);">Status:</span>
+                <select name="status" onchange="this.form.submit()" style="padding: 4px 8px; font-size: 0.9rem;">
+                    <option value="new" {% if f.status == 'new' %}selected{% endif %}>Neu</option>
+                    <option value="in_progress" {% if f.status == 'in_progress' %}selected{% endif %}>In Bearbeitung</option>
+                    <option value="done" {% if f.status == 'done' %}selected{% endif %}>Erledigt</option>
+                    <option value="rejected" {% if f.status == 'rejected' %}selected{% endif %}>Abgelehnt</option>
+                </select>
+            </form>
+            
+            <form method="POST" action="/feedback/{{ f.id }}/delete" 
+                  onsubmit="return confirm('Diesen Eintrag wirklich löschen?');">
+                <button type="submit" class="btn btn-danger" style="padding: 4px 12px; font-size: 0.85rem;">🗑️ Löschen</button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+{% else %}
+<div class="card">
+    <p style="text-align: center; color: var(--color-text-light); padding: 40px;">
+        Noch kein Feedback vorhanden.
+    </p>
+</div>
+{% endif %}
+
+<div class="actions">
+    <a href="/" class="btn btn-secondary">← Zurück zum Dashboard</a>
+</div>
+{% endblock %}

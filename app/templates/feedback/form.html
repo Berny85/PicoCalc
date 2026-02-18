@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Feedback senden - Picobellu Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Feedback senden</h2>
+    
+    <div class="feedback-info" style="background: var(--color-bg-hover); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+        <strong>Seite:</strong> {{ page_title or 'Unbekannt' }}<br>
+        <small style="color: var(--color-text-light);">{{ page_url }}</small>
+    </div>
+    
+    <form method="POST" action="/feedback">
+        <input type="hidden" name="page_url" value="{{ page_url }}">
+        <input type="hidden" name="page_title" value="{{ page_title }}">
+        
+        <div class="form-group">
+            <label for="category">Kategorie *</label>
+            <select id="category" name="category" required>
+                <option value="">-- Bitte wählen --</option>
+                <option value="bug">🐛 Fehler melden</option>
+                <option value="feature">✨ Neue Funktion wünschen</option>
+                <option value="improvement">💡 Verbesserung vorschlagen</option>
+                <option value="other">📝 Sonstiges</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="message">Dein Feedback *</label>
+            <textarea id="message" name="message" rows="5" required 
+                      placeholder="Beschreibe dein Anliegen..."></textarea>
+        </div>
+        
+        <div class="actions">
+            <button type="submit" class="btn btn-primary">Feedback senden</button>
+            <a href="{{ page_url or '/' }}" class="btn btn-secondary">Abbrechen</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

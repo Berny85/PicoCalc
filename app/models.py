@@ -321,3 +321,22 @@ class Product(Base):
                 return f"{self.laser_material.name}"
             return "Kein Material angegeben"
         return "Kein Material"
+
+
+class Feedback(Base):
+    """Feedback-Tabelle für Änderungswünsche und Anregungen"""
+    __tablename__ = "feedback"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    page_url = Column(String(500), nullable=False)  # Auf welcher Seite wurde Feedback gegeben
+    page_title = Column(String(255), nullable=True)  # Titel der Seite
+    category = Column(String(50), nullable=False)  # 'bug', 'feature', 'improvement', 'other'
+    message = Column(Text, nullable=False)
+    user_info = Column(String(100), nullable=True)  # Optional: Wer hat das Feedback gegeben
+    status = Column(String(20), default="new")  # 'new', 'in_progress', 'done', 'rejected'
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def __repr__(self):
+        return f"Feedback({self.category}: {self.message[:30]}...)"

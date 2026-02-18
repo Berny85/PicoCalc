@@ -5,7 +5,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError
 from database import engine, get_db, SessionLocal
-from models import Base, Product, Material, MaterialType, Machine, STROM_PREIS_KWH
+from models import Base, Product, Material, MaterialType, Machine, Feedback, STROM_PREIS_KWH
 from datetime import datetime
 import time
 
@@ -945,6 +945,84 @@ async def delete_product(product_id: int, db: Session = Depends(get_db)):
     db.commit()
     
     return RedirectResponse(url="/products", status_code=303)
+
+# ===== FEEDBACK ROUTES =====
+
+@app.get("/feedback", response_class=HTMLResponse)
+async def feedback_form(request: Request, page: str = "/", title: str = ""):
+    """Feedback-Formular anzeigen"""
+    return templates.TemplateResponse("feedback/form.html", {
+        "request": request,
+        "page_url": page,
+        "page_title": title,
+        "title": "Feedback senden"
+    })
+
+@app.post("/feedback")
+async def submit_feedback(
+    request: Request,
+    page_url: str = Form(...),
+    page_title: str = Form(""),
+    category: str = Form(...),
+    message: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    """Feedback speichern"""
+    feedback = Feedback(
+        page_url=page_url,
+        page_title=page_title,
+        category=category,
+        message=message,
+        status="new"
+    )
+    
+    db.add(feedback)
+    db.commit()
+    db.refresh(feedback)
+    
+    # Zurück zur vorherigen Seite mit Erfolgsmeldung
+    response = RedirectResponse(url=page_url, status_code=303)
+    return response
+
+@app.get("/feedback/list", response_class=HTMLResponse)
+async def list_feedback(request: Request, db: Session = Depends(get_db)):
+    """Alle Feedback-Einträge anzeigen (Admin-Ansicht)"""
+    feedbacks = db.query(Feedback).order_by(Feedback.created_at.desc()).all()
+    
+    return templates.TemplateResponse("feedback/list.html", {
+        "request": request,
+        "feedbacks": feedbacks,
+        "title": "Feedback Übersicht"
+    })
+
+@app.post("/feedback/{feedback_id}/status")
+async def update_feedback_status(
+    feedback_id: int,
+    status: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    """Status eines Feedback-Eintrags aktualisieren"""
+    feedback = db.query(Feedback).filter(Feedback.id == feedback_id).first()
+    if not feedback:
+        raise HTTPException(status_code=404, detail="Feedback nicht gefunden")
+    
+    feedback.status = status
+    feedback.updated_at = datetime.utcnow()
+    db.commit()
+    
+    return RedirectResponse(url="/feedback/list", status_code=303)
+
+@app.post("/feedback/{feedback_id}/delete")
+async def delete_feedback(feedback_id: int, db: Session = Depends(get_db)):
+    """Feedback-Eintrag löschen"""
+    feedback = db.query(Feedback).filter(Feedback.id == feedback_id).first()
+    if not feedback:
+        raise HTTPException(status_code=404, detail="Feedback nicht gefunden")
+    
+    db.delete(feedback)
+    db.commit()
+    
+    return RedirectResponse(url="/feedback/list", status_code=303)
 
 if __name__ == "__main__":
     import uvicorn
