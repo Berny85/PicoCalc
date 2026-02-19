@@ -5,7 +5,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError
 from database import engine, get_db, SessionLocal
-from models import Base, Product, Material, MaterialType, Machine, Feedback, STROM_PREIS_KWH
+from models import Base, Product, Material, MaterialType, Machine, Feedback, Idea, STROM_PREIS_KWH
 from datetime import datetime
 import time
 
@@ -1023,6 +1023,98 @@ async def delete_feedback(feedback_id: int, db: Session = Depends(get_db)):
     db.commit()
     
     return RedirectResponse(url="/feedback/list", status_code=303)
+
+# ===== IDEEN-BOARD ROUTES =====
+
+@app.get("/ideas", response_class=HTMLResponse)
+async def ideas_board(request: Request, db: Session = Depends(get_db)):
+    """Kanban-Style Ideen-Board anzeigen"""
+    ideas_todo = db.query(Idea).filter(Idea.status == "todo").order_by(Idea.created_at.desc()).all()
+    ideas_in_progress = db.query(Idea).filter(Idea.status == "in_progress").order_by(Idea.created_at.desc()).all()
+    ideas_done = db.query(Idea).filter(Idea.status == "done").order_by(Idea.created_at.desc()).all()
+    
+    return templates.TemplateResponse("ideas/board.html", {
+        "request": request,
+        "ideas_todo": ideas_todo,
+        "ideas_in_progress": ideas_in_progress,
+        "ideas_done": ideas_done,
+        "title": "Ideen-Board"
+    })
+
+@app.post("/ideas")
+async def create_idea(
+    request: Request,
+    subject: str = Form(""),
+    content: str = Form(...),
+    status: str = Form("todo"),
+    db: Session = Depends(get_db)
+):
+    """Neue Idee erstellen"""
+    idea = Idea(
+        subject=subject,
+        content=content,
+        status=status
+    )
+    
+    db.add(idea)
+    db.commit()
+    db.refresh(idea)
+    
+    return RedirectResponse(url="/ideas", status_code=303)
+
+@app.post("/ideas/{idea_id}/update")
+async def update_idea(
+    idea_id: int,
+    request: Request,
+    subject: str = Form(""),
+    content: str = Form(...),
+    status: str = Form("todo"),
+    db: Session = Depends(get_db)
+):
+    """Idee aktualisieren"""
+    idea = db.query(Idea).filter(Idea.id == idea_id).first()
+    if not idea:
+        raise HTTPException(status_code=404, detail="Idee nicht gefunden")
+    
+    idea.subject = subject
+    idea.content = content
+    idea.status = status
+    idea.updated_at = datetime.utcnow()
+    
+    db.commit()
+    
+    return RedirectResponse(url="/ideas", status_code=303)
+
+@app.post("/ideas/{idea_id}/delete")
+async def delete_idea(idea_id: int, db: Session = Depends(get_db)):
+    """Idee löschen"""
+    idea = db.query(Idea).filter(Idea.id == idea_id).first()
+    if not idea:
+        raise HTTPException(status_code=404, detail="Idee nicht gefunden")
+    
+    db.delete(idea)
+    db.commit()
+    
+    return RedirectResponse(url="/ideas", status_code=303)
+
+
+@app.post("/ideas/{idea_id}/status")
+async def update_idea_status(
+    idea_id: int,
+    status: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    """Nur Status einer Idee aktualisieren (für Drag & Drop)"""
+    idea = db.query(Idea).filter(Idea.id == idea_id).first()
+    if not idea:
+        raise HTTPException(status_code=404, detail="Idee nicht gefunden")
+    
+    idea.status = status
+    idea.updated_at = datetime.utcnow()
+    db.commit()
+    
+    return {"success": True, "id": idea_id, "status": status}
+
 
 if __name__ == "__main__":
     import uvicorn

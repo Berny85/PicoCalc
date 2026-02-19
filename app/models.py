@@ -340,3 +340,19 @@ class Feedback(Base):
     
     def __repr__(self):
         return f"Feedback({self.category}: {self.message[:30]}...)"
+
+
+class Idea(Base):
+    """Ideen-Board für schnelles Notieren von Ideen im Kanban-Stil"""
+    __tablename__ = "ideas"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    subject = Column(String(255), nullable=True)  # Betreff-Zeile (optional)
+    content = Column(Text, nullable=False)  # Mehrzeiliges Textfeld
+    status = Column(String(20), default="todo")  # 'todo', 'in_progress', 'done'
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def __repr__(self):
+        return f"Idea({self.subject or self.content[:30]}...)"
