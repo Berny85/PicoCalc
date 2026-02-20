@@ -14,10 +14,10 @@
 
 | Component | Technology |
 |-----------|------------|
-| Backend | Python 3.11 + FastAPI |
+| Backend | Python 3.11 + FastAPI 0.109.0 |
 | Database | PostgreSQL 16 |
-| ORM | SQLAlchemy 2.0 |
-| Frontend | Jinja2 Templates + HTMX |
+| ORM | SQLAlchemy 2.0.25 |
+| Frontend | Jinja2 Templates + HTMX 1.9.10 |
 | Styling | Vanilla CSS (in templates) |
 | Deployment | Docker + Docker Compose |
 | Infrastructure | Intel NUC with Unraid OS |
@@ -66,6 +66,7 @@ PicoCalc/
 - **Local URL**: http://localhost:5000
 - **Database**: PostgreSQL on port 5432
 - **pgAdmin**: http://localhost:5050
+- **Hot reload**: Code mounted as volume, auto-reload enabled
 
 ### Production Environment (Intel NUC with Unraid)
 - **IP**: 192.168.50.8
@@ -73,6 +74,15 @@ PicoCalc/
 - **Portainer**: http://192.168.50.8:9000 (Docker management)
 - **Dozzle**: http://192.168.50.8:8080 (Log viewer)
 - **pgAdmin**: http://192.168.50.8:5050
+
+### Production Services (docker-compose.prod.yml)
+| Service | Container Name | Port | Description |
+|---------|---------------|------|-------------|
+| db | picocalc-db | 5432 | PostgreSQL with WAL archiving |
+| web | picocalc-app | 5000 | FastAPI application |
+| backup | picocalc-backup | - | Automated volume backups |
+| dozzle | dozzle | 8080 | Docker log viewer |
+| pgadmin | picocalc-pgadmin | 5050 | PostgreSQL management UI |
 
 ## Database Models
 
@@ -127,6 +137,21 @@ Kanban-style ideas board:
 
 ### Categories (user-facing)
 Dekoration, Technik, Ersatzteile, Spielzeug, Werkzeuge, Sticker, Papierprodukte, Sonstiges
+
+## Dependencies (requirements.txt)
+
+```
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+sqlalchemy==2.0.25
+psycopg2-binary==2.9.9
+jinja2==3.1.3
+python-multipart==0.0.6
+pydantic==2.5.3
+pydantic-settings==2.1.0
+python-dotenv==1.0.0
+alembic==1.13.1
+```
 
 ## Build and Test Commands
 

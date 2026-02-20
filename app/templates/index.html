@@ -35,7 +35,8 @@
 <div class="card">
     <h2>Letzte Produkte</h2>
     {% if products %}
-    <table>
+    <div class="table-responsive">
+    <table class="table-compact">
         <thead>
             <tr>
                 <th>Name</th>
@@ -68,6 +69,7 @@
             {% endfor %}
         </tbody>
     </table>
+    </div>
     <div style="margin-top: 20px;">
         <a href="/products" class="btn btn-secondary">Alle Produkte anzeigen</a>
     </div>

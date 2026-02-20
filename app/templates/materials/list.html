@@ -25,6 +25,7 @@
     </form>
     
     {% if materials %}
+    <div class="table-responsive">
     <table>
         <thead>
             <tr>
@@ -68,6 +69,7 @@
             {% endfor %}
         </tbody>
     </table>
+    </div>
     {% else %}
     <p style="text-align: center; padding: 40px; color: var(--color-text-light);">
         Noch keine Materialien vorhanden. <br>

@@ -10,6 +10,19 @@ from datetime import datetime
 import time
 
 
+def parse_decimal(value: str) -> float:
+    """Konvertiert einen String mit Komma oder Punkt als Dezimaltrenner zu float"""
+    if value is None:
+        return 0.0
+    # Ersetze Komma durch Punkt für die Konvertierung
+    return float(str(value).replace(',', '.'))
+
+
+def minutes_to_hours(minutes: float) -> float:
+    """Konvertiert Minuten in Stunden"""
+    return minutes / 60.0
+
+
 def seed_material_types(db: Session):
     """Initialisiert Standard-Materialtypen falls noch keine existieren"""
     existing = db.query(MaterialType).first()
@@ -527,29 +540,30 @@ async def create_3d_print(
     name: str = Form(...),
     category: str = Form("Sonstiges"),
     filament_material_id: int = Form(...),
-    filament_weight_g: float = Form(...),
-    print_time_hours: float = Form(0),
+    filament_weight_g: str = Form(...),
+    print_time_hours: str = Form("0"),
     machine_id: int = Form(...),
-    labor_hours: float = Form(0),
-    labor_rate_per_hour: float = Form(20.00),
-    packaging_cost: float = Form(0),
-    shipping_cost: float = Form(0),
+    labor_minutes: str = Form("0"),
+    labor_rate_per_hour: str = Form("20.00"),
+    packaging_cost: str = Form("0"),
+    shipping_cost: str = Form("0"),
     notes: str = Form(""),
     db: Session = Depends(get_db)
 ):
     """Neues 3D-Druck Produkt erstellen"""
+    # Konvertiere Komma zu Punkt und berechne Stunden aus Minuten
     product = Product(
         name=name,
         product_type="3d_print",
         category=category,
         filament_material_id=filament_material_id,
-        filament_weight_g=filament_weight_g,
-        print_time_hours=print_time_hours,
+        filament_weight_g=parse_decimal(filament_weight_g),
+        print_time_hours=parse_decimal(print_time_hours),
         machine_id=machine_id,
-        labor_hours=labor_hours,
-        labor_rate_per_hour=labor_rate_per_hour,
-        packaging_cost=packaging_cost,
-        shipping_cost=shipping_cost,
+        labor_hours=minutes_to_hours(parse_decimal(labor_minutes)),
+        labor_rate_per_hour=parse_decimal(labor_rate_per_hour),
+        packaging_cost=parse_decimal(packaging_cost),
+        shipping_cost=parse_decimal(shipping_cost),
         notes=notes
     )
     
@@ -580,12 +594,13 @@ async def create_sticker_sheet(
     name: str = Form(...),
     category: str = Form("Sonstiges"),
     sheet_material_id: int = Form(...),
-    sheet_count: float = Form(...),
-    units_per_sheet: float = Form(3),  # Standard: 3 Bögen pro Material
-    labor_hours: float = Form(0),
-    labor_rate_per_hour: float = Form(20.00),
-    packaging_cost: float = Form(0),
-    shipping_cost: float = Form(0),
+    sheet_count: str = Form(...),
+    units_per_sheet: str = Form("3"),  # Standard: 3 Bögen pro Material
+    cut_time_hours: str = Form("0"),
+    labor_minutes: str = Form("0"),
+    labor_rate_per_hour: str = Form("20.00"),
+    packaging_cost: str = Form("0"),
+    shipping_cost: str = Form("0"),
     notes: str = Form(""),
     db: Session = Depends(get_db)
 ):
@@ -595,12 +610,13 @@ async def create_sticker_sheet(
         product_type="sticker_sheet",
         category=category,
         sheet_material_id=sheet_material_id,
-        sheet_count=sheet_count,
-        units_per_sheet=units_per_sheet,
-        labor_hours=labor_hours,
-        labor_rate_per_hour=labor_rate_per_hour,
-        packaging_cost=packaging_cost,
-        shipping_cost=shipping_cost,
+        sheet_count=parse_decimal(sheet_count),
+        units_per_sheet=parse_decimal(units_per_sheet),
+        cut_time_hours=parse_decimal(cut_time_hours),
+        labor_hours=minutes_to_hours(parse_decimal(labor_minutes)),
+        labor_rate_per_hour=parse_decimal(labor_rate_per_hour),
+        packaging_cost=parse_decimal(packaging_cost),
+        shipping_cost=parse_decimal(shipping_cost),
         notes=notes
     )
     
@@ -631,12 +647,12 @@ async def create_diecut_sticker(
     name: str = Form(...),
     category: str = Form("Sonstiges"),
     sheet_material_id: int = Form(...),
-    sheet_count: float = Form(...),
-    units_per_sheet: float = Form(6),  # Standard: 6 Sticker pro Bogen
-    labor_hours: float = Form(0),
-    labor_rate_per_hour: float = Form(20.00),
-    packaging_cost: float = Form(0),
-    shipping_cost: float = Form(0),
+    sheet_count: str = Form(...),
+    units_per_sheet: str = Form("6"),  # Standard: 6 Sticker pro Bogen
+    labor_minutes: str = Form("0"),
+    labor_rate_per_hour: str = Form("20.00"),
+    packaging_cost: str = Form("0"),
+    shipping_cost: str = Form("0"),
     notes: str = Form(""),
     db: Session = Depends(get_db)
 ):
@@ -646,12 +662,12 @@ async def create_diecut_sticker(
         product_type="diecut_sticker",
         category=category,
         sheet_material_id=sheet_material_id,
-        sheet_count=sheet_count,
-        units_per_sheet=units_per_sheet,
-        labor_hours=labor_hours,
-        labor_rate_per_hour=labor_rate_per_hour,
-        packaging_cost=packaging_cost,
-        shipping_cost=shipping_cost,
+        sheet_count=parse_decimal(sheet_count),
+        units_per_sheet=parse_decimal(units_per_sheet),
+        labor_hours=minutes_to_hours(parse_decimal(labor_minutes)),
+        labor_rate_per_hour=parse_decimal(labor_rate_per_hour),
+        packaging_cost=parse_decimal(packaging_cost),
+        shipping_cost=parse_decimal(shipping_cost),
         notes=notes
     )
     
@@ -685,29 +701,29 @@ async def create_laser_engraving(
     laser_design_name: str = Form(...),
     # Layer 1
     laser1_type: str = Form(...),
-    laser1_power_percent: float = Form(80.0),
-    laser1_speed_mm_s: float = Form(200),
-    laser1_passes: int = Form(1),
-    laser1_dpi: int = Form(300),
-    laser1_lines_per_cm: int = Form(60),
+    laser1_power_percent: str = Form("80.0"),
+    laser1_speed_mm_s: str = Form("200"),
+    laser1_passes: str = Form("1"),
+    laser1_dpi: str = Form("300"),
+    laser1_lines_per_cm: str = Form("60"),
     # Layer 2 (optional)
     laser2_type: str = Form(None),
-    laser2_power_percent: float = Form(100.0),
-    laser2_speed_mm_s: float = Form(100),
-    laser2_passes: int = Form(1),
-    laser2_dpi: int = Form(300),
-    laser2_lines_per_cm: int = Form(60),
+    laser2_power_percent: str = Form("100.0"),
+    laser2_speed_mm_s: str = Form("100"),
+    laser2_passes: str = Form("1"),
+    laser2_dpi: str = Form("300"),
+    laser2_lines_per_cm: str = Form("60"),
     # Layer 3 (optional)
     laser3_type: str = Form(None),
-    laser3_power_percent: float = Form(50.0),
-    laser3_speed_mm_s: float = Form(300),
-    laser3_passes: int = Form(1),
-    laser3_dpi: int = Form(600),
-    laser3_lines_per_cm: int = Form(120),
-    labor_hours: float = Form(0),
-    labor_rate_per_hour: float = Form(20.00),
-    packaging_cost: float = Form(0),
-    shipping_cost: float = Form(0),
+    laser3_power_percent: str = Form("50.0"),
+    laser3_speed_mm_s: str = Form("300"),
+    laser3_passes: str = Form("1"),
+    laser3_dpi: str = Form("600"),
+    laser3_lines_per_cm: str = Form("120"),
+    labor_minutes: str = Form("0"),
+    labor_rate_per_hour: str = Form("20.00"),
+    packaging_cost: str = Form("0"),
+    shipping_cost: str = Form("0"),
     notes: str = Form(""),
     db: Session = Depends(get_db)
 ):
@@ -720,29 +736,29 @@ async def create_laser_engraving(
         laser_design_name=laser_design_name,
         # Layer 1
         laser1_type=laser1_type,
-        laser1_power_percent=laser1_power_percent,
-        laser1_speed_mm_s=laser1_speed_mm_s,
-        laser1_passes=laser1_passes,
-        laser1_dpi=laser1_dpi,
-        laser1_lines_per_cm=laser1_lines_per_cm,
+        laser1_power_percent=parse_decimal(laser1_power_percent),
+        laser1_speed_mm_s=parse_decimal(laser1_speed_mm_s),
+        laser1_passes=int(parse_decimal(laser1_passes)),
+        laser1_dpi=int(parse_decimal(laser1_dpi)),
+        laser1_lines_per_cm=int(parse_decimal(laser1_lines_per_cm)),
         # Layer 2
         laser2_type=laser2_type if laser2_type else None,
-        laser2_power_percent=laser2_power_percent,
-        laser2_speed_mm_s=laser2_speed_mm_s,
-        laser2_passes=laser2_passes,
-        laser2_dpi=laser2_dpi,
-        laser2_lines_per_cm=laser2_lines_per_cm,
+        laser2_power_percent=parse_decimal(laser2_power_percent),
+        laser2_speed_mm_s=parse_decimal(laser2_speed_mm_s),
+        laser2_passes=int(parse_decimal(laser2_passes)),
+        laser2_dpi=int(parse_decimal(laser2_dpi)),
+        laser2_lines_per_cm=int(parse_decimal(laser2_lines_per_cm)),
         # Layer 3
         laser3_type=laser3_type if laser3_type else None,
-        laser3_power_percent=laser3_power_percent,
-        laser3_speed_mm_s=laser3_speed_mm_s,
-        laser3_passes=laser3_passes,
-        laser3_dpi=laser3_dpi,
-        laser3_lines_per_cm=laser3_lines_per_cm,
-        labor_hours=labor_hours,
-        labor_rate_per_hour=labor_rate_per_hour,
-        packaging_cost=packaging_cost,
-        shipping_cost=shipping_cost,
+        laser3_power_percent=parse_decimal(laser3_power_percent),
+        laser3_speed_mm_s=parse_decimal(laser3_speed_mm_s),
+        laser3_passes=int(parse_decimal(laser3_passes)),
+        laser3_dpi=int(parse_decimal(laser3_dpi)),
+        laser3_lines_per_cm=int(parse_decimal(laser3_lines_per_cm)),
+        labor_hours=minutes_to_hours(parse_decimal(labor_minutes)),
+        labor_rate_per_hour=parse_decimal(labor_rate_per_hour),
+        packaging_cost=parse_decimal(packaging_cost),
+        shipping_cost=parse_decimal(shipping_cost),
         notes=notes
     )
     
@@ -838,42 +854,42 @@ async def update_product(
     category: str = Form("Sonstiges"),
     # 3D-Druck Felder
     filament_material_id: int = Form(None),
-    filament_weight_g: float = Form(None),
-    print_time_hours: float = Form(0),
+    filament_weight_g: str = Form(None),
+    print_time_hours: str = Form("0"),
     # Sticker Felder
     sheet_material_id: int = Form(None),
-    sheet_count: float = Form(None),
-    units_per_sheet: float = Form(1),
-    cut_time_hours: float = Form(0),
+    sheet_count: str = Form(None),
+    units_per_sheet: str = Form("1"),
+    cut_time_hours: str = Form("0"),
     # Laser-Gravur Felder - Layer 1
     laser_material_id: int = Form(None),
     laser_design_name: str = Form(None),
     laser1_type: str = Form(None),
-    laser1_power_percent: float = Form(80.0),
-    laser1_speed_mm_s: float = Form(200),
-    laser1_passes: int = Form(1),
-    laser1_dpi: int = Form(300),
-    laser1_lines_per_cm: int = Form(60),
+    laser1_power_percent: str = Form("80.0"),
+    laser1_speed_mm_s: str = Form("200"),
+    laser1_passes: str = Form("1"),
+    laser1_dpi: str = Form("300"),
+    laser1_lines_per_cm: str = Form("60"),
     # Laser-Gravur Felder - Layer 2
     laser2_type: str = Form(None),
-    laser2_power_percent: float = Form(100.0),
-    laser2_speed_mm_s: float = Form(100),
-    laser2_passes: int = Form(1),
-    laser2_dpi: int = Form(300),
-    laser2_lines_per_cm: int = Form(60),
+    laser2_power_percent: str = Form("100.0"),
+    laser2_speed_mm_s: str = Form("100"),
+    laser2_passes: str = Form("1"),
+    laser2_dpi: str = Form("300"),
+    laser2_lines_per_cm: str = Form("60"),
     # Laser-Gravur Felder - Layer 3
     laser3_type: str = Form(None),
-    laser3_power_percent: float = Form(50.0),
-    laser3_speed_mm_s: float = Form(300),
-    laser3_passes: int = Form(1),
-    laser3_dpi: int = Form(600),
-    laser3_lines_per_cm: int = Form(120),
+    laser3_power_percent: str = Form("50.0"),
+    laser3_speed_mm_s: str = Form("300"),
+    laser3_passes: str = Form("1"),
+    laser3_dpi: str = Form("600"),
+    laser3_lines_per_cm: str = Form("120"),
     # Gemeinsame Felder
     machine_id: int = Form(None),
-    labor_hours: float = Form(0),
-    labor_rate_per_hour: float = Form(20.00),
-    packaging_cost: float = Form(0),
-    shipping_cost: float = Form(0),
+    labor_minutes: str = Form("0"),
+    labor_rate_per_hour: str = Form("20.00"),
+    packaging_cost: str = Form("0"),
+    shipping_cost: str = Form("0"),
     notes: str = Form(""),
     db: Session = Depends(get_db)
 ):
@@ -888,45 +904,45 @@ async def update_product(
     # Typ-spezifische Felder
     if product.product_type == "3d_print":
         product.filament_material_id = filament_material_id
-        product.filament_weight_g = filament_weight_g
-        product.print_time_hours = print_time_hours
+        product.filament_weight_g = parse_decimal(filament_weight_g) if filament_weight_g else None
+        product.print_time_hours = parse_decimal(print_time_hours)
     elif product.product_type in ["sticker_sheet", "diecut_sticker"]:
         product.sheet_material_id = sheet_material_id
-        product.sheet_count = sheet_count
-        product.units_per_sheet = units_per_sheet
-        product.cut_time_hours = cut_time_hours
+        product.sheet_count = parse_decimal(sheet_count) if sheet_count else None
+        product.units_per_sheet = parse_decimal(units_per_sheet)
+        product.cut_time_hours = parse_decimal(cut_time_hours)
     elif product.product_type == "laser_engraving":
         product.laser_material_id = laser_material_id
         product.laser_design_name = laser_design_name
         # Layer 1
         product.laser1_type = laser1_type
-        product.laser1_power_percent = laser1_power_percent
-        product.laser1_speed_mm_s = laser1_speed_mm_s
-        product.laser1_passes = laser1_passes
-        product.laser1_dpi = laser1_dpi
-        product.laser1_lines_per_cm = laser1_lines_per_cm
+        product.laser1_power_percent = parse_decimal(laser1_power_percent)
+        product.laser1_speed_mm_s = parse_decimal(laser1_speed_mm_s)
+        product.laser1_passes = int(parse_decimal(laser1_passes))
+        product.laser1_dpi = int(parse_decimal(laser1_dpi))
+        product.laser1_lines_per_cm = int(parse_decimal(laser1_lines_per_cm))
         # Layer 2
         product.laser2_type = laser2_type if laser2_type else None
-        product.laser2_power_percent = laser2_power_percent
-        product.laser2_speed_mm_s = laser2_speed_mm_s
-        product.laser2_passes = laser2_passes
-        product.laser2_dpi = laser2_dpi
-        product.laser2_lines_per_cm = laser2_lines_per_cm
+        product.laser2_power_percent = parse_decimal(laser2_power_percent)
+        product.laser2_speed_mm_s = parse_decimal(laser2_speed_mm_s)
+        product.laser2_passes = int(parse_decimal(laser2_passes))
+        product.laser2_dpi = int(parse_decimal(laser2_dpi))
+        product.laser2_lines_per_cm = int(parse_decimal(laser2_lines_per_cm))
         # Layer 3
         product.laser3_type = laser3_type if laser3_type else None
-        product.laser3_power_percent = laser3_power_percent
-        product.laser3_speed_mm_s = laser3_speed_mm_s
-        product.laser3_passes = laser3_passes
-        product.laser3_dpi = laser3_dpi
-        product.laser3_lines_per_cm = laser3_lines_per_cm
+        product.laser3_power_percent = parse_decimal(laser3_power_percent)
+        product.laser3_speed_mm_s = parse_decimal(laser3_speed_mm_s)
+        product.laser3_passes = int(parse_decimal(laser3_passes))
+        product.laser3_dpi = int(parse_decimal(laser3_dpi))
+        product.laser3_lines_per_cm = int(parse_decimal(laser3_lines_per_cm))
     
     # Gemeinsame Felder
     if product.product_type == "3d_print":
         product.machine_id = machine_id
-    product.labor_hours = labor_hours
-    product.labor_rate_per_hour = labor_rate_per_hour
-    product.packaging_cost = packaging_cost
-    product.shipping_cost = shipping_cost
+    product.labor_hours = minutes_to_hours(parse_decimal(labor_minutes))
+    product.labor_rate_per_hour = parse_decimal(labor_rate_per_hour)
+    product.packaging_cost = parse_decimal(packaging_cost)
+    product.shipping_cost = parse_decimal(shipping_cost)
     product.notes = notes
     product.updated_at = datetime.utcnow()
     

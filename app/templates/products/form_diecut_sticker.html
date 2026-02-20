@@ -83,10 +83,11 @@
         <div class="grid">
             <div>
                 <div class="form-group">
-                    <label for="labor_hours">Arbeitsstunden</label>
-                    <input type="number" id="labor_hours" name="labor_hours" 
-                           step="0.1" min="0"
-                           value="{{ product.labor_hours if product else '0' }}">
+                    <label for="labor_minutes">Arbeitszeit (Minuten)</label>
+                    <input type="text" id="labor_minutes" name="labor_minutes" 
+                           pattern="[0-9]*[.,]?[0-9]*" inputmode="decimal"
+                           value="{% if product %}{{ (product.labor_hours * 60) }}{% else %}0{% endif %}">
+                    <small style="color: var(--color-text-light);">Produktionszeit in Minuten</small>
                 </div>
                 
                 <div class="form-group">

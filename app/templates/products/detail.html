@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: start;">
+    <div style="display: flex; justify-content: space-between; align-items: start; flex-wrap: wrap; gap: 15px;">
         <div>
             <h2>{{ product.name }}</h2>
             <span class="category-badge category-{{ product.category|lower }}">
@@ -14,11 +14,11 @@
                 {{ product.product_type }}
             </span>
         </div>
-        <div class="actions">
-            <a href="/products/{{ product.id }}/edit" class="btn btn-primary">Bearbeiten</a>
+        <div class="actions" style="flex-wrap: wrap;">
+            <a href="/products/{{ product.id }}/edit" class="btn btn-primary">✏️ Bearbeiten</a>
             <form method="POST" action="/products/{{ product.id }}/delete" style="display: inline;" 
                   onsubmit="return confirm('Möchtest du dieses Produkt wirklich löschen?');">
-                <button type="submit" class="btn btn-danger">Löschen</button>
+                <button type="submit" class="btn btn-danger">🗑️ Löschen</button>
             </form>
         </div>
     </div>
@@ -36,6 +36,7 @@
         <h2>Material</h2>
         
         {% if product.product_type == '3d_print' %}
+        <div class="table-responsive">
         <table>
             <tr>
                 <td>Filament:</td>
@@ -54,7 +55,9 @@
                 <td><strong>{{ calc.material_cost }} €</strong></td>
             </tr>
         </table>
+        </div>
         {% elif product.product_type == 'sticker_sheet' %}
+        <div class="table-responsive">
         <table>
             <tr>
                 <td>Material:</td>
@@ -73,7 +76,9 @@
                 <td><strong>{{ calc.material_cost }} €</strong></td>
             </tr>
         </table>
+        </div>
         {% elif product.product_type == 'laser_engraving' %}
+        <div class="table-responsive">
         <table>
             <tr>
                 <td>Material:</td>
@@ -112,9 +117,11 @@
             </tr>
             {% endif %}
         </table>
+        </div>
         {% endif %}
         
         <h3 style="margin-top: 30px;">Weitere Kosten</h3>
+        <div class="table-responsive">
         <table>
             <tr>
                 <td>Verpackung:</td>
@@ -125,10 +132,12 @@
                 <td><strong>{{ product.shipping_cost }} €</strong></td>
             </tr>
         </table>
+        </div>
     </div>
     
     <div class="card">
         <h2>Produktion & Arbeit</h2>
+        <div class="table-responsive">
         <table>
             {% if product.product_type == '3d_print' %}
             <tr style="border-bottom: 2px solid var(--color-primary-dark);">
@@ -154,8 +163,8 @@
                 <td><strong>{{ calc.machine_cost }} €</strong></td>
             </tr>
             <tr style="border-top: 2px solid var(--color-primary-dark);">
-                <td>Arbeitsstunden:</td>
-                <td><strong>{{ product.labor_hours }} h</strong></td>
+                <td>Arbeitszeit:</td>
+                <td><strong>{{ (product.labor_hours * 60) }} min</strong> ({{ "%.2f"|format(product.labor_hours) }} h)</td>
             </tr>
             <tr>
                 <td>Stundensatz:</td>
@@ -166,6 +175,7 @@
                 <td><strong>{{ calc.labor_cost }} €</strong></td>
             </tr>
         </table>
+        </div>
     </div>
 </div>
 
@@ -206,6 +216,7 @@
 
 <div class="card">
     <h2>Metadaten</h2>
+    <div class="table-responsive">
     <table>
         <tr>
             <td>Erstellt am:</td>
@@ -216,6 +227,7 @@
             <td>{{ product.updated_at.strftime('%d.%m.%Y %H:%M') }}</td>
         </tr>
     </table>
+    </div>
 </div>
 
 <div class="actions">

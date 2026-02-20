@@ -102,16 +102,18 @@
             <div>
                 <div class="form-group">
                     <label for="print_time_hours">Druckzeit (Stunden) *</label>
-                    <input type="number" id="print_time_hours" name="print_time_hours" 
-                           step="0.1" min="0" required
+                    <input type="text" id="print_time_hours" name="print_time_hours" 
+                           pattern="[0-9]*[.,]?[0-9]*" inputmode="decimal" required
                            value="{{ product.print_time_hours if product else '0' }}">
+                    <small style="color: var(--color-text-light);">z.B. 2,5 oder 2.5 (Komma oder Punkt)</small>
                 </div>
                 
                 <div class="form-group">
-                    <label for="labor_hours">Arbeitsstunden (Nachbearbeitung)</label>
-                    <input type="number" id="labor_hours" name="labor_hours" 
-                           step="0.1" min="0"
-                           value="{{ product.labor_hours if product else '0' }}">
+                    <label for="labor_minutes">Arbeitszeit (Minuten)</label>
+                    <input type="text" id="labor_minutes" name="labor_minutes" 
+                           pattern="[0-9]*[.,]?[0-9]*" inputmode="decimal"
+                           value="{% if product %}{{ (product.labor_hours * 60) }}{% else %}0{% endif %}">
+                    <small style="color: var(--color-text-light);">Nachbearbeitung in Minuten</small>
                 </div>
                 
                 <div class="form-group">
