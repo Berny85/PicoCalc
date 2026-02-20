@@ -347,8 +347,8 @@ class Idea(Base):
     __tablename__ = "ideas"
     
     id = Column(Integer, primary_key=True, index=True)
-    subject = Column(String(255), nullable=True)  # Betreff-Zeile (optional)
-    content = Column(Text, nullable=False)  # Mehrzeiliges Textfeld
+    subject = Column(String(255), nullable=False)  # Idee (Pflichtfeld)
+    content = Column(Text, nullable=True)  # Notizen (optional)
     status = Column(String(20), default="todo")  # 'todo', 'in_progress', 'done'
     
     created_at = Column(DateTime, default=datetime.utcnow)

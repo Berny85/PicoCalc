@@ -4,7 +4,7 @@
 
 ## Project Overview
 
-**PicoCalc** is a web-based product price calculator designed for small manufacturing businesses. It calculates production costs for various product types including 3D printing, sticker production, die-cut stickers, and laser engraving.
+**PicoCalc** is a web-based product price calculator designed for small manufacturing businesses. It calculates production costs for various product types including 3D printing, sticker production, die-cut stickers, paper products, and laser engraving.
 
 - **Repository**: https://github.com/Berny85/PicoCalc.git
 - **Production URL**: http://192.168.50.8:5000
@@ -21,15 +21,15 @@
 | Styling | Vanilla CSS (in templates) |
 | Deployment | Docker + Docker Compose |
 | Infrastructure | Intel NUC with Unraid OS |
-| CI/CD | GitHub Actions |
+| CI/CD | GitHub Actions + Docker Hub |
 
 ## Project Structure
 
 ```
 PicoCalc/
 ├── app/                          # Main application code
-│   ├── main.py                   # FastAPI app with all routes
-│   ├── models.py                 # SQLAlchemy database models
+│   ├── main.py                   # FastAPI app with all routes (~1120 lines)
+│   ├── models.py                 # SQLAlchemy database models (~358 lines)
 │   ├── database.py               # Database configuration
 │   ├── requirements.txt          # Python dependencies
 │   ├── Dockerfile                # Application container image
@@ -39,12 +39,14 @@ PicoCalc/
 │       ├── materials/            # Material management UI
 │       ├── machines/             # Machine management UI
 │       ├── products/             # Product forms and details
+│       ├── feedback/             # Feedback form and list
+│       ├── ideas/                # Kanban-style ideas board
 │       └── partials/             # HTMX partial templates
-├── .github/workflows/            # CI/CD configuration
-│   └── deploy.yml                # GitHub Actions workflow
 ├── backup/                       # Database backup scripts
 │   ├── backup-script.sh          # Automated backup script
 │   └── restore-script.sh         # Database restore script
+├── .github/workflows/            # CI/CD configuration
+│   └── deploy.yml                # GitHub Actions workflow
 ├── docker-compose.yaml           # Development configuration
 ├── docker-compose.prod.yml       # Production configuration
 ├── postgresql.conf               # PostgreSQL WAL configuration
@@ -52,6 +54,7 @@ PicoCalc/
 ├── deploy-to-nuc.ps1             # Windows deployment script
 ├── backup-to-local.ps1           # Local backup download script
 ├── quick-deploy.sh               # Fast deployment (no rebuild)
+├── reset-prod.sh                 # Production reset (⚠️ deletes data)
 ├── README.md                     # Project overview (German)
 └── DEPLOYMENT.md                 # Detailed deployment docs (German)
 ```
@@ -81,10 +84,17 @@ Represents production equipment (3D printers, cutters, etc.):
 - `power_kw` - Power consumption
 - Methods: `calculate_cost_per_hour()`, `calculate_cost_per_unit()`
 
+### MaterialType (`models.py`)
+Configurable material categories:
+- `key` - Internal identifier (e.g., 'filament', 'sticker_sheet')
+- `name` - Display name
+- `sort_order` - For dropdown ordering
+- `is_active` - Enable/disable flag
+
 ### Material (`models.py`)
 Represents raw materials (filaments, sticker sheets, paper):
-- `name`, `material_type` (filament, sticker_sheet, paper, other)
-- `brand`, `color`, `unit` (kg, sheet, piece)
+- `name`, `material_type` (references MaterialType.key)
+- `brand`, `color`, `unit` (kg, sheet, m, piece)
 - `price_per_unit`
 
 ### Product (`models.py`)
@@ -92,8 +102,19 @@ Central entity with type-specific fields:
 - **Common**: `name`, `product_type`, `category`, `labor_hours`, `labor_rate_per_hour`
 - **3D Print**: `filament_material_id`, `filament_weight_g`, `print_time_hours`
 - **Sticker/Paper**: `sheet_material_id`, `sheet_count`, `units_per_sheet`
-- **Laser**: `laser_material`, `laser_design_name`, `laser1_*`, `laser2_*`, `laser3_*`
+- **Laser**: `laser_material_id`, `laser_design_name`, `laser1_*`, `laser2_*`, `laser3_*`
 - Method: `calculate_costs()` - Returns cost breakdown and selling price suggestions
+
+### Feedback (`models.py`)
+User feedback and bug reports:
+- `page_url`, `page_title` - Context where feedback was given
+- `category` - 'bug', 'feature', 'improvement', 'other'
+- `message`, `status` - 'new', 'in_progress', 'done', 'rejected'
+
+### Idea (`models.py`)
+Kanban-style ideas board:
+- `subject`, `content`
+- `status` - 'todo', 'in_progress', 'done'
 
 ## Product Types & Categories
 
@@ -101,39 +122,11 @@ Central entity with type-specific fields:
 - `3d_print` - 3D printed objects
 - `sticker_sheet` - Sticker sheets
 - `diecut_sticker` - Die-cut stickers
+- `paper` - Paper products
 - `laser_engraving` - Laser engraved items
 
 ### Categories (user-facing)
 Dekoration, Technik, Ersatzteile, Spielzeug, Werkzeuge, Sticker, Papierprodukte, Sonstiges
-
-## Development Workflow
-
-### Local Development
-```powershell
-# Start development environment
-docker-compose up -d
-
-# Access application at http://localhost:5000
-# Access pgAdmin at http://localhost:5050
-```
-
-### Making Changes
-1. Edit code in `app/` directory
-2. Changes auto-reload in development (uvicorn --reload)
-3. Test locally
-4. Commit and push to main branch
-
-### Deployment
-```powershell
-# Windows: Automated deployment via PowerShell
-.\deploy-to-nuc.ps1
-
-# Or manual deployment via SSH:
-ssh root@192.168.50.8
-cd /mnt/user/appdata/picocalc
-git pull origin main
-docker compose -f docker-compose.prod.yml up --build -d
-```
 
 ## Build and Test Commands
 
@@ -150,6 +143,10 @@ docker-compose down
 
 # Rebuild after dependency changes
 docker-compose up --build -d
+
+# Reset database (⚠️ deletes all data)
+docker-compose down -v
+docker-compose up -d
 ```
 
 ### Production (on NUC)
@@ -168,6 +165,36 @@ docker logs picocalc-app
 docker logs picocalc-db
 ```
 
+### Windows Deployment (from dev machine)
+```powershell
+# Automated deployment via PowerShell
+.\deploy-to-nuc.ps1
+
+# Download backup from NUC
+.\backup-to-local.ps1
+```
+
+## Development Workflow
+
+### Local Development
+```powershell
+# 1. Start development environment
+docker-compose up -d
+
+# 2. Develop and test at http://localhost:5000
+
+# 3. Push changes to GitHub
+git add .
+git commit -m "Beschreibung"
+git push origin main
+```
+
+### Deployment Flow
+1. Push code to GitHub triggers GitHub Actions workflow
+2. Workflow builds Docker image and pushes to Docker Hub
+3. Portainer webhook triggers auto-deployment on NUC
+4. NUC pulls new image and restarts containers
+
 ## Key Configuration Files
 
 ### Environment Variables
@@ -184,18 +211,43 @@ Production: `postgresql://printuser:${DB_PASSWORD}@db:5432/printcalc`
 - Backups run 3x daily (06:00, 12:00, 18:00)
 - 14-day retention policy
 
-## CI/CD Pipeline
+## Code Style Guidelines
 
-The GitHub Actions workflow (`.github/workflows/deploy.yml`):
-1. Triggers on push to `main` branch
-2. Builds Docker image from `app/` directory
-3. Pushes to Docker Hub (`bernys/picocalc:latest`)
-4. Triggers Portainer webhook for auto-deployment
+### Python
+- Use type hints where practical
+- Follow PEP 8 naming conventions
+- Database models use German field names for business concepts
+- Route handlers use German variable names for form data
 
-Required GitHub Secrets:
-- `DOCKER_USERNAME` - Docker Hub username
-- `DOCKER_PASSWORD` - Docker Hub access token
-- `PORTAINER_WEBHOOK_URL` - Portainer stack webhook URL
+### Template Naming
+- List views: `{resource}/list.html`
+- Form views: `{resource}/form.html` or `form_{type}.html`
+- Detail views: `{resource}/detail.html`
+- HTMX partials: `partials/{name}.html`
+
+### Database Conventions
+- Table names: plural, lowercase (machines, materials, products)
+- Primary keys: `id` (Integer, auto-increment)
+- Timestamps: `created_at`, `updated_at`
+- Foreign keys: `{resource}_id`
+
+## Testing
+
+Currently, the project does not have automated tests. Testing is done manually:
+
+1. Start development environment: `docker-compose up -d`
+2. Access http://localhost:5000
+3. Test CRUD operations for all entities
+4. Verify cost calculations against expected values
+5. Check responsive design in different browsers
+
+## Security Considerations
+
+1. **No sensitive data in code** - Passwords via environment variables
+2. **Database** - PostgreSQL behind Docker network, port 5432 exposed only on host
+3. **Secrets management** - Docker secrets or Portainer environment variables
+4. **Backups** - Automated backups with retention
+5. **No authentication** - Current version has no user authentication (internal use only)
 
 ## Backup and Restore
 
@@ -219,34 +271,6 @@ Required GitHub Secrets:
 ./backup/restore-script.sh 20250115_120000
 ```
 
-## Code Style Guidelines
-
-### Python
-- Use type hints where practical
-- Follow PEP 8 naming conventions
-- Database models use German field names for business concepts
-- Route handlers use German variable names for form data
-
-### Template Naming
-- List views: `{resource}/list.html`
-- Form views: `{resource}/form.html` or `form_{type}.html`
-- Detail views: `{resource}/detail.html`
-- HTMX partials: `partials/{name}.html`
-
-### Database Conventions
-- Table names: plural, lowercase (machines, materials, products)
-- Primary keys: `id` (Integer, auto-increment)
-- Timestamps: `created_at`, `updated_at`
-- Foreign keys: `{resource}_id`
-
-## Security Considerations
-
-1. **No sensitive data in code** - Passwords via environment variables
-2. **Database** - PostgreSQL behind Docker network, port 5432 exposed only on host
-3. **Secrets management** - Docker secrets or Portainer environment variables
-4. **Backups** - Automated backups with retention
-5. **No authentication** - Current version has no user authentication (internal use only)
-
 ## Common Tasks
 
 ### Adding a New Product Type
@@ -260,13 +284,26 @@ Required GitHub Secrets:
 1. Add column to model in `models.py`
 2. Update form templates
 3. Update route handlers in `main.py`
-4. Since there's no migration system currently, manual DB update or rebuild required
+4. Since there's no migration system currently, manual DB update or recreation required
 
 ### Updating Dependencies
 1. Edit `app/requirements.txt`
 2. Rebuild containers: `docker-compose up --build -d`
 3. Test thoroughly
 4. Commit changes
+
+## CI/CD Pipeline
+
+The GitHub Actions workflow (`.github/workflows/deploy.yml`):
+1. Triggers on push to `main` branch
+2. Builds Docker image from `app/` directory
+3. Pushes to Docker Hub (`bernys/picocalc:latest`)
+4. Triggers Portainer webhook for auto-deployment
+
+Required GitHub Secrets:
+- `DOCKER_USERNAME` - Docker Hub username
+- `DOCKER_PASSWORD` - Docker Hub access token
+- `PORTAINER_WEBHOOK_URL` - Portainer stack webhook URL
 
 ## Troubleshooting
 
@@ -294,13 +331,19 @@ docker-compose down -v  # Removes volumes
 docker-compose up -d    # Recreates fresh
 ```
 
+### Production Reset (⚠️ Destroys all data)
+```bash
+# On NUC only - use with caution!
+./reset-prod.sh
+```
+
 ## Important Notes for AI Agents
 
 1. **German Language**: All user-facing text is German. Maintain German for new UI text, comments, and documentation.
 
 2. **No ORM Migrations**: The project uses `Base.metadata.create_all()` on startup. Schema changes require:
    - Model updates
-   - Manual DB migration or recreation
+   - Manual DB migration or recreation (use `reset-prod.sh` on NUC with caution)
 
 3. **Cost Calculation Logic**: The core business logic is in `models.py`:
    - `Machine.calculate_cost_per_hour()` - Includes depreciation + electricity
@@ -314,3 +357,10 @@ docker-compose up -d    # Recreates fresh
 6. **Development vs Production**:
    - Dev: Code mounted as volume, auto-reload enabled
    - Prod: Code baked into image, no volume mounts for app code
+
+7. **File Organization**: The main application is intentionally monolithic (`main.py` contains all routes) for simplicity in a small project.
+
+8. **Dependencies**: See `app/requirements.txt` for exact versions:
+   - FastAPI 0.109.0
+   - SQLAlchemy 2.0.25
+   - PostgreSQL driver: psycopg2-binary 2.9.9

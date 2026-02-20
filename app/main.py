@@ -1044,8 +1044,8 @@ async def ideas_board(request: Request, db: Session = Depends(get_db)):
 @app.post("/ideas")
 async def create_idea(
     request: Request,
-    subject: str = Form(""),
-    content: str = Form(...),
+    subject: str = Form(...),
+    content: str = Form(""),
     status: str = Form("todo"),
     db: Session = Depends(get_db)
 ):
@@ -1066,8 +1066,8 @@ async def create_idea(
 async def update_idea(
     idea_id: int,
     request: Request,
-    subject: str = Form(""),
-    content: str = Form(...),
+    subject: str = Form(...),
+    content: str = Form(""),
     status: str = Form("todo"),
     db: Session = Depends(get_db)
 ):
