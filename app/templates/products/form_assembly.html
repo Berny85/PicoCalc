@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Picobellu Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>{{ title }}</h2>
+    
+    <form method="POST" action="{% if product %}/products/{{ product.id }}/update{% else %}/products/assembly{% endif %}">
+        <div class="grid">
+            <div>
+                <div class="form-group">
+                    <label for="name">Produktname *</label>
+                    <input type="text" id="name" name="name" required 
+                           value="{{ product.name if product else '' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="category">Kategorie</label>
+                    <select id="category" name="category">
+                        {% for cat in categories %}
+                        <option value="{{ cat }}" {% if product and product.category == cat %}selected{% endif %}>
+                            {{ cat }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            
+            <div>
+                <div class="form-group">
+                    <label for="notes">Notizen</label>
+                    <textarea id="notes" name="notes" rows="4">{{ product.notes if product else '' }}</textarea>
+                </div>
+            </div>
+        </div>
+        
+        <h3 style="margin-top: 30px; color: var(--color-primary-dark);">Komponenten</h3>
+        <p style="color: var(--color-text-light); margin-bottom: 15px;">
+            Füge alle Komponenten hinzu, die für dieses Zusammenbau-Produkt benötigt werden.
+            Du kannst entweder manuell Kosten eingeben oder ein bestehendes Produkt verknüpfen.
+        </p>
+        
+        <div id="components-container">
+            {% if product and product.components %}
+                {% for component in product.components|sort(attribute='sort_order') %}
+                <div class="component-row" style="background: var(--color-bg-hover); padding: 20px; border-radius: 8px; margin-bottom: 15px;">
+                    <div class="grid" style="align-items: end;">
+                        <div>
+                            <label>Komponenten-Name *</label>
+                            <input type="text" name="component_name" required 
+                                   value="{{ component.name }}" placeholder="z.B. Metall-Ring">
+                        </div>
+                        <div>
+                            <label>Anzahl</label>
+                            <input type="number" name="component_quantity" step="0.01" min="0" 
+                                   value="{{ component.quantity }}" placeholder="1">
+                        </div>
+                        <div>
+                            <label>Stückkosten (€)</label>
+                            <input type="number" name="component_unit_cost" step="0.01" min="0" 
+                                   value="{{ component.unit_cost }}" placeholder="0.00">
+                        </div>
+                        <div>
+                            <button type="button" class="btn btn-danger" onclick="removeComponent(this)" style="width: 100%;">
+                                🗑️ Entfernen
+                            </button>
+                        </div>
+                    </div>
+                    <div class="grid" style="margin-top: 15px;">
+                        <div>
+                            <label>Verknüpftes Produkt (optional)</label>
+                            <select name="component_linked_product_id" style="width: 100%;">
+                                <option value="">-- Kein Produkt --</option>
+                                {% for p in all_products %}
+                                    {% if not product or p.id != product.id %}
+                                    <option value="{{ p.id }}" {% if component.linked_product_id == p.id %}selected{% endif %}>
+                                        {{ p.name }} ({{ p.product_type }})
+                                    </option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                            <small style="color: var(--color-text-light);">
+                                Wenn ein Produkt verknüpft wird, werden dessen Gesamtkosten automatisch übernommen.
+                            </small>
+                        </div>
+                        <div>
+                            <label>Notizen</label>
+                            <input type="text" name="component_notes" 
+                                   value="{{ component.notes or '' }}" placeholder="Optionale Notizen">
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="component-row" style="background: var(--color-bg-hover); padding: 20px; border-radius: 8px; margin-bottom: 15px;">
+                    <div class="grid" style="align-items: end;">
+                        <div>
+                            <label>Komponenten-Name *</label>
+                            <input type="text" name="component_name" required placeholder="z.B. Metall-Ring">
+                        </div>
+                        <div>
+                            <label>Anzahl</label>
+                            <input type="number" name="component_quantity" step="0.01" min="0" value="1" placeholder="1">
+                        </div>
+                        <div>
+                            <label>Stückkosten (€)</label>
+                            <input type="number" name="component_unit_cost" step="0.01" min="0" placeholder="0.00">
+                        </div>
+                        <div>
+                            <button type="button" class="btn btn-danger" onclick="removeComponent(this)" style="width: 100%;">
+                                🗑️ Entfernen
+                            </button>
+                        </div>
+                    </div>
+                    <div class="grid" style="margin-top: 15px;">
+                        <div>
+                            <label>Verknüpftes Produkt (optional)</label>
+                            <select name="component_linked_product_id" style="width: 100%;">
+                                <option value="">-- Kein Produkt --</option>
+                                {% for p in all_products %}
+                                    {% if not product or p.id != product.id %}
+                                    <option value="{{ p.id }}">
+                                        {{ p.name }} ({{ p.product_type }})
+                                    </option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                            <small style="color: var(--color-text-light);">
+                                Wenn ein Produkt verknüpft wird, werden dessen Gesamtkosten automatisch übernommen.
+                            </small>
+                        </div>
+                        <div>
+                            <label>Notizen</label>
+                            <input type="text" name="component_notes" placeholder="Optionale Notizen">
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+        
+        <button type="button" class="btn btn-secondary" onclick="addComponent()" style="margin-top: 10px;">
+            ➕ Weitere Komponente hinzufügen
+        </button>
+        
+        <h3 style="margin-top: 30px; color: var(--color-primary-dark);">Arbeit & Kosten</h3>
+        <div class="grid">
+            <div>
+                <div class="form-group">
+                    <label for="labor_minutes">Arbeitszeit für Zusammenbau (Minuten)</label>
+                    <input type="text" id="labor_minutes" name="labor_minutes" 
+                           pattern="[0-9]*[.,]?[0-9]*" inputmode="decimal"
+                           value="{% if product %}{{ (product.labor_hours * 60) }}{% else %}0{% endif %}">
+                    <small style="color: var(--color-text-light);">Zeit für Montage und Verpackung</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="labor_rate_per_hour">Stundensatz (€/h)</label>
+                    <input type="number" id="labor_rate_per_hour" name="labor_rate_per_hour" 
+                           step="0.01" min="0"
+                           value="{{ product.labor_rate_per_hour if product else '20.00' }}">
+                </div>
+            </div>
+            
+            <div>
+                <div class="form-group">
+                    <label for="packaging_cost">Verpackungskosten (€)</label>
+                    <input type="number" id="packaging_cost" name="packaging_cost" 
+                           step="0.01" min="0"
+                           value="{{ product.packaging_cost if product else '0' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="shipping_cost">Versandkosten (€)</label>
+                    <input type="number" id="shipping_cost" name="shipping_cost" 
+                           step="0.01" min="0"
+                           value="{{ product.shipping_cost if product else '0' }}">
+                </div>
+            </div>
+        </div>
+        
+        <div class="actions" style="margin-top: 30px;">
+            <button type="submit" class="btn btn-primary">
+                {% if product %}Aktualisieren{% else %}Zusammenbau-Produkt anlegen{% endif %}
+            </button>
+            <a href="{% if product %}/products/{{ product.id }}{% else %}/products{% endif %}" 
+               class="btn btn-secondary">Abbrechen</a>
+        </div>
+    </form>
+</div>
+
+<!-- Template für neue Komponente -->
+<template id="component-template">
+    <div class="component-row" style="background: var(--color-bg-hover); padding: 20px; border-radius: 8px; margin-bottom: 15px;">
+        <div class="grid" style="align-items: end;">
+            <div>
+                <label>Komponenten-Name *</label>
+                <input type="text" name="component_name" required placeholder="z.B. Metall-Ring">
+            </div>
+            <div>
+                <label>Anzahl</label>
+                <input type="number" name="component_quantity" step="0.01" min="0" value="1" placeholder="1">
+            </div>
+            <div>
+                <label>Stückkosten (€)</label>
+                <input type="number" name="component_unit_cost" step="0.01" min="0" placeholder="0.00">
+            </div>
+            <div>
+                <button type="button" class="btn btn-danger" onclick="removeComponent(this)" style="width: 100%;">
+                    🗑️ Entfernen
+                </button>
+            </div>
+        </div>
+        <div class="grid" style="margin-top: 15px;">
+            <div>
+                <label>Verknüpftes Produkt (optional)</label>
+                <select name="component_linked_product_id" style="width: 100%;">
+                    <option value="">-- Kein Produkt --</option>
+                    {% for p in all_products %}
+                        {% if not product or p.id != product.id %}
+                        <option value="{{ p.id }}">
+                            {{ p.name }} ({{ p.product_type }})
+                        </option>
+                        {% endif %}
+                    {% endfor %}
+                </select>
+                <small style="color: var(--color-text-light);">
+                    Wenn ein Produkt verknüpft wird, werden dessen Gesamtkosten automatisch übernommen.
+                </small>
+            </div>
+            <div>
+                <label>Notizen</label>
+                <input type="text" name="component_notes" placeholder="Optionale Notizen">
+            </div>
+        </div>
+    </div>
+</template>
+
+<script>
+function addComponent() {
+    const container = document.getElementById('components-container');
+    const template = document.getElementById('component-template');
+    const clone = template.content.cloneNode(true);
+    container.appendChild(clone);
+}
+
+function removeComponent(button) {
+    const row = button.closest('.component-row');
+    const container = document.getElementById('components-container');
+    
+    // Prüfe ob es die letzte Komponente ist
+    if (container.querySelectorAll('.component-row').length > 1) {
+        row.remove();
+    } else {
+        // Leere die Felder statt zu löschen
+        row.querySelectorAll('input').forEach(input => {
+            if (input.type === 'number') {
+                input.value = input.name === 'component_quantity' ? '1' : '';
+            } else {
+                input.value = '';
+            }
+        });
+        row.querySelectorAll('select').forEach(select => {
+            select.value = '';
+        });
+    }
+}
+</script>
+{% endblock %}

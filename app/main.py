@@ -5,7 +5,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError
 from database import engine, get_db, SessionLocal
-from models import Base, Product, Material, MaterialType, Machine, Feedback, Idea, ConvertedFile, ProductImage, STROM_PREIS_KWH
+from models import Base, Product, Material, MaterialType, Machine, Feedback, Idea, ConvertedFile, ProductImage, ProductComponent, STROM_PREIS_KWH
 from datetime import datetime
 import time
 import os
@@ -103,6 +103,7 @@ PRODUCT_TYPES = [
     ("sticker_sheet", "Stickerbogen"),
     ("diecut_sticker", "DieCut-Sticker"),
     ("paper", "Papierprodukt"),
+    ("assembly", "Zusammenbau-Produkt"),
 ]
 
 @app.get("/", response_class=HTMLResponse)
@@ -782,6 +783,89 @@ async def create_laser_engraving(
     
     return RedirectResponse(url=f"/products/{product.id}", status_code=303)
 
+# ===== ZUSAMMENBAU (ASSEMBLY) ROUTES =====
+
+@app.get("/products/assembly/new", response_class=HTMLResponse)
+async def new_assembly_form(request: Request, db: Session = Depends(get_db)):
+    """Formular für neues Zusammenbau-Produkt"""
+    # Lade alle Produkte für Verknüpfung
+    all_products = db.query(Product).order_by(Product.name).all()
+    
+    return templates.TemplateResponse("products/form_assembly.html", {
+        "request": request,
+        "product": None,
+        "categories": CATEGORIES,
+        "all_products": all_products,
+        "title": "Neues Zusammenbau-Produkt"
+    })
+
+@app.post("/products/assembly")
+async def create_assembly(
+    request: Request,
+    name: str = Form(...),
+    category: str = Form("Sonstiges"),
+    labor_minutes: str = Form("0"),
+    labor_rate_per_hour: str = Form("20.00"),
+    packaging_cost: str = Form("0"),
+    shipping_cost: str = Form("0"),
+    notes: str = Form(""),
+    # Komponenten (dynamische Felder)
+    component_name: list[str] = Form([]),
+    component_quantity: list[str] = Form([]),
+    component_unit_cost: list[str] = Form([]),
+    component_notes: list[str] = Form([]),
+    component_linked_product_id: list[str] = Form([]),
+    db: Session = Depends(get_db)
+):
+    """Neues Zusammenbau-Produkt erstellen"""
+    product = Product(
+        name=name,
+        product_type="assembly",
+        category=category,
+        labor_hours=minutes_to_hours(parse_decimal(labor_minutes)),
+        labor_rate_per_hour=parse_decimal(labor_rate_per_hour),
+        packaging_cost=parse_decimal(packaging_cost),
+        shipping_cost=parse_decimal(shipping_cost),
+        notes=notes
+    )
+    
+    db.add(product)
+    db.commit()
+    db.refresh(product)
+    
+    # Komponenten erstellen
+    for i in range(len(component_name)):
+        if i < len(component_name) and component_name[i].strip():
+            # Wenn ein verknüpftes Produkt ausgewählt wurde, hole dessen Kosten
+            linked_id = None
+            unit_cost = parse_decimal(component_unit_cost[i]) if i < len(component_unit_cost) else 0
+            
+            if i < len(component_linked_product_id) and component_linked_product_id[i]:
+                try:
+                    linked_id = int(component_linked_product_id[i])
+                    linked_product = db.query(Product).filter(Product.id == linked_id).first()
+                    if linked_product:
+                        # Berechne Kosten des verknüpften Produkts
+                        linked_calc = linked_product.calculate_costs()
+                        unit_cost = linked_calc['total_cost']
+                except (ValueError, TypeError):
+                    linked_id = None
+            
+            comp = ProductComponent(
+                product_id=product.id,
+                name=component_name[i].strip(),
+                quantity=parse_decimal(component_quantity[i]) if i < len(component_quantity) else 1,
+                unit_cost=unit_cost,
+                notes=component_notes[i] if i < len(component_notes) else None,
+                linked_product_id=linked_id,
+                sort_order=i
+            )
+            db.add(comp)
+    
+    db.commit()
+    
+    return RedirectResponse(url=f"/products/{product.id}", status_code=303)
+
 # ===== PRODUKT ANZEIGEN/BEARBEITEN =====
 
 @app.get("/products/{product_id}", response_class=HTMLResponse)
@@ -808,12 +892,16 @@ async def view_product(
     filaments = []
     sticker_sheets = []
     laser_materials = []
+    all_products = []
     if product.product_type == "3d_print":
         filaments = db.query(Material).filter(Material.material_type == "filament").order_by(Material.name).all()
     elif product.product_type in ["sticker_sheet", "diecut_sticker"]:
         sticker_sheets = db.query(Material).filter(Material.material_type == "sticker_sheet").order_by(Material.name).all()
     elif product.product_type == "laser_engraving":
         laser_materials = db.query(Material).filter(Material.material_type == "laser_material").order_by(Material.name).all()
+    elif product.product_type == "assembly":
+        # Lade alle Produkte für Verknüpfungs-Anzeige
+        all_products = db.query(Product).filter(Product.id != product_id).order_by(Product.name).all()
     
     # Lade Maschinen je nach Typ (nur für 3D-Druck)
     machines = []
@@ -830,6 +918,7 @@ async def view_product(
         "laser_materials": laser_materials,
         "machines": machines,
         "images": images,
+        "all_products": all_products,
         "success_msg": success,
         "error_msg": error
     })
@@ -860,6 +949,17 @@ async def edit_product_form(product_id: int, request: Request, db: Session = Dep
         template = "products/form_diecut_sticker.html"
     elif product.product_type == "laser_engraving":
         template = "products/form_laser_engraving.html"
+    elif product.product_type == "assembly":
+        template = "products/form_assembly.html"
+        # Lade alle Produkte für Verknüpfung
+        all_products = db.query(Product).order_by(Product.name).all()
+        return templates.TemplateResponse(template, {
+            "request": request,
+            "product": product,
+            "categories": CATEGORIES,
+            "all_products": all_products,
+            "title": f"Produkt bearbeiten"
+        })
     else:
         template = "products/form_generic.html"
     
@@ -919,6 +1019,13 @@ async def update_product(
     packaging_cost: str = Form("0"),
     shipping_cost: str = Form("0"),
     notes: str = Form(""),
+    # Assembly Komponenten (dynamische Felder)
+    component_id: list[str] = Form([]),
+    component_name: list[str] = Form([]),
+    component_quantity: list[str] = Form([]),
+    component_unit_cost: list[str] = Form([]),
+    component_notes: list[str] = Form([]),
+    component_linked_product_id: list[str] = Form([]),
     db: Session = Depends(get_db)
 ):
     """Produkt aktualisieren"""
@@ -963,6 +1070,38 @@ async def update_product(
         product.laser3_passes = int(parse_decimal(laser3_passes))
         product.laser3_dpi = int(parse_decimal(laser3_dpi))
         product.laser3_lines_per_cm = int(parse_decimal(laser3_lines_per_cm))
+    elif product.product_type == "assembly":
+        # Lösche bestehende Komponenten und erstelle neue
+        db.query(ProductComponent).filter(ProductComponent.product_id == product_id).delete()
+        
+        # Komponenten erstellen
+        for i in range(len(component_name)):
+            if i < len(component_name) and component_name[i].strip():
+                # Wenn ein verknüpftes Produkt ausgewählt wurde, hole dessen Kosten
+                linked_id = None
+                unit_cost = parse_decimal(component_unit_cost[i]) if i < len(component_unit_cost) else 0
+                
+                if i < len(component_linked_product_id) and component_linked_product_id[i]:
+                    try:
+                        linked_id = int(component_linked_product_id[i])
+                        linked_product = db.query(Product).filter(Product.id == linked_id).first()
+                        if linked_product:
+                            # Berechne Kosten des verknüpften Produkts
+                            linked_calc = linked_product.calculate_costs()
+                            unit_cost = linked_calc['total_cost']
+                    except (ValueError, TypeError):
+                        linked_id = None
+                
+                comp = ProductComponent(
+                    product_id=product.id,
+                    name=component_name[i].strip(),
+                    quantity=parse_decimal(component_quantity[i]) if i < len(component_quantity) else 1,
+                    unit_cost=unit_cost,
+                    notes=component_notes[i] if i < len(component_notes) else None,
+                    linked_product_id=linked_id,
+                    sort_order=i
+                )
+                db.add(comp)
     
     # Gemeinsame Felder
     if product.product_type == "3d_print":
@@ -984,6 +1123,9 @@ async def delete_product(product_id: int, db: Session = Depends(get_db)):
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Produkt nicht gefunden")
+    
+    # Lösche zuerst alle Komponenten (falls Assembly-Produkt)
+    db.query(ProductComponent).filter(ProductComponent.product_id == product_id).delete()
     
     db.delete(product)
     db.commit()

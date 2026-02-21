@@ -12,13 +12,14 @@
 
 ## Technology Stack
 
-| Component | Technology |
-|-----------|------------|
-| Backend | Python 3.11 + FastAPI 0.109.0 |
-| Database | PostgreSQL 16 |
-| ORM | SQLAlchemy 2.0.25 |
-| Frontend | Jinja2 Templates + HTMX 1.9.10 |
-| Styling | Vanilla CSS (in Templates, Purple/Blue Theme) |
+| Component | Technology | Version |
+|-----------|------------|---------|
+| Backend | Python | 3.11 |
+| Web Framework | FastAPI | 0.109.0 |
+| Database | PostgreSQL | 16 (Alpine) |
+| ORM | SQLAlchemy | 2.0.25 |
+| Frontend | Jinja2 Templates + HTMX | 1.9.10 |
+| Styling | Vanilla CSS (Purple/Blue Theme) |
 | Deployment | Docker + Docker Compose |
 | Infrastructure | Intel NUC mit Unraid OS |
 | CI/CD | GitHub Actions + Docker Hub |
@@ -28,23 +29,23 @@
 ```
 PicoCalc/
 ├── app/                          # Hauptanwendung
-│   ├── main.py                   # FastAPI App mit allen Routes (~1590 Zeilen)
-│   ├── models.py                 # SQLAlchemy Datenbank-Modelle (~422 Zeilen)
-│   ├── database.py               # Datenbank-Konfiguration
+│   ├── main.py                   # FastAPI App mit allen Routes (~1597 Zeilen)
+│   ├── models.py                 # SQLAlchemy Datenbank-Modelle (~436 Zeilen)
+│   ├── database.py               # Datenbank-Konfiguration und Session-Management
 │   ├── requirements.txt          # Python-Abhängigkeiten
 │   ├── Dockerfile                # Container-Image Definition
 │   └── templates/                # Jinja2 HTML Templates
-│       ├── base.html             # Base Layout mit Navigation
+│       ├── base.html             # Base Layout mit Navigation und CSS
 │       ├── index.html            # Dashboard
 │       ├── materials/            # Material-Verwaltung UI
 │       ├── machines/             # Maschinen-Verwaltung UI
 │       ├── products/             # Produkt-Formulare und Details
 │       ├── feedback/             # Feedback-Formular und Liste
 │       ├── ideas/                # Kanban-Style Ideen-Board
-│       ├── tools/                # PNG-zu-SVG Converter
+│       ├── tools/                # PNG-zu-SVG Converter & Bibliothek
 │       └── partials/             # HTMX Partial Templates
 ├── backup/                       # Backup-Skripte
-│   ├── backup-script.sh          # Automatisiertes Backup
+│   ├── backup-script.sh          # Automatisiertes PostgreSQL Backup
 │   └── restore-script.sh         # Datenbank-Wiederherstellung
 ├── .github/workflows/            # CI/CD Konfiguration
 │   └── deploy.yml                # GitHub Actions Workflow
@@ -52,7 +53,7 @@ PicoCalc/
 ├── docker-compose.prod.yml       # Produktions-Konfiguration
 ├── postgresql.conf               # PostgreSQL WAL Konfiguration
 ├── deploy.sh                     # NUC Deployment Script (Bash)
-├── deploy-to-nuc.ps1             # Windows Deployment Script
+├── deploy-to-nuc.ps1             # Windows Deployment Script (PowerShell)
 ├── backup-to-local.ps1           # Lokales Backup-Download Script
 ├── quick-deploy.sh               # Schnelles Deployment (ohne Rebuild)
 ├── reset-prod.sh                 # Produktions-Reset (⚠️ löscht Daten)
@@ -77,30 +78,33 @@ PicoCalc/
 - **pgAdmin**: http://192.168.50.8:5050
 
 ### Production Services (docker-compose.prod.yml)
+
 | Service | Container Name | Port | Description |
 |---------|---------------|------|-------------|
 | db | picocalc-db | 5432 | PostgreSQL mit WAL Archiving |
 | web | picocalc-app | 5000 | FastAPI Anwendung |
-| backup | picocalc-backup | - | Automatisierte Volume-Backups |
+| backup | picocalc-backup | - | Automatisierte Volume-Backups (3x täglich) |
 | dozzle | dozzle | 8080 | Docker Log-Viewer |
 | pgadmin | picocalc-pgadmin | 5050 | PostgreSQL Management UI |
 
 ## Database Models
 
 ### Machine (`models.py`)
-Repräsentiert Produktionsgeräte (3D-Drucker, Cutter, etc.):
-- `name`, `machine_type` (3d_printer, cutter_plotter, other)
-- `depreciation_euro` - Geräte-Abschreibungskosten
-- `lifespan_hours` - Erwartete Lebensdauer
-- `power_kw` - Stromverbrauch
-- Methoden: `calculate_cost_per_hour()`, `calculate_cost_per_unit()`
+Repräsentiert Produktionsgeräte (3D-Drucker, Cutter, Tintenstrahl-Drucker):
+- `name`, `machine_type` (3d_printer, cutter_plotter, inkjet_printer, other)
+- `depreciation_euro` - Geräte-Abschreibungskosten (zeitbasiert)
+- `lifespan_hours` - Erwartete Lebensdauer in Stunden
+- `power_kw` - Stromverbrauch in kW
+- `lifespan_pages` - Für Tintenstrahl-Drucker: Lebensdauer in Seiten
+- `depreciation_per_page` - Für Tintenstrahl-Drucker: Abschreibung pro Seite
+- Methoden: `calculate_cost_per_hour()`, `calculate_cost_per_page()`, `calculate_cost_per_unit()`
 
 ### MaterialType (`models.py`)
 Konfigurierbare Material-Kategorien:
 - `key` - Interner Identifier (z.B. 'filament', 'sticker_sheet')
 - `name` - Anzeigename
 - `sort_order` - Für Dropdown-Reihenfolge
-- `is_active` - Aktiv/Inaktiv Flag
+- `is_active` - 1 = Aktiv, 0 = Inaktiv
 
 ### Material (`models.py`)
 Repräsentiert Rohmaterialien (Filamente, Stickerbögen, Papier):
@@ -110,11 +114,11 @@ Repräsentiert Rohmaterialien (Filamente, Stickerbögen, Papier):
 
 ### Product (`models.py`)
 Zentrale Entity mit typ-spezifischen Feldern:
-- **Gemeinsam**: `name`, `product_type`, `category`, `labor_hours`, `labor_rate_per_hour`
+- **Gemeinsam**: `name`, `product_type`, `category`, `labor_hours`, `labor_rate_per_hour`, `packaging_cost`, `shipping_cost`, `notes`
 - **3D-Druck**: `filament_material_id`, `filament_weight_g`, `print_time_hours`, `machine_id`
 - **Sticker/Papier**: `sheet_material_id`, `sheet_count`, `units_per_sheet`, `cut_time_hours`
-- **Laser**: `laser_material_id`, `laser_design_name`, `laser1_*`, `laser2_*`, `laser3_*`
-- Methode: `calculate_costs()` - Gibt Kostenaufschlüsselung und Verkaufspreis-Vorschläge zurück
+- **Laser**: `laser_material_id`, `laser_design_name`, `laser1_*`, `laser2_*`, `laser3_*` (Layer-Konfiguration)
+- Methode: `calculate_costs()` - Gibt Kostenaufschlüsselung und Verkaufspreis-Vorschläge (30%, 50%, 100% Marge) zurück
 
 ### Feedback (`models.py`)
 User-Feedback und Bug-Reports:
@@ -131,14 +135,14 @@ Kanban-Style Ideen-Board:
 Gespeicherte PNG-zu-SVG Konvertierungen:
 - `original_filename`, `stored_filename` (UUID)
 - `file_path_png`, `file_path_svg`
-- `conversion_mode`, `color_mode`
+- `conversion_mode` (spline/pixel), `color_mode` (color/binary)
 - `description`, `tags`
 
 ### ProductImage (`models.py`)
 Produktbilder:
 - `product_id` - Verknüpfung zu Product
 - `file_path`, `mime_type`
-- `is_primary` - Hauptbild Flag
+- `is_primary` - 1 = Hauptbild, 0 = Zusatzbild
 - `converted_file_id` - Optionale Verknüpfung zu SVG-Bibliothek
 
 ## Product Types & Categories
@@ -244,6 +248,7 @@ git push origin main
 Production erfordert diese Environment Variables (gesetzt in Portainer):
 - `DB_PASSWORD` - PostgreSQL Passwort
 - `SECRET_KEY` - FastAPI Secret Key
+- `FILE_STORAGE_PATH` - Pfad für Dateispeicher (/app/storage)
 
 ### Database Connection
 Development: `postgresql://printuser:printpass@db:5432/printcalc`
@@ -261,6 +266,7 @@ Production: `postgresql://printuser:${DB_PASSWORD}@db:5432/printcalc`
 - PEP 8 Naming Conventions folgen
 - Datenbank-Modelle verwenden deutsche Feldnamen für Business-Konzepte
 - Route Handler verwenden deutsche Variablennamen für Form-Daten
+- Dekorative Kommentare mit `==== SECTION ====` Format für Übersichtlichkeit
 
 ### Template Naming
 - Listenansichten: `{resource}/list.html`
@@ -273,6 +279,7 @@ Production: `postgresql://printuser:${DB_PASSWORD}@db:5432/printcalc`
 - Primary Keys: `id` (Integer, auto-increment)
 - Timestamps: `created_at`, `updated_at`
 - Foreign Keys: `{resource}_id`
+- Boolean-Flags als Integer (0/1) für SQLite-Kompatibilität
 
 ## Testing
 
@@ -298,7 +305,7 @@ Aktuell hat das Projekt keine automatisierten Tests. Testing erfolgt manuell:
 - Läuft 3x täglich via `docker-volume-backup` Container
 - Location: `/mnt/user/backups/picocalc/`
 - Format: `backup-YYYY-MM-DDTHH-MM-SS.tar.gz`
-- Retention: 14 Tage
+- Retention: 14 Tage (automatische Löschung)
 
 ### Manual Backup to Local Machine
 ```powershell
@@ -321,16 +328,18 @@ Aktuell hat das Projekt keine automatisierten Tests. Testing erfolgt manuell:
 - Nutzt vtracer Bibliothek für Vektorisierung
 - Konvertierte Dateien können in SVG-Bibliothek gespeichert werden
 - Bibliothek verfügbar unter `/tools/converted-files`
+- Unterstützte Formate: PNG, JPG, WEBP, BMP
 
 ### Product Images
 - Bilder können zu Produkten hochgeladen werden
 - Unterstützt PNG, JPG, WEBP
 - SVGs aus der Bibliothek können mit Produkten verknüpft werden
 - Hauptbild-Funktionalität für primäre Produktfotos
+- Bilder werden in `FILE_STORAGE_PATH/products/YYYY/MM/` organisiert
 
 ### Kanban-Style Ideas Board
 - Ideen können in Status "todo", "in_progress", "done" verschoben werden
-- Drag & Drop Funktionalität
+- Drag & Drop Funktionalität (AJAX Status-Update)
 - Schnelles Notieren von Verbesserungsideen
 
 ## Common Tasks
@@ -409,6 +418,7 @@ docker-compose up -d    # Erstellt neu
 
 3. **Cost Calculation Logic**: Die zentrale Business-Logik ist in `models.py`:
    - `Machine.calculate_cost_per_hour()` - Inkludiert Abschreibung + Strom
+   - `Machine.calculate_cost_per_page()` - Für Tintenstrahl-Drucker
    - `Product.calculate_costs()` - Aggregiert alle Kostenkomponenten
    - Verkaufspreise werden mit 30%, 50%, 100% Margen berechnet
 
@@ -431,3 +441,22 @@ docker-compose up -d    # Erstellt neu
 9. **Decimal Parsing**: Die Funktion `parse_decimal()` in `main.py` konvertiert Strings mit Komma oder Punkt als Dezimaltrenner zu float. Wird für alle numerischen Formularfelder verwendet.
 
 10. **Time Conversion**: Die Funktion `minutes_to_hours()` konvertiert Minuten zu Stunden. Formularfelder für Zeit verwenden typischerweise Minuten (User-freundlicher), werden aber als Stunden gespeichert.
+
+11. **Machine Types**: Unterstützte Maschinentypen:
+    - `3d_printer` - Zeitbasierte Kostenberechnung (Strom + Abschreibung/Stunde)
+    - `cutter_plotter` - Zeitbasierte Kostenberechnung
+    - `inkjet_printer` - Seitenbasierte Kostenberechnung (Abschreibung/Seite)
+    - `other` - Zeitbasierte Kostenberechnung
+
+12. **Storage Paths**:
+    - Development: `/app/storage` (Docker Volume)
+    - Production: `/mnt/user/appdata/picocalc/storage` (Unraid Pfad)
+    - Temporäre Uploads: `/tmp/picocalc_uploads`
+
+13. **Laser Layer Support**: Laser-Gravur-Produkte unterstützen bis zu 3 Layer mit je:
+    - Type (blau, ir, rot)
+    - Power (%)
+    - Speed (mm/s)
+    - Passes (Anzahl Durchläufe)
+    - DPI
+    - Lines per cm

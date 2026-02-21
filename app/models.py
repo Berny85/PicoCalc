@@ -275,6 +275,32 @@ class Product(Base):
         
         return costs
     
+    def calculate_assembly_costs(self):
+        """Kalkulation für Zusammenbau-Produkte (Assembly)"""
+        costs = {'type': 'assembly'}
+        
+        # Summiere alle Komponenten-Kosten
+        total_components_cost = 0.0
+        components_details = []
+        
+        for component in self.components:
+            component_cost = component.calculate_total_cost()
+            total_components_cost += component_cost
+            components_details.append({
+                'name': component.name,
+                'quantity': float(component.quantity),
+                'unit_cost': float(component.unit_cost),
+                'total': round(component_cost, 2),
+                'notes': component.notes
+            })
+        
+        costs['material_cost'] = round(total_components_cost, 2)
+        costs['components'] = components_details
+        costs['components_count'] = len(components_details)
+        costs['machine_cost'] = 0  # Keine Maschinenkosten beim Zusammenbau
+        
+        return costs
+    
     def calculate_costs(self):
         """Hauptkalkulation je nach Produkttyp"""
         # Typ-spezifische Kosten
@@ -288,6 +314,10 @@ class Product(Base):
             machine_cost = type_costs['machine_cost']
         elif self.product_type == 'laser_engraving':
             type_costs = self.calculate_laser_costs()
+            material_cost = type_costs['material_cost']
+            machine_cost = type_costs['machine_cost']
+        elif self.product_type == 'assembly':
+            type_costs = self.calculate_assembly_costs()
             material_cost = type_costs['material_cost']
             machine_cost = type_costs['machine_cost']
         else:
@@ -334,6 +364,14 @@ class Product(Base):
             if self.laser_material:
                 return f"{self.laser_material.name}"
             return "Kein Material angegeben"
+        elif self.product_type == 'assembly':
+            count = len(self.components)
+            if count == 0:
+                return "Keine Komponenten"
+            elif count == 1:
+                return "1 Komponente"
+            else:
+                return f"{count} Komponenten"
         return "Kein Material"
 
 
@@ -434,3 +472,37 @@ class ProductImage(Base):
     
     def __repr__(self):
         return f"ProductImage({self.original_filename} -> Product {self.product_id})"
+
+
+class ProductComponent(Base):
+    """Komponenten für Zusammenbau-Produkte (Assembly)"""
+    __tablename__ = "product_components"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    
+    # Komponenten-Details
+    name = Column(String(255), nullable=False)  # z.B. "Metall-Ring", "Quaste"
+    quantity = Column(Numeric(10, 2), default=1)  # Anzahl dieser Komponente
+    unit_cost = Column(Numeric(10, 2), default=0)  # Kosten pro Einheit
+    notes = Column(Text, nullable=True)  # Optionale Notizen
+    
+    # Verknüpfung mit vorhandenem Produkt (optional)
+    linked_product_id = Column(Integer, ForeignKey("products.id"), nullable=True)
+    
+    # Sortierung
+    sort_order = Column(Integer, default=0)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Beziehungen
+    parent_product = relationship("Product", foreign_keys=[product_id], backref="components")
+    linked_product = relationship("Product", foreign_keys=[linked_product_id])
+    
+    def __repr__(self):
+        return f"ProductComponent({self.name} x{self.quantity})"
+    
+    def calculate_total_cost(self):
+        """Berechnet Gesamtkosten für diese Komponente"""
+        return float(self.unit_cost) * float(self.quantity)

@@ -236,6 +236,34 @@
             {% endif %}
         </table>
         </div>
+        {% elif product.product_type == 'assembly' %}
+        <div class="table-responsive">
+        <h3>Komponenten</h3>
+        {% if calc.components %}
+        <table>
+            {% for comp in calc.components %}
+            <tr>
+                <td><strong>{{ comp.name }}</strong></td>
+                <td>{{ comp.quantity }} × {{ "%.2f"|format(comp.unit_cost) }} €</td>
+                <td style="text-align: right;"><strong>{{ "%.2f"|format(comp.total) }} €</strong></td>
+            </tr>
+            {% if comp.notes %}
+            <tr>
+                <td colspan="3" style="color: var(--color-text-light); font-size: 0.9em; padding-top: 0;">
+                    {{ comp.notes }}
+                </td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+            <tr style="border-top: 2px solid var(--color-primary-dark);">
+                <td colspan="2"><strong>Gesamtkosten Komponenten:</strong></td>
+                <td style="text-align: right;"><strong>{{ calc.material_cost }} €</strong></td>
+            </tr>
+        </table>
+        {% else %}
+        <p style="color: var(--color-text-light);">Keine Komponenten definiert.</p>
+        {% endif %}
+        </div>
         {% endif %}
         
         <h3 style="margin-top: 30px;">Weitere Kosten</h3>
@@ -268,6 +296,7 @@
                 <td><strong>{{ product.cut_time_hours }} h</strong></td>
             </tr>
             {% endif %}
+            {% if product.product_type != 'assembly' %}
             <tr>
                 <td>Genutzte Maschine:</td>
                 <td><strong>{{ product.machine.name if product.machine else '-' }}</strong></td>
@@ -280,6 +309,7 @@
                 <td>Maschinenkosten:</td>
                 <td><strong>{{ calc.machine_cost }} €</strong></td>
             </tr>
+            {% endif %}
             <tr style="border-top: 2px solid var(--color-primary-dark);">
                 <td>Arbeitszeit:</td>
                 <td><strong>{{ (product.labor_hours * 60) }} min</strong> ({{ "%.2f"|format(product.labor_hours) }} h)</td>
