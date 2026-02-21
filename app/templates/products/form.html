@@ -76,7 +76,7 @@
                     <label for="labor_rate_per_hour">Stundensatz (€/h)</label>
                     <input type="number" id="labor_rate_per_hour" name="labor_rate_per_hour" 
                            step="0.01" min="0"
-                           value="{{ product.labor_rate_per_hour if product else '20.00' }}">
+                           value="{{ product.labor_rate_per_hour if product else '20,00' }}">
                 </div>
             </div>
             
@@ -99,8 +99,8 @@
                     <label for="machine_power_kw">Stromverbrauch (kW)</label>
                     <input type="number" id="machine_power_kw" name="machine_power_kw" 
                            step="0.001" min="0"
-                           value="{{ product.machine_power_kw if product else '0.1' }}">
-                    <small style="color: var(--color-text-light);">z.B. 0.1 für 100W</small>
+                           value="{{ product.machine_power_kw if product else '0,1' }}">
+                    <small style="color: var(--color-text-light);">z.B. 0,1 für 100W</small>
                 </div>
             </div>
         </div>

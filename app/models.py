@@ -15,10 +15,14 @@ class Machine(Base):
     machine_type = Column(String(50), nullable=False)  # 3d_printer, cutter_plotter, etc.
     description = Column(Text, nullable=True)
     
-    # Kostenparameter
-    depreciation_euro = Column(Numeric(10, 2), nullable=False)  # Abschreibung pro Gerät
-    lifespan_hours = Column(Numeric(10, 2), nullable=False)  # Lebensdauer in Stunden
-    power_kw = Column(Numeric(5, 3), nullable=False)  # Stromverbrauch in kW
+    # Kostenparameter (zeitbasiert - für 3D-Drucker, etc.)
+    depreciation_euro = Column(Numeric(10, 2), nullable=False, default=0)  # Abschreibung pro Gerät
+    lifespan_hours = Column(Numeric(10, 2), nullable=False, default=1)  # Lebensdauer in Stunden
+    power_kw = Column(Numeric(5, 3), nullable=False, default=0)  # Stromverbrauch in kW
+    
+    # Kostenparameter (seitenbasiert - für Tintenstrahl-Drucker)
+    lifespan_pages = Column(Numeric(10, 0), nullable=True)  # Lebensdauer in Seiten
+    depreciation_per_page = Column(Numeric(10, 4), nullable=True)  # Abschreibung pro Seite (€)
     
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -28,13 +32,23 @@ class Machine(Base):
         return f"{self.name} ({self.machine_type})"
     
     def calculate_cost_per_hour(self):
-        """Berechnet Maschinenkosten pro Stunde"""
+        """Berechnet Maschinenkosten pro Stunde (für zeitbasierte Maschinen)"""
+        if self.machine_type == 'inkjet_printer':
+            return 0.0  # Tintenstrahl-Drucker rechnen pro Seite, nicht pro Stunde
         strom_kosten = STROM_PREIS_KWH * float(self.power_kw)
         abschreibung = float(self.depreciation_euro) / float(self.lifespan_hours)
         return strom_kosten + abschreibung
     
-    def calculate_cost_per_unit(self, production_hours):
-        """Berechnet Gesamtkosten für Produktionszeit"""
+    def calculate_cost_per_page(self):
+        """Berechnet Maschinenkosten pro Seite (für Tintenstrahl-Drucker)"""
+        if self.machine_type == 'inkjet_printer' and self.depreciation_per_page:
+            return float(self.depreciation_per_page)
+        return 0.0
+    
+    def calculate_cost_per_unit(self, production_hours=0, pages=0):
+        """Berechnet Gesamtkosten für Produktion (zeitbasiert oder seitenbasiert)"""
+        if self.machine_type == 'inkjet_printer':
+            return pages * self.calculate_cost_per_page()
         return production_hours * self.calculate_cost_per_hour()
 
 
@@ -356,3 +370,67 @@ class Idea(Base):
     
     def __repr__(self):
         return f"Idea({self.subject or self.content[:30]}...)"
+
+
+class ConvertedFile(Base):
+    """Gespeicherte PNG-zu-SVG Konvertierungen"""
+    __tablename__ = "converted_files"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    original_filename = Column(String(255), nullable=False)
+    stored_filename = Column(String(255), nullable=False, unique=True)  # UUID
+    file_path_png = Column(String(500), nullable=False)  # Relativer Pfad zur PNG
+    file_path_svg = Column(String(500), nullable=False)  # Relativer Pfad zur SVG
+    original_size_bytes = Column(Integer, nullable=True)
+    svg_size_bytes = Column(Integer, nullable=True)
+    
+    # Konvertierungs-Optionen (für Dokumentation/Re-Konvertierung)
+    conversion_mode = Column(String(50), default="spline")  # 'spline' oder 'pixel'
+    color_mode = Column(String(50), default="color")  # 'color' oder 'binary'
+    
+    # Optional: Beschreibung/Tags für die Suche
+    description = Column(String(500), nullable=True)
+    tags = Column(String(255), nullable=True)  # Komma-getrennte Tags
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f"ConvertedFile({self.original_filename})"
+    
+    def get_size_reduction_percent(self):
+        """Berechnet die Größenreduktion in Prozent"""
+        if self.original_size_bytes and self.svg_size_bytes and self.original_size_bytes > 0:
+            return round((1 - self.svg_size_bytes / self.original_size_bytes) * 100, 1)
+        return 0
+
+
+class ProductImage(Base):
+    """Produktbilder (PNG, JPG - nicht nur SVG-Konvertierungen)"""
+    __tablename__ = "product_images"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    
+    # Datei-Informationen
+    original_filename = Column(String(255), nullable=False)
+    stored_filename = Column(String(255), nullable=False, unique=True)  # UUID
+    file_path = Column(String(500), nullable=False)  # Relativer Pfad
+    file_size_bytes = Column(Integer, nullable=True)
+    mime_type = Column(String(50), nullable=True)  # image/png, image/jpeg
+    
+    # Bild-Metadaten
+    description = Column(String(500), nullable=True)
+    is_primary = Column(Integer, default=0)  # 1 = Hauptbild, 0 = Zusatzbild
+    sort_order = Column(Integer, default=0)  # Für Reihenfolge
+    
+    # Verknüpfung mit SVG-Bibliothek (optional)
+    converted_file_id = Column(Integer, ForeignKey("converted_files.id"), nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Beziehungen
+    product = relationship("Product", backref="images")
+    converted_file = relationship("ConvertedFile", backref="product_usages")
+    
+    def __repr__(self):
+        return f"ProductImage({self.original_filename} -> Product {self.product_id})"

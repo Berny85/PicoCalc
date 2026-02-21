@@ -18,12 +18,15 @@
                 
                 <div class="form-group">
                     <label for="machine_type">Typ *</label>
-                    <select id="machine_type" name="machine_type" required>
+                    <select id="machine_type" name="machine_type" required onchange="updateFormFields()">
                         <option value="3d_printer" {% if machine and machine.machine_type == '3d_printer' %}selected{% endif %}>
                             3D-Drucker
                         </option>
                         <option value="cutter_plotter" {% if machine and machine.machine_type == 'cutter_plotter' %}selected{% endif %}>
                             Schneideplotter
+                        </option>
+                        <option value="inkjet_printer" {% if machine and machine.machine_type == 'inkjet_printer' %}selected{% endif %}>
+                            Tintenstrahl-Drucker
                         </option>
                         <option value="other" {% if machine and machine.machine_type == 'other' %}selected{% endif %}>
                             Sonstiges
@@ -41,19 +44,21 @@
         </div>
         
         <h3 style="margin-top: 30px; color: var(--color-primary-dark);">Kosten-Parameter</h3>
-        <div class="grid">
+        
+        <!-- Zeitbasierte Felder (für 3D-Drucker, Cutter, etc.) -->
+        <div id="time-based-fields" class="grid">
             <div>
                 <div class="form-group">
                     <label for="depreciation_euro">Abschreibung (€)</label>
                     <input type="number" id="depreciation_euro" name="depreciation_euro" 
-                           step="0.01" min="0" required
+                           step="0.01" min="0"
                            value="{{ machine.depreciation_euro if machine else '350' }}">
                 </div>
                 
                 <div class="form-group">
                     <label for="lifespan_hours">Lebensdauer (Stunden)</label>
                     <input type="number" id="lifespan_hours" name="lifespan_hours" 
-                           step="1" min="1" required
+                           step="1" min="1"
                            value="{{ machine.lifespan_hours if machine else '3000' }}">
                 </div>
             </div>
@@ -62,15 +67,15 @@
                 <div class="form-group">
                     <label for="power_kw">Stromverbrauch (kW)</label>
                     <input type="number" id="power_kw" name="power_kw" 
-                           step="0.001" min="0" required
-                           value="{{ machine.power_kw if machine else '0.1' }}">
-                    <small style="color: var(--color-text-light);">z.B. 0.1 für 100W</small>
+                           step="0.001" min="0"
+                           value="{{ machine.power_kw if machine else '0,1' }}">
+                    <small style="color: var(--color-text-light);">z.B. 0,1 für 100W</small>
                 </div>
                 
                 <div class="form-group">
                     <label>Berechnete Kosten pro Stunde</label>
-                    <div id="calculated-cost-display" style="padding: 10px; background: var(--color-bg-hover); border-radius: 4px;">
-                        <strong>{% if machine %}{{ "%.2f"|format(machine.calculate_cost_per_hour()) }} €{% else %}- €{% endif %}</strong>
+                    <div id="calculated-cost-hourly" style="padding: 10px; background: var(--color-bg-hover); border-radius: 4px;">
+                        <strong>{% if machine %}{{ "%.4f"|format(machine.calculate_cost_per_hour()) }} €{% else %}- €{% endif %}</strong>
                         {% if machine %}
                         {% set power_kw_float = machine.power_kw | float %}
                         {% set depreciation_float = machine.depreciation_euro | float %}
@@ -79,6 +84,36 @@
                             (Strom: {{ "%.3f"|format(STROM_PREIS_KWH * power_kw_float) }} €/h + Abschreibung: {{ "%.3f"|format(depreciation_float/lifespan_float) }} €/h)
                         </small>
                         {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Seitenbasierte Felder (nur für Tintenstrahl-Drucker) -->
+        <div id="page-based-fields" class="grid" style="display: none;">
+            <div>
+                <div class="form-group">
+                    <label for="lifespan_pages">Lebensdauer (Seiten)</label>
+                    <input type="number" id="lifespan_pages" name="lifespan_pages" 
+                           step="1" min="0"
+                           value="{{ machine.lifespan_pages|int if machine and machine.lifespan_pages else '' }}">
+                    <small style="color: var(--color-text-light);">Erwartete Gesamtdruckmenge in Seiten</small>
+                </div>
+            </div>
+            
+            <div>
+                <div class="form-group">
+                    <label for="depreciation_per_page">Abschreibung pro Seite (€)</label>
+                    <input type="number" id="depreciation_per_page" name="depreciation_per_page" 
+                           step="0.0001" min="0"
+                           value="{{ machine.depreciation_per_page if machine and machine.depreciation_per_page else '' }}">
+                    <small style="color: var(--color-text-light);">Z.B. 0,05 für 5 Cent pro Seite</small>
+                </div>
+                
+                <div class="form-group">
+                    <label>Berechnete Kosten pro Seite</label>
+                    <div id="calculated-cost-page" style="padding: 10px; background: var(--color-bg-hover); border-radius: 4px;">
+                        <strong>{% if machine and machine.machine_type == 'inkjet_printer' %}{{ "%.4f"|format(machine.calculate_cost_per_page()) }} €{% else %}- €{% endif %}</strong>
                     </div>
                 </div>
             </div>
@@ -98,8 +133,37 @@ const STROM_PREIS_KWH = {{ STROM_PREIS_KWH }};
 const depreciationInput = document.getElementById('depreciation_euro');
 const lifespanInput = document.getElementById('lifespan_hours');
 const powerKwInput = document.getElementById('power_kw');
+const machineTypeSelect = document.getElementById('machine_type');
+const timeBasedFields = document.getElementById('time-based-fields');
+const pageBasedFields = document.getElementById('page-based-fields');
+const lifespanPagesInput = document.getElementById('lifespan_pages');
+const depreciationPerPageInput = document.getElementById('depreciation_per_page');
 
-function updateCalculatedCost() {
+function updateFormFields() {
+    const selectedType = machineTypeSelect.value;
+    
+    if (selectedType === 'inkjet_printer') {
+        // Zeige seitenbasierte Felder, verstecke zeitbasierte
+        timeBasedFields.style.display = 'none';
+        pageBasedFields.style.display = 'grid';
+        
+        // Mache zeitbasierte Felder optional
+        depreciationInput.required = false;
+        lifespanInput.required = false;
+        powerKwInput.required = false;
+    } else {
+        // Zeige zeitbasierte Felder, verstecke seitenbasierte
+        timeBasedFields.style.display = 'grid';
+        pageBasedFields.style.display = 'none';
+        
+        // Mache zeitbasierte Felder required
+        depreciationInput.required = true;
+        lifespanInput.required = true;
+        powerKwInput.required = true;
+    }
+}
+
+function updateCalculatedCostHourly() {
     const depreciation = parseFloat(depreciationInput.value) || 0;
     const lifespan = parseFloat(lifespanInput.value) || 1;
     const power = parseFloat(powerKwInput.value) || 0;
@@ -108,17 +172,27 @@ function updateCalculatedCost() {
     const abschreibung = depreciation / lifespan;
     const costPerHour = stromKosten + abschreibung;
     
-    const costElement = document.getElementById('calculated-cost-display');
-    costElement.innerHTML = '<strong>' + costPerHour.toFixed(2) + ' €</strong>';
+    const costElement = document.getElementById('calculated-cost-hourly');
+    costElement.innerHTML = '<strong>' + costPerHour.toFixed(4) + ' €</strong>';
     costElement.innerHTML += '<small style="color: var(--color-text-light); display: block; margin-top: 5px;">';
     costElement.innerHTML += '(Strom: ' + stromKosten.toFixed(3) + ' €/h + Abschreibung: ' + abschreibung.toFixed(3) + ' €/h)';
     costElement.innerHTML += '</small>';
 }
 
-depreciationInput.addEventListener('input', updateCalculatedCost);
-lifespanInput.addEventListener('input', updateCalculatedCost);
-powerKwInput.addEventListener('input', updateCalculatedCost);
+function updateCalculatedCostPerPage() {
+    const costPerPage = parseFloat(depreciationPerPageInput.value) || 0;
+    
+    const costElement = document.getElementById('calculated-cost-page');
+    costElement.innerHTML = '<strong>' + costPerPage.toFixed(4) + ' €</strong>';
+}
+
+// Event Listener
+depreciationInput.addEventListener('input', updateCalculatedCostHourly);
+lifespanInput.addEventListener('input', updateCalculatedCostHourly);
+powerKwInput.addEventListener('input', updateCalculatedCostHourly);
+depreciationPerPageInput.addEventListener('input', updateCalculatedCostPerPage);
+
+// Initialisierung
+updateFormFields();
 </script>
 {% endblock %}
-
-

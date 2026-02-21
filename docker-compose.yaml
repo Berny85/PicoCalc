@@ -8,10 +8,12 @@ services:
     environment:
       - DATABASE_URL=postgresql://printuser:printpass@db:5432/printcalc
       - SECRET_KEY=dev-secret-key
+      - FILE_STORAGE_PATH=/app/storage
     depends_on:
       - db
     volumes:
       - ./app:/app
+      - file_storage:/app/storage
     command: uvicorn main:app --host 0.0.0.0 --port 5000 --reload
 
   db:
@@ -35,3 +37,4 @@ services:
 
 volumes:
   postgres_data:
+  file_storage:

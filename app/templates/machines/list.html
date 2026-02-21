@@ -16,11 +16,11 @@
             <tr>
                 <th>Name</th>
                 <th>Typ</th>
-                <th>Abschreibung</th>
-                <th>Abschreibung (€)</th>
-                <th>Lebensdauer (h)</th>
+                <th>Beschreibung</th>
+                <th>{% if m and m.machine_type == 'inkjet_printer' %}Abschreibung/Seite{% else %}Abschreibung{% endif %}</th>
+                <th>Lebensdauer</th>
                 <th>Strom (kW)</th>
-                <th>Kosten/Std (€)</th>
+                <th>Kosten</th>
                 <th>Aktionen</th>
             </tr>
         </thead>
@@ -28,12 +28,28 @@
             {% for m in machines %}
             <tr>
                 <td><strong>{{ m.name }}</strong></td>
-                <td>{{ m.machine_type }}</td>
+                <td>
+                    {% if m.machine_type == '3d_printer' %}3D-Drucker
+                    {% elif m.machine_type == 'cutter_plotter' %}Schneideplotter
+                    {% elif m.machine_type == 'inkjet_printer' %}Tintenstrahl-Drucker
+                    {% else %}Sonstiges{% endif %}
+                </td>
                 <td>{{ m.description or '-' }}</td>
-                <td><strong>{{ m.depreciation_euro }} €</strong></td>
-                <td><strong>{{ m.lifespan_hours }} h</strong></td>
-                <td><strong>{{ m.power_kw }} kW</strong></td>
-                <td><strong>{{ "%.3f"|format(m.calculate_cost_per_hour()) }} €</strong></td>
+                
+                {% if m.machine_type == 'inkjet_printer' %}
+                    {# Tintenstrahl-Drucker: Seitenbasierte Anzeige #}
+                    <td><strong>{{ "%.4f"|format(m.depreciation_per_page or 0) }} €/Seite</strong></td>
+                    <td><strong>{{ m.lifespan_pages|int if m.lifespan_pages else '-' }} Seiten</strong></td>
+                    <td><strong>-</strong></td>
+                    <td><strong>{{ "%.4f"|format(m.calculate_cost_per_page()) }} €/Seite</strong></td>
+                {% else %}
+                    {# Andere Maschinen: Zeitbasierte Anzeige #}
+                    <td><strong>{{ m.depreciation_euro }} €</strong></td>
+                    <td><strong>{{ m.lifespan_hours }} h</strong></td>
+                    <td><strong>{{ m.power_kw }} kW</strong></td>
+                    <td><strong>{{ "%.3f"|format(m.calculate_cost_per_hour()) }} €/h</strong></td>
+                {% endif %}
+                
                 <td>
                     <a href="/machines/{{ m.id }}/edit" class="btn btn-primary" 
                        style="padding: 6px 12px; font-size: 14px;">Bearbeiten</a>
@@ -60,5 +76,3 @@
     </div>
 </div>
 {% endblock %}
-
-

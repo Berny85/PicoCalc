@@ -1,0 +1,455 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Picobellu Kalkulator{% endblock %}
+
+{% block extra_css %}
+<style>
+    .upload-area {
+        border: 3px dashed var(--color-border);
+        border-radius: 12px;
+        padding: 40px;
+        text-align: center;
+        transition: all 0.3s;
+        background: var(--color-bg-hover);
+    }
+    
+    .upload-area:hover,
+    .upload-area.drag-over {
+        border-color: var(--color-primary);
+        background: rgba(102, 126, 234, 0.05);
+    }
+    
+    .upload-icon {
+        font-size: 3rem;
+        margin-bottom: 15px;
+        color: var(--color-primary);
+    }
+    
+    .file-input {
+        display: none;
+    }
+    
+    .upload-btn {
+        display: inline-block;
+        padding: 12px 30px;
+        background: var(--gradient-primary);
+        color: white;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: transform 0.2s;
+    }
+    
+    .upload-btn:hover {
+        transform: translateY(-2px);
+    }
+    
+    .options-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        margin: 20px 0;
+    }
+    
+    .option-group {
+        background: var(--color-bg-hover);
+        padding: 15px;
+        border-radius: 8px;
+    }
+    
+    .option-group label {
+        font-weight: 600;
+        margin-bottom: 8px;
+        display: block;
+    }
+    
+    .option-group select,
+    .option-group input[type="range"] {
+        width: 100%;
+    }
+    
+    .range-value {
+        display: inline-block;
+        background: var(--color-primary);
+        color: white;
+        padding: 2px 10px;
+        border-radius: 12px;
+        font-size: 0.85rem;
+        margin-left: 10px;
+    }
+    
+    .preview-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+        margin-top: 30px;
+    }
+    
+    .preview-box {
+        background: var(--color-bg-hover);
+        border-radius: 8px;
+        padding: 20px;
+    }
+    
+    .preview-box h3 {
+        margin-bottom: 15px;
+        color: var(--color-primary-dark);
+    }
+    
+    .svg-preview {
+        background: white;
+        border: 1px solid var(--color-border);
+        border-radius: 4px;
+        padding: 20px;
+        max-height: 400px;
+        overflow: auto;
+    }
+    
+    .svg-preview svg {
+        max-width: 100%;
+        height: auto;
+    }
+    
+    .code-preview {
+        background: #2d3748;
+        color: #e2e8f0;
+        padding: 15px;
+        border-radius: 4px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.8rem;
+        max-height: 300px;
+        overflow: auto;
+        white-space: pre-wrap;
+        word-break: break-all;
+    }
+    
+    .alert {
+        padding: 15px 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+    
+    .alert-error {
+        background: #fee;
+        color: #c33;
+        border: 1px solid #fcc;
+    }
+    
+    .alert-success {
+        background: #efe;
+        color: #2a2;
+        border: 1px solid #cec;
+    }
+    
+    .file-info {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px;
+        background: var(--color-bg-hover);
+        border-radius: 8px;
+        margin: 15px 0;
+    }
+    
+    @media (max-width: 768px) {
+        .upload-area {
+            padding: 25px;
+        }
+        
+        .upload-icon {
+            font-size: 2rem;
+        }
+        
+        .options-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>🎨 PNG zu SVG Converter</h2>
+    <p style="color: var(--color-text-light);">
+        Wandle Rasterbilder (PNG, JPG, WEBP, BMP) in skalierbare SVG-Vektoren um. 
+        Ideal für Logos, Icons und Grafiken für den Lasercutter oder Plotter.
+    </p>
+</div>
+
+{% if error %}
+<div class="alert alert-error">
+    ⚠️ {{ error }}
+</div>
+{% endif %}
+
+{% if success %}
+<div class="alert alert-success">
+    ✅ {{ success }}
+</div>
+{% endif %}
+
+{% if not svg_content %}
+<div class="card">
+    <form method="POST" action="/tools/png-to-svg" enctype="multipart/form-data" id="convert-form">
+        
+        <!-- Upload Bereich -->
+        <div class="upload-area" id="upload-area">
+            <div class="upload-icon">📁</div>
+            <p><strong>Bild hierher ziehen</strong> oder klicken zum Auswählen</p>
+            <p style="color: var(--color-text-light); font-size: 0.9rem; margin-top: 10px;">
+                Unterstützte Formate: PNG, JPG, WEBP, BMP
+            </p>
+            <input type="file" name="image" id="file-input" class="file-input" 
+                   accept=".png,.jpg,.jpeg,.webp,.bmp" required>
+            <br><br>
+            <span class="upload-btn">Datei auswählen</span>
+        </div>
+        
+        <div id="file-info" class="file-info" style="display: none;">
+            <span>📄 <strong id="filename">-</strong></span>
+            <span style="color: var(--color-text-light);">Größe: <span id="filesize">-</span> KB</span>
+        </div>
+        
+        <div style="margin: 15px 0; text-align: right;">
+            <a href="/tools/converted-files" class="btn btn-secondary" style="font-size: 0.9rem;">
+                📁 Zur SVG-Bibliothek
+            </a>
+        </div>
+        
+        <!-- Optionen -->
+        <h3 style="margin-top: 30px; color: var(--color-primary-dark);">Konvertierungs-Optionen</h3>
+        
+        <div class="options-grid">
+            <div class="option-group">
+                <label for="mode">Kurven-Modus</label>
+                <select name="mode" id="mode">
+                    <option value="spline" selected>Smooth Spline (glatte Kurven)</option>
+                    <option value="pixel">Pixel-perfect (scharfe Kanten)</option>
+                </select>
+                <small style="color: var(--color-text-light);">
+                    Spline für Logos, Pixel für Pixelart
+                </small>
+            </div>
+            
+            <div class="option-group">
+                <label for="color_mode">Farbmodus</label>
+                <select name="color_mode" id="color_mode">
+                    <option value="color" selected>Farbe</option>
+                    <option value="binary">Schwarz/Weiß</option>
+                </select>
+                <small style="color: var(--color-text-light);">
+                    Farbe für Fotos, B/W für Linien
+                </small>
+            </div>
+            
+            <div class="option-group">
+                <label for="filter_speckle">
+                    Rauschfilter
+                    <span class="range-value" id="speckle-value">4</span>
+                </label>
+                <input type="range" name="filter_speckle" id="filter_speckle" 
+                       min="0" max="20" value="4">
+                <small style="color: var(--color-text-light);">
+                    Entfernt kleine Flecken/Störungen
+                </small>
+            </div>
+            
+            <div class="option-group">
+                <label for="color_precision">
+                    Farbgenauigkeit
+                    <span class="range-value" id="precision-value">6</span>
+                </label>
+                <input type="range" name="color_precision" id="color_precision" 
+                       min="1" max="10" value="6">
+                <small style="color: var(--color-text-light);">
+                    Höher = mehr Farben, größere Datei
+                </small>
+            </div>
+            
+            <div class="option-group">
+                <label for="layer_difference">
+                    Layer-Differenz
+                    <span class="range-value" id="difference-value">16</span>
+                </label>
+                <input type="range" name="layer_difference" id="layer_difference" 
+                       min="1" max="50" value="16">
+                <small style="color: var(--color-text-light);">
+                    Farbabstand zwischen Layern
+                </small>
+            </div>
+            
+            <div class="option-group">
+                <label for="corner_threshold">
+                    Ecken-Threshold
+                    <span class="range-value" id="corner-value">60</span>
+                </label>
+                <input type="range" name="corner_threshold" id="corner_threshold" 
+                       min="0" max="180" value="60">
+                <small style="color: var(--color-text-light);">
+                    Höher = mehr gerade Linien
+                </small>
+            </div>
+        </div>
+        
+        <!-- Speicher-Optionen -->
+        <h3 style="margin-top: 30px; color: var(--color-primary-dark);">Speicher-Optionen</h3>
+        
+        <div class="options-grid">
+            <div class="option-group" style="grid-column: 1 / -1;">
+                <label>
+                    <input type="checkbox" name="save_file" value="true" checked style="width: auto; margin-right: 8px;">
+                    <strong>In Bibliothek speichern</strong>
+                </label>
+                <small style="color: var(--color-text-light); display: block; margin-top: 5px;">
+                    PNG und SVG werden dauerhaft gespeichert und können später wieder heruntergeladen werden
+                </small>
+            </div>
+            
+            <div class="option-group">
+                <label for="description">Beschreibung (optional)</label>
+                <input type="text" id="description" name="description" 
+                       placeholder="z.B. Logo für Lasercutter...">
+            </div>
+            
+            <div class="option-group">
+                <label for="tags">Tags (optional, komma-getrennt)</label>
+                <input type="text" id="tags" name="tags" 
+                       placeholder="z.B. logo, laser, weihnachten">
+            </div>
+        </div>
+        
+        <div class="actions" style="margin-top: 30px;">
+            <button type="submit" class="btn btn-primary" style="font-size: 1.1rem; padding: 15px 40px;">
+                🚀 Zu SVG konvertieren
+            </button>
+            <a href="/tools/converted-files" class="btn btn-secondary">📁 Zur Bibliothek</a>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+{% if svg_content %}
+<!-- Ergebnis-Anzeige -->
+<div class="card">
+    <h3>📊 Konvertierungsergebnis</h3>
+    <div class="file-info">
+        <div>
+            <strong>Original:</strong> {{ original_filename }}<br>
+            <small>Größe: {{ "%.1f"|format(original_size / 1024) }} KB</small>
+        </div>
+        <div style="text-align: right;">
+            <strong>SVG:</strong><br>
+            <small>Größe: {{ "%.1f"|format(svg_size / 1024) }} KB</small><br>
+            <small>Reduktion: {{ "%.1f"|format((1 - svg_size / original_size) * 100) }}%</small><br>
+            {% if saved_file_id %}
+            <small style="color: #28a745;">✅ In Bibliothek gespeichert</small>
+            {% endif %}
+        </div>
+    </div>
+    {% if saved_file_id %}
+    <div style="margin-top: 15px; text-align: center;">
+        <a href="/tools/converted-files/{{ saved_file_id }}/preview" class="btn btn-primary">
+            👁️ In der Bibliothek ansehen
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<div class="preview-container">
+    <div class="preview-box">
+        <h3>👁️ SVG Vorschau</h3>
+        <div class="svg-preview">
+            {{ svg_content | safe }}
+        </div>
+    </div>
+    
+    <div class="preview-box">
+        <h3>📋 SVG Code</h3>
+        <div class="code-preview">{{ svg_content }}</div>
+    </div>
+</div>
+
+<div class="card" style="margin-top: 20px;">
+    <h3>💾 Download</h3>
+    <div class="actions">
+        <form method="POST" action="/tools/png-to-svg/download" style="display: inline;">
+            <input type="hidden" name="svg_content" value="{{ svg_content | e }}">
+            <input type="hidden" name="filename" value="{{ original_filename }}">
+            <button type="submit" class="btn btn-primary">⬇️ SVG herunterladen</button>
+        </form>
+        <a href="/tools/png-to-svg" class="btn btn-secondary">🔄 Weitere Datei konvertieren</a>
+    </div>
+</div>
+{% endif %}
+
+<div class="card" style="margin-top: 20px;">
+    <h3>💡 Tipps für beste Ergebnisse</h3>
+    <ul style="margin-left: 20px; line-height: 1.8;">
+        <li><strong>Logos/Icons:</strong> Verwende "Smooth Spline" mit niedriger Farbgenauigkeit (2-4)</li>
+        <li><strong>Fotos:</strong> Verwende "Pixel-perfect" mit höherer Farbgenauigkeit (6-8)</li>
+        <li><strong>Lasercutter:</strong> Wähle "Schwarz/Weiß" für reine Konturen</li>
+        <li><strong>Rauschfilter:</strong> Erhöhe bei verrauschten/scannerten Bildern</li>
+        <li><strong>Dateigröße:</strong> Kleinere Bilder (< 1000px) ergeben sauberere SVGs</li>
+    </ul>
+</div>
+
+<script>
+    // Drag & Drop Funktionalität
+    const uploadArea = document.getElementById('upload-area');
+    const fileInput = document.getElementById('file-input');
+    const fileInfo = document.getElementById('file-info');
+    const filename = document.getElementById('filename');
+    const filesize = document.getElementById('filesize');
+    
+    // Range Slider Werte aktualisieren
+    document.getElementById('filter_speckle').addEventListener('input', function() {
+        document.getElementById('speckle-value').textContent = this.value;
+    });
+    document.getElementById('color_precision').addEventListener('input', function() {
+        document.getElementById('precision-value').textContent = this.value;
+    });
+    document.getElementById('layer_difference').addEventListener('input', function() {
+        document.getElementById('difference-value').textContent = this.value;
+    });
+    document.getElementById('corner_threshold').addEventListener('input', function() {
+        document.getElementById('corner-value').textContent = this.value;
+    });
+    
+    // Klick auf Upload-Area öffnet Datei-Dialog
+    uploadArea.addEventListener('click', () => fileInput.click());
+    
+    // Datei-Auswahl anzeigen
+    fileInput.addEventListener('change', function() {
+        if (this.files && this.files[0]) {
+            const file = this.files[0];
+            filename.textContent = file.name;
+            filesize.textContent = (file.size / 1024).toFixed(1);
+            fileInfo.style.display = 'flex';
+        }
+    });
+    
+    // Drag & Drop Events
+    uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.classList.add('drag-over');
+    });
+    
+    uploadArea.addEventListener('dragleave', () => {
+        uploadArea.classList.remove('drag-over');
+    });
+    
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('drag-over');
+        
+        const files = e.dataTransfer.files;
+        if (files.length) {
+            fileInput.files = files;
+            const file = files[0];
+            filename.textContent = file.name;
+            filesize.textContent = (file.size / 1024).toFixed(1);
+            fileInfo.style.display = 'flex';
+        }
+    });
+</script>
+{% endblock %}

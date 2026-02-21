@@ -1,14 +1,14 @@
 # PicoCalc - Agent Documentation
 
-> **Language Note**: This project uses German as its primary language for code comments, documentation, and UI text.
+> **Language Note**: Dieses Projekt verwendet Deutsch als Primärsprache für Code-Kommentare, Dokumentation und UI-Texte.
 
 ## Project Overview
 
-**PicoCalc** is a web-based product price calculator designed for small manufacturing businesses. It calculates production costs for various product types including 3D printing, sticker production, die-cut stickers, paper products, and laser engraving.
+**PicoCalc** ist ein webbasierter Produktpreis-Kalkulator für kleine Fertigungsunternehmen. Er berechnet Produktionskosten für verschiedene Produkttypen wie 3D-Druck, Sticker-Produktion, Die-Cut-Sticker, Papierprodukte und Laser-Gravur.
 
 - **Repository**: https://github.com/Berny85/PicoCalc.git
 - **Production URL**: http://192.168.50.8:5000
-- **Primary Language**: German (code, comments, documentation, UI)
+- **Primary Language**: German (Code, Kommentare, Dokumentation, UI)
 
 ## Technology Stack
 
@@ -18,124 +18,139 @@
 | Database | PostgreSQL 16 |
 | ORM | SQLAlchemy 2.0.25 |
 | Frontend | Jinja2 Templates + HTMX 1.9.10 |
-| Styling | Vanilla CSS (in templates) |
+| Styling | Vanilla CSS (in Templates, Purple/Blue Theme) |
 | Deployment | Docker + Docker Compose |
-| Infrastructure | Intel NUC with Unraid OS |
+| Infrastructure | Intel NUC mit Unraid OS |
 | CI/CD | GitHub Actions + Docker Hub |
 
 ## Project Structure
 
 ```
 PicoCalc/
-├── app/                          # Main application code
-│   ├── main.py                   # FastAPI app with all routes (~1120 lines)
-│   ├── models.py                 # SQLAlchemy database models (~358 lines)
-│   ├── database.py               # Database configuration
-│   ├── requirements.txt          # Python dependencies
-│   ├── Dockerfile                # Application container image
-│   └── templates/                # Jinja2 HTML templates
-│       ├── base.html             # Base layout with navigation
+├── app/                          # Hauptanwendung
+│   ├── main.py                   # FastAPI App mit allen Routes (~1590 Zeilen)
+│   ├── models.py                 # SQLAlchemy Datenbank-Modelle (~422 Zeilen)
+│   ├── database.py               # Datenbank-Konfiguration
+│   ├── requirements.txt          # Python-Abhängigkeiten
+│   ├── Dockerfile                # Container-Image Definition
+│   └── templates/                # Jinja2 HTML Templates
+│       ├── base.html             # Base Layout mit Navigation
 │       ├── index.html            # Dashboard
-│       ├── materials/            # Material management UI
-│       ├── machines/             # Machine management UI
-│       ├── products/             # Product forms and details
-│       ├── feedback/             # Feedback form and list
-│       ├── ideas/                # Kanban-style ideas board
-│       └── partials/             # HTMX partial templates
-├── backup/                       # Database backup scripts
-│   ├── backup-script.sh          # Automated backup script
-│   └── restore-script.sh         # Database restore script
-├── .github/workflows/            # CI/CD configuration
-│   └── deploy.yml                # GitHub Actions workflow
-├── docker-compose.yaml           # Development configuration
-├── docker-compose.prod.yml       # Production configuration
-├── postgresql.conf               # PostgreSQL WAL configuration
-├── deploy.sh                     # NUC deployment script (Bash)
-├── deploy-to-nuc.ps1             # Windows deployment script
-├── backup-to-local.ps1           # Local backup download script
-├── quick-deploy.sh               # Fast deployment (no rebuild)
-├── reset-prod.sh                 # Production reset (⚠️ deletes data)
-├── README.md                     # Project overview (German)
-└── DEPLOYMENT.md                 # Detailed deployment docs (German)
+│       ├── materials/            # Material-Verwaltung UI
+│       ├── machines/             # Maschinen-Verwaltung UI
+│       ├── products/             # Produkt-Formulare und Details
+│       ├── feedback/             # Feedback-Formular und Liste
+│       ├── ideas/                # Kanban-Style Ideen-Board
+│       ├── tools/                # PNG-zu-SVG Converter
+│       └── partials/             # HTMX Partial Templates
+├── backup/                       # Backup-Skripte
+│   ├── backup-script.sh          # Automatisiertes Backup
+│   └── restore-script.sh         # Datenbank-Wiederherstellung
+├── .github/workflows/            # CI/CD Konfiguration
+│   └── deploy.yml                # GitHub Actions Workflow
+├── docker-compose.yaml           # Entwicklungs-Konfiguration
+├── docker-compose.prod.yml       # Produktions-Konfiguration
+├── postgresql.conf               # PostgreSQL WAL Konfiguration
+├── deploy.sh                     # NUC Deployment Script (Bash)
+├── deploy-to-nuc.ps1             # Windows Deployment Script
+├── backup-to-local.ps1           # Lokales Backup-Download Script
+├── quick-deploy.sh               # Schnelles Deployment (ohne Rebuild)
+├── reset-prod.sh                 # Produktions-Reset (⚠️ löscht Daten)
+├── README.md                     # Projekt-Übersicht (Deutsch)
+└── DEPLOYMENT.md                 # Detaillierte Deployment-Doku (Deutsch)
 ```
 
 ## Architecture
 
 ### Development Environment (Windows 11)
-- **Docker Desktop** for containerization
+- **Docker Desktop** für Containerisierung
 - **Local URL**: http://localhost:5000
-- **Database**: PostgreSQL on port 5432
+- **Database**: PostgreSQL auf Port 5432
 - **pgAdmin**: http://localhost:5050
-- **Hot reload**: Code mounted as volume, auto-reload enabled
+- **Hot reload**: Code als Volume gemountet, Auto-Reload aktiviert
 
-### Production Environment (Intel NUC with Unraid)
+### Production Environment (Intel NUC mit Unraid)
 - **IP**: 192.168.50.8
 - **PicoCalc App**: http://192.168.50.8:5000
-- **Portainer**: http://192.168.50.8:9000 (Docker management)
-- **Dozzle**: http://192.168.50.8:8080 (Log viewer)
+- **Portainer**: http://192.168.50.8:9000 (Docker Management)
+- **Dozzle**: http://192.168.50.8:8080 (Log-Viewer)
 - **pgAdmin**: http://192.168.50.8:5050
 
 ### Production Services (docker-compose.prod.yml)
 | Service | Container Name | Port | Description |
 |---------|---------------|------|-------------|
-| db | picocalc-db | 5432 | PostgreSQL with WAL archiving |
-| web | picocalc-app | 5000 | FastAPI application |
-| backup | picocalc-backup | - | Automated volume backups |
-| dozzle | dozzle | 8080 | Docker log viewer |
-| pgadmin | picocalc-pgadmin | 5050 | PostgreSQL management UI |
+| db | picocalc-db | 5432 | PostgreSQL mit WAL Archiving |
+| web | picocalc-app | 5000 | FastAPI Anwendung |
+| backup | picocalc-backup | - | Automatisierte Volume-Backups |
+| dozzle | dozzle | 8080 | Docker Log-Viewer |
+| pgadmin | picocalc-pgadmin | 5050 | PostgreSQL Management UI |
 
 ## Database Models
 
 ### Machine (`models.py`)
-Represents production equipment (3D printers, cutters, etc.):
+Repräsentiert Produktionsgeräte (3D-Drucker, Cutter, etc.):
 - `name`, `machine_type` (3d_printer, cutter_plotter, other)
-- `depreciation_euro` - Device depreciation cost
-- `lifespan_hours` - Expected lifetime
-- `power_kw` - Power consumption
-- Methods: `calculate_cost_per_hour()`, `calculate_cost_per_unit()`
+- `depreciation_euro` - Geräte-Abschreibungskosten
+- `lifespan_hours` - Erwartete Lebensdauer
+- `power_kw` - Stromverbrauch
+- Methoden: `calculate_cost_per_hour()`, `calculate_cost_per_unit()`
 
 ### MaterialType (`models.py`)
-Configurable material categories:
-- `key` - Internal identifier (e.g., 'filament', 'sticker_sheet')
-- `name` - Display name
-- `sort_order` - For dropdown ordering
-- `is_active` - Enable/disable flag
+Konfigurierbare Material-Kategorien:
+- `key` - Interner Identifier (z.B. 'filament', 'sticker_sheet')
+- `name` - Anzeigename
+- `sort_order` - Für Dropdown-Reihenfolge
+- `is_active` - Aktiv/Inaktiv Flag
 
 ### Material (`models.py`)
-Represents raw materials (filaments, sticker sheets, paper):
-- `name`, `material_type` (references MaterialType.key)
+Repräsentiert Rohmaterialien (Filamente, Stickerbögen, Papier):
+- `name`, `material_type` (verweist auf MaterialType.key)
 - `brand`, `color`, `unit` (kg, sheet, m, piece)
 - `price_per_unit`
 
 ### Product (`models.py`)
-Central entity with type-specific fields:
-- **Common**: `name`, `product_type`, `category`, `labor_hours`, `labor_rate_per_hour`
-- **3D Print**: `filament_material_id`, `filament_weight_g`, `print_time_hours`
-- **Sticker/Paper**: `sheet_material_id`, `sheet_count`, `units_per_sheet`
+Zentrale Entity mit typ-spezifischen Feldern:
+- **Gemeinsam**: `name`, `product_type`, `category`, `labor_hours`, `labor_rate_per_hour`
+- **3D-Druck**: `filament_material_id`, `filament_weight_g`, `print_time_hours`, `machine_id`
+- **Sticker/Papier**: `sheet_material_id`, `sheet_count`, `units_per_sheet`, `cut_time_hours`
 - **Laser**: `laser_material_id`, `laser_design_name`, `laser1_*`, `laser2_*`, `laser3_*`
-- Method: `calculate_costs()` - Returns cost breakdown and selling price suggestions
+- Methode: `calculate_costs()` - Gibt Kostenaufschlüsselung und Verkaufspreis-Vorschläge zurück
 
 ### Feedback (`models.py`)
-User feedback and bug reports:
-- `page_url`, `page_title` - Context where feedback was given
+User-Feedback und Bug-Reports:
+- `page_url`, `page_title` - Kontext wo Feedback gegeben wurde
 - `category` - 'bug', 'feature', 'improvement', 'other'
 - `message`, `status` - 'new', 'in_progress', 'done', 'rejected'
 
 ### Idea (`models.py`)
-Kanban-style ideas board:
+Kanban-Style Ideen-Board:
 - `subject`, `content`
 - `status` - 'todo', 'in_progress', 'done'
 
+### ConvertedFile (`models.py`)
+Gespeicherte PNG-zu-SVG Konvertierungen:
+- `original_filename`, `stored_filename` (UUID)
+- `file_path_png`, `file_path_svg`
+- `conversion_mode`, `color_mode`
+- `description`, `tags`
+
+### ProductImage (`models.py`)
+Produktbilder:
+- `product_id` - Verknüpfung zu Product
+- `file_path`, `mime_type`
+- `is_primary` - Hauptbild Flag
+- `converted_file_id` - Optionale Verknüpfung zu SVG-Bibliothek
+
 ## Product Types & Categories
 
-### Product Types (internal)
-- `3d_print` - 3D printed objects
-- `sticker_sheet` - Sticker sheets
-- `diecut_sticker` - Die-cut stickers
-- `paper` - Paper products
-- `laser_engraving` - Laser engraved items
+### Product Types (intern)
+- `3d_print` - 3D-gedruckte Objekte
+- `sticker_sheet` - Stickerbögen
+- `diecut_sticker` - Die-Cut Sticker
+- `paper` - Papierprodukte
+- `laser_engraving` - Laser-gravierte Artikel
 
-### Categories (user-facing)
+### Categories (User-facing)
 Dekoration, Technik, Ersatzteile, Spielzeug, Werkzeuge, Sticker, Papierprodukte, Sonstiges
 
 ## Dependencies (requirements.txt)
@@ -151,51 +166,54 @@ pydantic==2.5.3
 pydantic-settings==2.1.0
 python-dotenv==1.0.0
 alembic==1.13.1
+# PNG to SVG Converter
+vtracer==0.6.11
+pillow==10.2.0
 ```
 
 ## Build and Test Commands
 
 ### Development
 ```bash
-# Start all services
+# Starte alle Services
 docker-compose up -d
 
-# View logs
+# Zeige Logs
 docker-compose logs -f web
 
-# Stop services
+# Stoppe Services
 docker-compose down
 
-# Rebuild after dependency changes
+# Rebuild nach Abhängigkeits-Änderungen
 docker-compose up --build -d
 
-# Reset database (⚠️ deletes all data)
+# Reset Database (⚠️ löscht alle Daten)
 docker-compose down -v
 docker-compose up -d
 ```
 
-### Production (on NUC)
+### Production (auf NUC)
 ```bash
-# Full deployment with rebuild
+# Vollständiges Deployment mit Rebuild
 docker compose -f docker-compose.prod.yml up --build -d
 
-# Quick restart (no rebuild)
+# Schneller Restart (kein Rebuild)
 docker compose -f docker-compose.prod.yml up -d
 
-# View container status
+# Container-Status prüfen
 docker compose -f docker-compose.prod.yml ps
 
-# View logs
+# Logs anzeigen
 docker logs picocalc-app
 docker logs picocalc-db
 ```
 
-### Windows Deployment (from dev machine)
+### Windows Deployment (vom Dev-PC)
 ```powershell
-# Automated deployment via PowerShell
+# Automatisiertes Deployment via PowerShell
 .\deploy-to-nuc.ps1
 
-# Download backup from NUC
+# Backup vom NUC herunterladen
 .\backup-to-local.ps1
 ```
 
@@ -203,91 +221,91 @@ docker logs picocalc-db
 
 ### Local Development
 ```powershell
-# 1. Start development environment
+# 1. Entwicklungsumgebung starten
 docker-compose up -d
 
-# 2. Develop and test at http://localhost:5000
+# 2. Entwickeln und testen unter http://localhost:5000
 
-# 3. Push changes to GitHub
+# 3. Änderungen zu GitHub pushen
 git add .
 git commit -m "Beschreibung"
 git push origin main
 ```
 
 ### Deployment Flow
-1. Push code to GitHub triggers GitHub Actions workflow
-2. Workflow builds Docker image and pushes to Docker Hub
-3. Portainer webhook triggers auto-deployment on NUC
-4. NUC pulls new image and restarts containers
+1. Push Code zu GitHub
+2. GitHub Actions Workflow baut Docker Image und pusht zu Docker Hub
+3. Portainer Webhook triggert Auto-Deployment auf NUC
+4. NUC pullt neues Image und startet Container neu
 
 ## Key Configuration Files
 
 ### Environment Variables
-Production requires these environment variables (set in Portainer):
-- `DB_PASSWORD` - PostgreSQL password
-- `SECRET_KEY` - FastAPI secret key
+Production erfordert diese Environment Variables (gesetzt in Portainer):
+- `DB_PASSWORD` - PostgreSQL Passwort
+- `SECRET_KEY` - FastAPI Secret Key
 
 ### Database Connection
 Development: `postgresql://printuser:printpass@db:5432/printcalc`
 Production: `postgresql://printuser:${DB_PASSWORD}@db:5432/printcalc`
 
 ### PostgreSQL Configuration
-- `postgresql.conf` - WAL archiving configuration for point-in-time recovery
-- Backups run 3x daily (06:00, 12:00, 18:00)
-- 14-day retention policy
+- `postgresql.conf` - WAL Archiving Konfiguration für Point-in-Time Recovery
+- Backups laufen 3x täglich (06:00, 12:00, 18:00)
+- 14-Tage Retention Policy
 
 ## Code Style Guidelines
 
 ### Python
-- Use type hints where practical
-- Follow PEP 8 naming conventions
-- Database models use German field names for business concepts
-- Route handlers use German variable names for form data
+- Type Hints wo praktikabel verwenden
+- PEP 8 Naming Conventions folgen
+- Datenbank-Modelle verwenden deutsche Feldnamen für Business-Konzepte
+- Route Handler verwenden deutsche Variablennamen für Form-Daten
 
 ### Template Naming
-- List views: `{resource}/list.html`
-- Form views: `{resource}/form.html` or `form_{type}.html`
-- Detail views: `{resource}/detail.html`
-- HTMX partials: `partials/{name}.html`
+- Listenansichten: `{resource}/list.html`
+- Formular-Ansichten: `{resource}/form.html` oder `form_{type}.html`
+- Detail-Ansichten: `{resource}/detail.html`
+- HTMX Partials: `partials/{name}.html`
 
 ### Database Conventions
-- Table names: plural, lowercase (machines, materials, products)
-- Primary keys: `id` (Integer, auto-increment)
+- Tabellennamen: plural, lowercase (machines, materials, products)
+- Primary Keys: `id` (Integer, auto-increment)
 - Timestamps: `created_at`, `updated_at`
-- Foreign keys: `{resource}_id`
+- Foreign Keys: `{resource}_id`
 
 ## Testing
 
-Currently, the project does not have automated tests. Testing is done manually:
+Aktuell hat das Projekt keine automatisierten Tests. Testing erfolgt manuell:
 
-1. Start development environment: `docker-compose up -d`
-2. Access http://localhost:5000
-3. Test CRUD operations for all entities
-4. Verify cost calculations against expected values
-5. Check responsive design in different browsers
+1. Entwicklungsumgebung starten: `docker-compose up -d`
+2. http://localhost:5000 aufrufen
+3. CRUD-Operationen für alle Entities testen
+4. Kostenberechnungen gegen erwartete Werte prüfen
+5. Responsive Design in verschiedenen Browsern testen
 
 ## Security Considerations
 
-1. **No sensitive data in code** - Passwords via environment variables
-2. **Database** - PostgreSQL behind Docker network, port 5432 exposed only on host
-3. **Secrets management** - Docker secrets or Portainer environment variables
-4. **Backups** - Automated backups with retention
-5. **No authentication** - Current version has no user authentication (internal use only)
+1. **Keine sensiblen Daten im Code** - Passwörter via Environment Variables
+2. **Datenbank** - PostgreSQL hinter Docker-Netzwerk, Port 5432 nur auf Host exposed
+3. **Secrets Management** - Docker Secrets oder Portainer Environment Variables
+4. **Backups** - Automatisierte Backups mit Retention
+5. **Keine Authentifizierung** - Aktuelle Version hat keine User-Authentifizierung (nur interner Gebrauch)
 
 ## Backup and Restore
 
 ### Automated Backups
-- Runs 3x daily via `docker-volume-backup` container
+- Läuft 3x täglich via `docker-volume-backup` Container
 - Location: `/mnt/user/backups/picocalc/`
 - Format: `backup-YYYY-MM-DDTHH-MM-SS.tar.gz`
-- Retention: 14 days
+- Retention: 14 Tage
 
 ### Manual Backup to Local Machine
 ```powershell
 .\backup-to-local.ps1
 ```
 
-### Restore from Backup (on NUC)
+### Restore from Backup (auf NUC)
 ```bash
 # Restore latest backup
 ./backup/restore-script.sh latest
@@ -296,96 +314,120 @@ Currently, the project does not have automated tests. Testing is done manually:
 ./backup/restore-script.sh 20250115_120000
 ```
 
+## Special Features
+
+### PNG to SVG Converter
+- Tool unter `/tools/png-to-svg`
+- Nutzt vtracer Bibliothek für Vektorisierung
+- Konvertierte Dateien können in SVG-Bibliothek gespeichert werden
+- Bibliothek verfügbar unter `/tools/converted-files`
+
+### Product Images
+- Bilder können zu Produkten hochgeladen werden
+- Unterstützt PNG, JPG, WEBP
+- SVGs aus der Bibliothek können mit Produkten verknüpft werden
+- Hauptbild-Funktionalität für primäre Produktfotos
+
+### Kanban-Style Ideas Board
+- Ideen können in Status "todo", "in_progress", "done" verschoben werden
+- Drag & Drop Funktionalität
+- Schnelles Notieren von Verbesserungsideen
+
 ## Common Tasks
 
 ### Adding a New Product Type
-1. Add type to `PRODUCT_TYPES` in `main.py`
-2. Add type-specific fields to `Product` model in `models.py`
-3. Create form template: `templates/products/form_{type}.html`
-4. Add routes for create/edit in `main.py`
-5. Add calculation logic to `calculate_costs()` in models
+1. Typ zu `PRODUCT_TYPES` in `main.py` hinzufügen
+2. Typ-spezifische Felder zu `Product` Modell in `models.py` hinzufügen
+3. Formular-Template erstellen: `templates/products/form_{type}.html`
+4. Routes für Create/Edit in `main.py` hinzufügen
+5. Berechnungslogik zu `calculate_costs()` in models erweitern
 
 ### Adding Database Fields
-1. Add column to model in `models.py`
-2. Update form templates
-3. Update route handlers in `main.py`
-4. Since there's no migration system currently, manual DB update or recreation required
+1. Spalte zu Modell in `models.py` hinzufügen
+2. Formular-Templates aktualisieren
+3. Route Handler in `main.py` aktualisieren
+4. Da kein Migrationssystem existiert, manuelles DB-Update oder Neuerstellung erforderlich
 
 ### Updating Dependencies
-1. Edit `app/requirements.txt`
-2. Rebuild containers: `docker-compose up --build -d`
-3. Test thoroughly
-4. Commit changes
+1. `app/requirements.txt` bearbeiten
+2. Container rebuild: `docker-compose up --build -d`
+3. Gründlich testen
+4. Änderungen committen
 
 ## CI/CD Pipeline
 
-The GitHub Actions workflow (`.github/workflows/deploy.yml`):
-1. Triggers on push to `main` branch
-2. Builds Docker image from `app/` directory
-3. Pushes to Docker Hub (`bernys/picocalc:latest`)
-4. Triggers Portainer webhook for auto-deployment
+Der GitHub Actions Workflow (`.github/workflows/deploy.yml`):
+1. Triggert bei Push auf `main` Branch
+2. Baut Docker Image aus `app/` Verzeichnis
+3. Pusht zu Docker Hub (`bernys/picocalc:latest`)
+4. Triggert Portainer Webhook für Auto-Deployment
 
 Required GitHub Secrets:
-- `DOCKER_USERNAME` - Docker Hub username
-- `DOCKER_PASSWORD` - Docker Hub access token
-- `PORTAINER_WEBHOOK_URL` - Portainer stack webhook URL
+- `DOCKER_USERNAME` - Docker Hub Username
+- `DOCKER_PASSWORD` - Docker Hub Access Token
+- `PORTAINER_WEBHOOK_URL` - Portainer Stack Webhook URL
 
 ## Troubleshooting
 
 ### Database Connection Issues
 ```bash
-# Check if PostgreSQL is ready
+# Prüfe ob PostgreSQL bereit ist
 docker exec picocalc-db pg_isready -U printuser
 
-# View database logs
+# Zeige Datenbank-Logs
 docker logs picocalc-db
 ```
 
 ### Application Won't Start
 ```bash
-# Check for syntax errors
+# Prüfe auf Syntax Errors
 docker logs picocalc-app
 
-# Verify environment variables
+# Verifiziere Environment Variables
 docker exec picocalc-app env | grep DATABASE
 ```
 
 ### Reset Development Database
 ```bash
-docker-compose down -v  # Removes volumes
-docker-compose up -d    # Recreates fresh
+docker-compose down -v  # Entfernt Volumes
+docker-compose up -d    # Erstellt neu
 ```
 
-### Production Reset (⚠️ Destroys all data)
+### Production Reset (⚠️ Zerstört alle Daten)
 ```bash
-# On NUC only - use with caution!
+# Nur auf NUC - mit Vorsicht verwenden!
 ./reset-prod.sh
 ```
 
 ## Important Notes for AI Agents
 
-1. **German Language**: All user-facing text is German. Maintain German for new UI text, comments, and documentation.
+1. **German Language**: Alle User-facing Texte sind auf Deutsch. Neue UI-Texte, Kommentare und Dokumentation sollten auf Deutsch verfasst werden.
 
-2. **No ORM Migrations**: The project uses `Base.metadata.create_all()` on startup. Schema changes require:
-   - Model updates
-   - Manual DB migration or recreation (use `reset-prod.sh` on NUC with caution)
+2. **No ORM Migrations**: Das Projekt verwendet `Base.metadata.create_all()` beim Start. Schema-Änderungen erfordern:
+   - Modell-Updates
+   - Manuelle DB-Migration oder Neuerstellung (nutze `reset-prod.sh` auf NUC mit Vorsicht)
 
-3. **Cost Calculation Logic**: The core business logic is in `models.py`:
-   - `Machine.calculate_cost_per_hour()` - Includes depreciation + electricity
-   - `Product.calculate_costs()` - Aggregates all cost components
-   - Selling prices calculated with 30%, 50%, 100% margins
+3. **Cost Calculation Logic**: Die zentrale Business-Logik ist in `models.py`:
+   - `Machine.calculate_cost_per_hour()` - Inkludiert Abschreibung + Strom
+   - `Product.calculate_costs()` - Aggregiert alle Kostenkomponenten
+   - Verkaufspreise werden mit 30%, 50%, 100% Margen berechnet
 
-4. **Static Electricity Price**: `STROM_PREIS_KWH = 0.22` (€/kWh) is hardcoded in models.py
+4. **Static Electricity Price**: `STROM_PREIS_KWH = 0.22` (€/kWh) ist hardcoded in models.py
 
-5. **Template Inheritance**: All templates extend `base.html` which includes HTMX and common styling
+5. **Template Inheritance**: Alle Templates erben von `base.html` welches HTMX und gemeinsames Styling inkludiert
 
 6. **Development vs Production**:
-   - Dev: Code mounted as volume, auto-reload enabled
-   - Prod: Code baked into image, no volume mounts for app code
+   - Dev: Code als Volume gemountet, Auto-Reload aktiviert
+   - Prod: Code in Image gebacken, keine Volume Mounts für App-Code
 
-7. **File Organization**: The main application is intentionally monolithic (`main.py` contains all routes) for simplicity in a small project.
+7. **File Organization**: Die Hauptanwendung ist absichtlich monolithisch (`main.py` enthält alle Routes) für Einfachheit in einem kleinen Projekt.
 
-8. **Dependencies**: See `app/requirements.txt` for exact versions:
+8. **Dependencies**: Siehe `app/requirements.txt` für exakte Versionen:
    - FastAPI 0.109.0
    - SQLAlchemy 2.0.25
    - PostgreSQL driver: psycopg2-binary 2.9.9
+   - vtracer 0.6.11 (für PNG-zu-SVG Konvertierung)
+
+9. **Decimal Parsing**: Die Funktion `parse_decimal()` in `main.py` konvertiert Strings mit Komma oder Punkt als Dezimaltrenner zu float. Wird für alle numerischen Formularfelder verwendet.
+
+10. **Time Conversion**: Die Funktion `minutes_to_hours()` konvertiert Minuten zu Stunden. Formularfelder für Zeit verwenden typischerweise Minuten (User-freundlicher), werden aber als Stunden gespeichert.

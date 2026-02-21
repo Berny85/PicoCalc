@@ -2,9 +2,115 @@
 
 {% block title %}Produkte - Picobellu Kalkulator{% endblock %}
 
+{% block extra_css %}
+<style>
+    .products-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 20px;
+        margin-top: 20px;
+    }
+    
+    .product-card {
+        background: var(--color-bg-card);
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        transition: transform 0.2s, box-shadow 0.2s;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .product-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+    
+    .product-image {
+        height: 180px;
+        background: var(--color-bg-hover);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        border-bottom: 1px solid var(--color-border);
+    }
+    
+    .product-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    
+    .product-image .no-image {
+        font-size: 3rem;
+        opacity: 0.3;
+    }
+    
+    .product-info {
+        padding: 15px;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .product-name {
+        font-weight: 600;
+        font-size: 1.1rem;
+        margin-bottom: 8px;
+        color: var(--color-text);
+    }
+    
+    .product-meta {
+        font-size: 0.85rem;
+        color: var(--color-text-light);
+        margin-bottom: 10px;
+    }
+    
+    .product-prices {
+        margin-top: auto;
+        padding-top: 10px;
+        border-top: 1px solid var(--color-border);
+    }
+    
+    .price-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.9rem;
+        margin: 4px 0;
+    }
+    
+    .price-label {
+        color: var(--color-text-light);
+    }
+    
+    .price-value {
+        font-weight: 600;
+    }
+    
+    .product-actions {
+        padding: 15px;
+        background: var(--color-bg-hover);
+    }
+    
+    @media (max-width: 768px) {
+        .products-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+    }
+    
+    @media (max-width: 480px) {
+        .products-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
         <h2>Alle Produkte</h2>
         <div>
             <a href="/products/3d-print/new" class="btn btn-primary">+ 3D-Druck</a>
@@ -30,42 +136,50 @@
     </form>
     
     {% if products %}
-    <div class="table-responsive">
-    <table>
-        <thead>
-            <tr>
-                <th>Name</th>
-                <th>Typ</th>
-                <th>Material</th>
-                <th>Einkaufspreis</th>
-                <th>Verkauf (30%)</th>
-                <th>Verkauf (50%)</th>
-                <th>Verkauf (100%)</th>
-                <th>Aktionen</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for item in products %}
-            <tr>
-                <td><strong>{{ item.product.name }}</strong></td>
-                <td>
+    <div class="products-grid">
+        {% for item in products %}
+        <div class="product-card">
+            <div class="product-image">
+                {% if item.product.images %}
+                    {% set primary_image = item.product.images|selectattr('is_primary', 'equalto', 1)|first %}
+                    {% if primary_image %}
+                        <img src="/product-images/{{ primary_image.id }}" alt="{{ item.product.name }}">
+                    {% else %}
+                        <img src="/product-images/{{ item.product.images[0].id }}" alt="{{ item.product.name }}">
+                    {% endif %}
+                {% else %}
+                    <span class="no-image">🖼️</span>
+                {% endif %}
+            </div>
+            <div class="product-info">
+                <div class="product-name">{{ item.product.name }}</div>
+                <div class="product-meta">
                     <span class="category-badge category-{{ item.product.product_type }}">
                         {{ item.product.product_type }}
                     </span>
-                </td>
-                <td>{{ item.product.get_material_summary() }}</td>
-                <td><strong>{{ item.calc.total_cost }} €</strong></td>
-                <td>{{ item.calc.selling_price_30 }} €</td>
-                <td>{{ item.calc.selling_price_50 }} €</td>
-                <td>{{ item.calc.selling_price_100 }} €</td>
-                <td>
-                    <a href="/products/{{ item.product.id }}" class="btn btn-primary" 
-                       style="padding: 6px 12px; font-size: 14px;">Details</a>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+                    <span style="margin-left: 5px;">{{ item.product.category }}</span>
+                </div>
+                <div class="product-meta" style="font-size: 0.8rem;">
+                    {{ item.product.get_material_summary()[:50] }}{% if item.product.get_material_summary()|length > 50 %}...{% endif %}
+                </div>
+                <div class="product-prices">
+                    <div class="price-row">
+                        <span class="price-label">Einkauf:</span>
+                        <span class="price-value">{{ item.calc.total_cost }} €</span>
+                    </div>
+                    <div class="price-row">
+                        <span class="price-label">Verkauf (50%):</span>
+                        <span class="price-value" style="color: var(--color-primary-dark);">{{ item.calc.selling_price_50 }} €</span>
+                    </div>
+                </div>
+            </div>
+            <div class="product-actions">
+                <a href="/products/{{ item.product.id }}" class="btn btn-primary" style="width: 100%; text-align: center;">
+                    Details anzeigen
+                </a>
+            </div>
+        </div>
+        {% endfor %}
     </div>
     {% else %}
     <p style="text-align: center; padding: 40px; color: var(--color-text-light);">

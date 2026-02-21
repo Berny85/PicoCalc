@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Picobellu Kalkulator{% endblock %}
+
+{% block extra_css %}
+<style>
+    .files-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 20px;
+        margin-top: 20px;
+    }
+    
+    .file-card {
+        background: var(--color-bg-card);
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        transition: transform 0.2s, box-shadow 0.2s;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .file-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+    
+    .file-preview {
+        height: 180px;
+        background: var(--color-bg-hover);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        border-bottom: 1px solid var(--color-border);
+    }
+    
+    .file-preview img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+    
+    .file-info {
+        padding: 15px;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .file-name {
+        font-weight: 600;
+        color: var(--color-text);
+        margin-bottom: 8px;
+        word-break: break-word;
+        font-size: 0.95rem;
+        line-height: 1.3;
+    }
+    
+    .file-meta {
+        color: var(--color-text-light);
+        font-size: 0.85rem;
+        margin-bottom: 5px;
+    }
+    
+    .file-stats {
+        display: flex;
+        gap: 15px;
+        margin: 10px 0;
+        padding: 10px;
+        background: var(--color-bg-hover);
+        border-radius: 6px;
+        font-size: 0.8rem;
+    }
+    
+    .stat-item {
+        text-align: center;
+    }
+    
+    .stat-value {
+        font-weight: 600;
+        color: var(--color-primary-dark);
+    }
+    
+    .stat-label {
+        color: var(--color-text-lighter);
+        font-size: 0.75rem;
+    }
+    
+    .file-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: auto;
+        padding-top: 12px;
+    }
+    
+    .file-actions .btn {
+        flex: 1;
+        padding: 8px 12px;
+        font-size: 0.85rem;
+        text-align: center;
+    }
+    
+    .file-description {
+        font-size: 0.85rem;
+        color: var(--color-text-light);
+        margin: 8px 0;
+        line-height: 1.4;
+    }
+    
+    .file-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 8px;
+    }
+    
+    .file-tag {
+        background: var(--color-primary);
+        color: white;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.75rem;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: var(--color-text-light);
+    }
+    
+    .empty-state-icon {
+        font-size: 4rem;
+        margin-bottom: 20px;
+        opacity: 0.5;
+    }
+    
+    @media (max-width: 768px) {
+        .files-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+        
+        .file-preview {
+            height: 140px;
+        }
+    }
+    
+    @media (max-width: 480px) {
+        .files-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+        <div>
+            <h2>🎨 Gespeicherte Konvertierungen</h2>
+            <p style="color: var(--color-text-light); margin-top: 5px;">
+                Hier findest du alle gespeicherten PNG-zu-SVG Konvertierungen
+            </p>
+        </div>
+        <a href="/tools/png-to-svg" class="btn btn-primary">+ Neue Konvertierung</a>
+    </div>
+</div>
+
+<!-- Suchleiste -->
+<div class="card">
+    <form method="GET" action="/tools/converted-files" class="search-box">
+        <input type="text" name="search" placeholder="Dateien suchen..." 
+               value="{{ search }}" style="flex: 1;">
+        <button type="submit" class="btn btn-primary">🔍 Suchen</button>
+        {% if search %}
+        <a href="/tools/converted-files" class="btn btn-secondary">Zurücksetzen</a>
+        {% endif %}
+    </form>
+</div>
+
+{% if files %}
+<div class="files-grid">
+    {% for file in files %}
+    <div class="file-card">
+        <div class="file-preview">
+            <img src="/tools/converted-files/{{ file.id }}/download/png" 
+                 alt="{{ file.original_filename }}"
+                 loading="lazy">
+        </div>
+        <div class="file-info">
+            <div class="file-name">{{ file.original_filename }}</div>
+            
+            {% if file.description %}
+            <div class="file-description">{{ file.description }}</div>
+            {% endif %}
+            
+            <div class="file-stats">
+                <div class="stat-item">
+                    <div class="stat-value">{{ "%.0f"|format(file.original_size_bytes / 1024) }}</div>
+                    <div class="stat-label">KB Original</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">{{ "%.0f"|format(file.svg_size_bytes / 1024) }}</div>
+                    <div class="stat-label">KB SVG</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">{{ file.get_size_reduction_percent() }}%</div>
+                    <div class="stat-label">kleiner</div>
+                </div>
+            </div>
+            
+            {% if file.tags %}
+            <div class="file-tags">
+                {% for tag in file.tags.split(',') %}
+                <span class="file-tag">{{ tag.strip() }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            
+            <div class="file-meta">
+                {{ file.created_at.strftime('%d.%m.%Y %H:%M') }} • 
+                {{ file.conversion_mode }} • 
+                {{ file.color_mode }}
+            </div>
+            
+            <div class="file-actions">
+                <a href="/tools/converted-files/{{ file.id }}/preview" class="btn btn-primary">
+                    👁️ Vorschau
+                </a>
+                <a href="/tools/converted-files/{{ file.id }}/download/svg" class="btn btn-success">
+                    ⬇️ SVG
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% else %}
+<div class="card empty-state">
+    <div class="empty-state-icon">📁</div>
+    <h3>Noch keine Dateien gespeichert</h3>
+    <p style="margin: 15px 0;">
+        Konvertiere dein erstes Bild zu SVG und speichere es hier ab.
+    </p>
+    <a href="/tools/png-to-svg" class="btn btn-primary">
+        Zur Konvertierung
+    </a>
+</div>
+{% endif %}
+
+<div class="actions" style="margin-top: 30px;">
+    <a href="/" class="btn btn-secondary">← Zurück zum Dashboard</a>
+</div>
+{% endblock %}

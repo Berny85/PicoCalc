@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Picobellu Kalkulator{% endblock %}
+
+{% block extra_css %}
+<style>
+    .preview-container {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 20px;
+        margin-top: 20px;
+    }
+    
+    .preview-box {
+        background: var(--color-bg-card);
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .preview-box h3 {
+        margin-bottom: 15px;
+        color: var(--color-primary-dark);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .preview-content {
+        background: var(--color-bg-hover);
+        border-radius: 8px;
+        padding: 20px;
+        min-height: 300px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: auto;
+    }
+    
+    .preview-content img,
+    .preview-content svg {
+        max-width: 100%;
+        max-height: 400px;
+        object-fit: contain;
+    }
+    
+    .file-details {
+        background: var(--color-bg-hover);
+        border-radius: 8px;
+        padding: 20px;
+        margin-top: 20px;
+    }
+    
+    .file-details h3 {
+        margin-bottom: 15px;
+        color: var(--color-primary-dark);
+    }
+    
+    .details-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+    }
+    
+    .detail-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--color-border);
+    }
+    
+    .detail-label {
+        color: var(--color-text-light);
+    }
+    
+    .detail-value {
+        font-weight: 600;
+        color: var(--color-text);
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+        margin-top: 20px;
+        flex-wrap: wrap;
+    }
+    
+    .action-buttons .btn {
+        flex: 1;
+        min-width: 150px;
+        text-align: center;
+    }
+    
+    .svg-code-preview {
+        background: #2d3748;
+        color: #e2e8f0;
+        padding: 15px;
+        border-radius: 8px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.75rem;
+        max-height: 300px;
+        overflow: auto;
+        white-space: pre-wrap;
+        word-break: break-all;
+        margin-top: 15px;
+    }
+    
+    @media (max-width: 768px) {
+        .preview-container {
+            grid-template-columns: 1fr;
+        }
+        
+        .preview-content {
+            min-height: 200px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+        <div>
+            <h2>👁️ Vorschau: {{ file.original_filename }}</h2>
+            <p style="color: var(--color-text-light); margin-top: 5px;">
+                Konvertiert am {{ file.created_at.strftime('%d.%m.%Y um %H:%M Uhr') }}
+            </p>
+        </div>
+        <div class="actions" style="margin: 0;">
+            <a href="/tools/converted-files" class="btn btn-secondary">← Zurück zur Liste</a>
+        </div>
+    </div>
+</div>
+
+<div class="preview-container">
+    <!-- Original PNG Vorschau -->
+    <div class="preview-box">
+        <h3>🖼️ Vorschau (Original PNG)</h3>
+        <div class="preview-content">
+            <img src="/tools/converted-files/{{ file.id }}/download/png" 
+                 alt="Original {{ file.original_filename }}">
+        </div>
+        <div style="text-align: center; margin-top: 10px; color: var(--color-text-light);">
+            {{ "%.1f"|format(file.original_size_bytes / 1024) }} KB
+        </div>
+    </div>
+    
+    <!-- Aktionen -->
+    <div class="preview-box">
+        <h3>⚡ Schnell-Aktionen</h3>
+        <div style="display: flex; flex-direction: column; gap: 15px; padding: 20px 0;">
+            <a href="/tools/converted-files/{{ file.id }}/download/svg" class="btn btn-success" style="padding: 15px 20px; font-size: 1.1rem;">
+                ⬇️ SVG herunterladen<br>
+                <small style="font-size: 0.8rem; opacity: 0.9;">{{ "%.1f"|format(file.svg_size_bytes / 1024) }} KB ({{ file.get_size_reduction_percent() }}% kleiner)</small>
+            </a>
+            
+            <a href="/tools/converted-files/{{ file.id }}/download/png" class="btn btn-primary" style="padding: 15px 20px;">
+                ⬇️ Original PNG herunterladen<br>
+                <small style="font-size: 0.8rem; opacity: 0.9;">{{ "%.1f"|format(file.original_size_bytes / 1024) }} KB</small>
+            </a>
+            
+            <form method="POST" action="/tools/converted-files/{{ file.id }}/delete" 
+                  onsubmit="return confirm('Möchtest du diese Datei wirklich löschen?');">
+                <button type="submit" class="btn btn-danger" style="width: 100%; padding: 12px 20px;">
+                    🗑️ Löschen
+                </button>
+            </form>
+        </div>
+        
+        <div style="margin-top: 20px; padding: 15px; background: var(--color-bg-hover); border-radius: 8px; font-size: 0.9rem;">
+            <strong>Konvertierungs-Details:</strong><br>
+            <span style="color: var(--color-text-light);">
+                Modus: {{ file.conversion_mode }}<br>
+                Farben: {{ file.color_mode }}<br>
+                Erstellt: {{ file.created_at.strftime('%d.%m.%Y %H:%M') }}
+            </span>
+        </div>
+    </div>
+</div>
+
+<!-- Datei-Details -->
+<div class="file-details">
+    <h3>📋 Datei-Informationen</h3>
+    <div class="details-grid">
+        <div class="detail-item">
+            <span class="detail-label">Original-Dateiname:</span>
+            <span class="detail-value">{{ file.original_filename }}</span>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label">Gespeichert am:</span>
+            <span class="detail-value">{{ file.created_at.strftime('%d.%m.%Y %H:%M') }}</span>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label">Kurven-Modus:</span>
+            <span class="detail-value">{{ file.conversion_mode }}</span>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label">Farbmodus:</span>
+            <span class="detail-value">{{ file.color_mode }}</span>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label">Original-Größe:</span>
+            <span class="detail-value">{{ "%.1f"|format(file.original_size_bytes / 1024) }} KB</span>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label">SVG-Größe:</span>
+            <span class="detail-value">{{ "%.1f"|format(file.svg_size_bytes / 1024) }} KB</span>
+        </div>
+        <div class="detail-item">
+            <span class="detail-label">Reduktion:</span>
+            <span class="detail-value" style="color: #28a745;">{{ file.get_size_reduction_percent() }}%</span>
+        </div>
+    </div>
+    
+    {% if file.description %}
+    <div style="margin-top: 15px; padding: 15px; background: white; border-radius: 6px;">
+        <strong>Beschreibung:</strong><br>
+        {{ file.description }}
+    </div>
+    {% endif %}
+    
+    {% if file.tags %}
+    <div style="margin-top: 15px;">
+        <strong>Tags:</strong>
+        <div style="display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px;">
+            {% for tag in file.tags.split(',') %}
+            <span style="background: var(--color-primary); color: white; padding: 4px 12px; border-radius: 12px; font-size: 0.85rem;">
+                {{ tag.strip() }}
+            </span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- SVG Code Preview (kollapsibel) -->
+<div class="card">
+    <h3 style="cursor: pointer;" onclick="toggleCodePreview()">
+        📄 SVG Code anzeigen/verstecken
+        <span style="float: right; font-size: 1.2rem;">▼</span>
+    </h3>
+    <div id="code-preview" class="svg-code-preview" style="display: none;">
+        {{ svg_content[:3000] }}{% if svg_content|length > 3000 %}... (gekürzt){% endif %}
+    </div>
+</div>
+
+<script>
+    function toggleCodePreview() {
+        const preview = document.getElementById('code-preview');
+        preview.style.display = preview.style.display === 'none' ? 'block' : 'none';
+    }
+</script>
+
+<div class="actions" style="margin-top: 30px;">
+    <a href="/tools/converted-files" class="btn btn-secondary">← Zurück zur Liste</a>
+    <a href="/tools/png-to-svg" class="btn btn-primary">+ Neue Konvertierung</a>
+</div>
+{% endblock %}
