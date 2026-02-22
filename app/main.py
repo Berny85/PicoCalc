@@ -721,12 +721,14 @@ async def create_stationery(
 async def new_diecut_sticker_form(request: Request, db: Session = Depends(get_db)):
     """Formular für neue DieCut Sticker"""
     sticker_sheets = db.query(Material).filter(Material.material_type == "sticker_sheet").order_by(Material.name).all()
+    machines = db.query(Machine).order_by(Machine.name).all()
     
     return templates.TemplateResponse("products/form_diecut_sticker.html", {
         "request": request,
         "product": None,
         "categories": CATEGORIES,
         "sticker_sheets": sticker_sheets,
+        "machines": machines,
         "title": "Neue DieCut Sticker"
     })
 
@@ -736,27 +738,35 @@ async def create_diecut_sticker(
     name: str = Form(...),
     category: str = Form("Sonstiges"),
     sheet_material_id: int = Form(...),
-    sheet_count: str = Form(...),
     units_per_sheet: str = Form("6"),  # Standard: 6 Sticker pro Bogen
+    calculation_mode: str = Form("per_unit"),
+    units_per_batch: str = Form("6"),
+    machine_ids: list[int] = Form([]),  # Mehrere Maschinen
     labor_minutes: str = Form("0"),
     labor_rate_per_hour: str = Form("20.00"),
-    packaging_cost: str = Form("0"),
-    shipping_cost: str = Form("0"),
     notes: str = Form(""),
     db: Session = Depends(get_db)
 ):
     """Neue DieCut Sticker erstellen"""
+    # Erste Maschine als Hauptmaschine, restliche als kommaseparierte IDs
+    primary_machine_id = machine_ids[0] if machine_ids else None
+    additional_ids = ",".join(str(mid) for mid in machine_ids[1:]) if len(machine_ids) > 1 else None
+    
     product = Product(
         name=name,
         product_type="diecut_sticker",
         category=category,
         sheet_material_id=sheet_material_id,
-        sheet_count=parse_decimal(sheet_count),
-        units_per_sheet=parse_decimal(units_per_sheet),
+        sheet_count=1,  # Immer 1 Bogen
+        units_per_sheet=parse_decimal(units_per_sheet) if calculation_mode == "per_unit" else 1,
+        units_per_batch=int(units_per_batch) if calculation_mode == "per_batch" else 1,
+        calculation_mode=calculation_mode,
+        machine_id=primary_machine_id,
+        additional_machine_ids=additional_ids,
         labor_minutes=parse_decimal(labor_minutes),
         labor_rate_per_hour=parse_decimal(labor_rate_per_hour),
-        packaging_cost=parse_decimal(packaging_cost),
-        shipping_cost=parse_decimal(shipping_cost),
+        packaging_cost=0,  # Wird beim Verkauf erfasst
+        shipping_cost=0,   # Wird beim Verkauf erfasst
         notes=notes
     )
     
@@ -1100,6 +1110,8 @@ async def update_product(
     packaging_cost: str = Form("0"),
     shipping_cost: str = Form("0"),
     notes: str = Form(""),
+    # Mehrere Maschinen (für Sticker, Schreibwaren, DieCut)
+    machine_ids: list[int] = Form([]),
     # Assembly Komponenten (dynamische Felder)
     component_id: list[str] = Form([]),
     component_name: list[str] = Form([]),
@@ -1132,6 +1144,9 @@ async def update_product(
         else:
             product.units_per_batch = int(units_per_batch)
             product.units_per_sheet = 1
+        # Mehrere Maschinen speichern
+        product.machine_id = machine_ids[0] if machine_ids else None
+        product.additional_machine_ids = ",".join(str(mid) for mid in machine_ids[1:]) if len(machine_ids) > 1 else None
     elif product.product_type == "laser_engraving":
         product.laser_material_id = laser_material_id
         product.laser_design_name = laser_design_name
@@ -1194,8 +1209,15 @@ async def update_product(
         product.machine_id = machine_id
     product.labor_minutes = parse_decimal(labor_minutes)
     product.labor_rate_per_hour = parse_decimal(labor_rate_per_hour)
-    product.packaging_cost = parse_decimal(packaging_cost)
-    product.shipping_cost = parse_decimal(shipping_cost)
+    
+    # Verpackung/Versand nur für 3D-Druck und Laser (bei Sticker/Schreibwaren wird es beim Verkauf erfasst)
+    if product.product_type in ["3d_print", "laser_engraving"]:
+        product.packaging_cost = parse_decimal(packaging_cost)
+        product.shipping_cost = parse_decimal(shipping_cost)
+    else:
+        product.packaging_cost = 0
+        product.shipping_cost = 0
+    
     product.notes = notes
     product.updated_at = datetime.utcnow()
     
