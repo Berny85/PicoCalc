@@ -20,7 +20,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # Add additional_machine_ids column
-    op.add_column('products', sa.Column('additional_machine_ids', sa.String(255), nullable=True))
+    # Prüfe ob Spalte bereits existiert (z.B. durch SQLAlchemy Auto-Create)
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    columns = [col['name'] for col in inspector.get_columns('products')]
+    
+    if 'additional_machine_ids' not in columns:
+        op.add_column('products', sa.Column('additional_machine_ids', sa.String(255), nullable=True))
 
 
 def downgrade() -> None:

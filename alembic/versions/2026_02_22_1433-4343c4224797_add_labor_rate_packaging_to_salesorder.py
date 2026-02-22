@@ -20,7 +20,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # Add labor_rate_packaging column with default 20.00
-    op.add_column('sales_orders', sa.Column('labor_rate_packaging', sa.Numeric(precision=10, scale=2), nullable=True, server_default='20.00'))
+    # Prüfe ob Spalte bereits existiert (z.B. durch SQLAlchemy Auto-Create)
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    columns = [col['name'] for col in inspector.get_columns('sales_orders')]
+    
+    if 'labor_rate_packaging' not in columns:
+        op.add_column('sales_orders', sa.Column('labor_rate_packaging', sa.Numeric(precision=10, scale=2), nullable=True, server_default='20.00'))
 
 
 def downgrade() -> None:
