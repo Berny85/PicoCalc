@@ -598,7 +598,8 @@ async def create_3d_print(
 @app.get("/products/sticker-sheet/new", response_class=HTMLResponse)
 async def new_sticker_sheet_form(request: Request, db: Session = Depends(get_db)):
     """Formular für neues Sticker-Sheet Produkt"""
-    sticker_sheets = db.query(Material).filter(Material.material_type == "sticker_sheet").order_by(Material.name).all()
+    # Alle Materialien verfügbar (Filter kann später hinzugefügt werden)
+    sticker_sheets = db.query(Material).order_by(Material.name).all()
     # Lade alle Maschinen
     machines = db.query(Machine).order_by(Machine.name).all()
     
@@ -660,7 +661,8 @@ async def create_sticker_sheet(
 @app.get("/products/stationery/new", response_class=HTMLResponse)
 async def new_stationery_form(request: Request, db: Session = Depends(get_db)):
     """Formular für neue Schreibwaren"""
-    sticker_sheets = db.query(Material).filter(Material.material_type == "sticker_sheet").order_by(Material.name).all()
+    # Alle Materialien verfügbar (Filter kann später hinzugefügt werden)
+    sticker_sheets = db.query(Material).order_by(Material.name).all()
     machines = db.query(Machine).order_by(Machine.name).all()
     
     return templates.TemplateResponse("products/form_stationery.html", {
@@ -720,7 +722,8 @@ async def create_stationery(
 @app.get("/products/diecut-sticker/new", response_class=HTMLResponse)
 async def new_diecut_sticker_form(request: Request, db: Session = Depends(get_db)):
     """Formular für neue DieCut Sticker"""
-    sticker_sheets = db.query(Material).filter(Material.material_type == "sticker_sheet").order_by(Material.name).all()
+    # Alle Materialien verfügbar (Filter kann später hinzugefügt werden)
+    sticker_sheets = db.query(Material).order_by(Material.name).all()
     machines = db.query(Machine).order_by(Machine.name).all()
     
     return templates.TemplateResponse("products/form_diecut_sticker.html", {
@@ -1014,10 +1017,11 @@ async def edit_product_form(product_id: int, request: Request, db: Session = Dep
     if not product:
         raise HTTPException(status_code=404, detail="Produkt nicht gefunden")
     
-    # Lade entsprechende Materialien
-    filaments = db.query(Material).filter(Material.material_type == "filament").order_by(Material.name).all()
-    sticker_sheets = db.query(Material).filter(Material.material_type == "sticker_sheet").order_by(Material.name).all()
-    laser_materials = db.query(Material).filter(Material.material_type == "laser_material").order_by(Material.name).all()
+    # Lade alle Materialien für alle Produkttypen (Filter kann später hinzugefügt werden)
+    all_materials = db.query(Material).order_by(Material.name).all()
+    filaments = all_materials
+    sticker_sheets = all_materials
+    laser_materials = all_materials
     
     # Lade entsprechende Maschinen
     machines = []
