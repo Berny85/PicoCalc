@@ -25,8 +25,8 @@ services:
 
   web:
     build: 
-      context: ./app
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: app/Dockerfile
     container_name: picocalc-app
     ports:
       - "5000:5000"

@@ -2,7 +2,9 @@ version: '3.8'
 
 services:
   web:
-    build: ./app
+    build: 
+      context: .
+      dockerfile: app/Dockerfile
     ports:
       - "5000:5000"
     environment:
@@ -13,6 +15,8 @@ services:
       - db
     volumes:
       - ./app:/app
+      - ./alembic.ini:/app/alembic.ini
+      - ./alembic:/app/alembic
       - file_storage:/app/storage
     command: uvicorn main:app --host 0.0.0.0 --port 5000 --reload
 
