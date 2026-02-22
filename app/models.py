@@ -66,7 +66,8 @@ class Machine(Base):
 
 
 class MaterialType(Base):
-    """Materialtypen - konfigurierbare Liste (Filament, Stickerbogen, etc.)"""
+    """Materialtypen - konfigurierbare Liste (Filament, Sticker-Sheet, etc.)
+"""
     __tablename__ = "material_types"
     
     id = Column(Integer, primary_key=True, index=True)
@@ -84,7 +85,8 @@ class MaterialType(Base):
 
 
 class Material(Base):
-    """Material-Tabelle für Filamente, Papier, Stickerbögen, etc."""
+    """Material-Tabelle für Filamente, Papier, Sticker-Sheets, etc.
+"""
     __tablename__ = "materials"
     
     id = Column(Integer, primary_key=True, index=True)

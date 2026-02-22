@@ -35,7 +35,7 @@ def seed_material_types(db: Session):
     
     default_types = [
         ("filament", "3D-Filament (€/kg)", "Filament für 3D-Drucker", 1),
-        ("sticker_sheet", "Stickerbogen (€/Bogen)", "Bögen für Sticker", 2),
+        ("sticker_sheet", "Sticker-Sheet (€/Bogen)", "Bögen für Sticker", 2),
         ("diecut_sticker", "DieCut-Sticker Material", "Material für einzelne Sticker", 3),
         ("paper", "Papier", "Verschiedene Papiersorten", 4),
         ("laser_material", "Laser-Material (€/Stück)", "Material für Laser-Gravur", 5),
@@ -100,7 +100,7 @@ def get_material_types(db: Session, only_active: bool = True):
 # Produkttypen
 PRODUCT_TYPES = [
     ("3d_print", "3D-Druck"),
-    ("sticker_sheet", "Stickerbogen"),
+    ("sticker_sheet", "Sticker-Sheet"),
     ("diecut_sticker", "DieCut-Sticker"),
     ("paper", "Papierprodukt"),
     ("stationery", "Schreibwaren"),
@@ -597,7 +597,7 @@ async def create_3d_print(
 
 @app.get("/products/sticker-sheet/new", response_class=HTMLResponse)
 async def new_sticker_sheet_form(request: Request, db: Session = Depends(get_db)):
-    """Formular für neues Stickerbogen Produkt"""
+    """Formular für neues Sticker-Sheet Produkt"""
     sticker_sheets = db.query(Material).filter(Material.material_type == "sticker_sheet").order_by(Material.name).all()
     # Lade alle Maschinen
     machines = db.query(Machine).order_by(Machine.name).all()
@@ -608,7 +608,7 @@ async def new_sticker_sheet_form(request: Request, db: Session = Depends(get_db)
         "categories": CATEGORIES,
         "sticker_sheets": sticker_sheets,
         "machines": machines,
-        "title": "Neuer Stickerbogen"
+        "title": "Neues Sticker-Sheet"
     })
 
 @app.post("/products/sticker-sheet")

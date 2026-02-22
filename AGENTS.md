@@ -114,7 +114,7 @@ Konfigurierbare Material-Kategorien:
 - `is_active` - 1 = Aktiv, 0 = Inaktiv
 
 ### Material (`models.py`)
-Repräsentiert Rohmaterialien (Filamente, Stickerbögen, Papier):
+Repräsentiert Rohmaterialien (Filamente, Sticker-Sheets, Papier):
 - `name`, `material_type` (verweist auf MaterialType.key)
 - `brand`, `color`, `unit` (kg, sheet, m, piece)
 - `price_per_unit`
