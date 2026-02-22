@@ -19,12 +19,22 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Tabelle sales_order_items existiert bereits (von SQLAlchemy erstellt)
-    # Nur alte Felder aus sales_orders entfernen
-    op.drop_column('sales_orders', 'product_id')
-    op.drop_column('sales_orders', 'quantity')
-    op.drop_column('sales_orders', 'unit_price')
-    op.drop_column('sales_orders', 'production_cost_per_unit')
+    # Tabelle sales_orders wurde möglicherweise bereits von SQLAlchemy mit dem 
+    # aktuellen Modell erstellt (ohne die alten Felder). Prüfen und nur löschen wenn vorhanden.
+    
+    # Prüfe ob die alten Spalten existieren (nur bei bestehender DB mit alter Struktur)
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    columns = [col['name'] for col in inspector.get_columns('sales_orders')]
+    
+    if 'product_id' in columns:
+        op.drop_column('sales_orders', 'product_id')
+    if 'quantity' in columns:
+        op.drop_column('sales_orders', 'quantity')
+    if 'unit_price' in columns:
+        op.drop_column('sales_orders', 'unit_price')
+    if 'production_cost_per_unit' in columns:
+        op.drop_column('sales_orders', 'production_cost_per_unit')
 
 
 def downgrade() -> None:
