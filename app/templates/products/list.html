@@ -157,7 +157,6 @@
                     <span class="category-badge category-{{ item.product.product_type }}">
                         {{ item.product.product_type }}
                     </span>
-                    <span style="margin-left: 5px;">{{ item.product.category }}</span>
                 </div>
                 <div class="product-meta" style="font-size: 0.8rem;">
                     {{ item.product.get_material_summary()[:50] }}{% if item.product.get_material_summary()|length > 50 %}...{% endif %}

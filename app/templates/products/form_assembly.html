@@ -15,16 +15,8 @@
                            value="{{ product.name if product else '' }}">
                 </div>
                 
-                <div class="form-group">
-                    <label for="category">Kategorie</label>
-                    <select id="category" name="category">
-                        {% for cat in categories %}
-                        <option value="{{ cat }}" {% if product and product.category == cat %}selected{% endif %}>
-                            {{ cat }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
+                <!-- Kategorie ausgeblendet - wird automatisch auf "Sonstiges" gesetzt -->
+                <input type="hidden" name="category" value="Sonstiges">
             </div>
             
             <div>

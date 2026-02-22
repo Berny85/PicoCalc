@@ -103,7 +103,8 @@ Repräsentiert Produktionsgeräte (3D-Drucker, Cutter, Tintenstrahl-Drucker):
 - `power_kw` - Stromverbrauch in kW
 - `lifespan_pages` - Für Tintenstrahl-Drucker: Lebensdauer in Seiten
 - `depreciation_per_page` - Für Tintenstrahl-Drucker: Abschreibung pro Seite
-- Methoden: `calculate_cost_per_hour()`, `calculate_cost_per_page()`, `calculate_cost_per_unit()`
+- **Neu**: `cost_per_sheet` - Für Plotter/Drucker: Kosten pro Bogen (für Sticker-Produktion)
+- Methoden: `calculate_cost_per_hour()`, `calculate_cost_per_page()`, `calculate_cost_per_sheet()`, `calculate_cost_per_unit()`
 
 ### MaterialType (`models.py`)
 Konfigurierbare Material-Kategorien:
@@ -120,9 +121,12 @@ Repräsentiert Rohmaterialien (Filamente, Stickerbögen, Papier):
 
 ### Product (`models.py`)
 Zentrale Entity mit typ-spezifischen Feldern:
-- **Gemeinsam**: `name`, `product_type`, `category`, `labor_minutes`, `labor_rate_per_hour`, `packaging_cost`, `shipping_cost`, `notes`
+- **Gemeinsam**: `name`, `product_type`, `category`, `labor_minutes`, `labor_rate_per_hour`, `notes`
+  - ⚠️ **Wichtig**: `labor_minutes` (nicht mehr `labor_hours`) - Arbeitszeit in Minuten
+  - ⚠️ **Wichtig**: `packaging_cost` und `shipping_cost` entfernt - werden jetzt beim Verkauf erfasst
+- **Berechnungsmodus**: `calculation_mode` ("per_unit" oder "per_batch"), `units_per_batch`
 - **3D-Druck**: `filament_material_id`, `filament_weight_g`, `print_time_hours`, `machine_id`
-- **Sticker/Papier**: `sheet_material_id`, `sheet_count`, `units_per_sheet`, `cut_time_hours`
+- **Sticker/Papier/Schreibwaren**: `sheet_material_id`, `sheet_count` (immer 1), `units_per_sheet`, `additional_machine_ids`
 - **Laser**: `laser_material_id`, `laser_design_name`, `laser1_*`, `laser2_*`, `laser3_*` (Layer-Konfiguration)
 - Methode: `calculate_costs()` - Gibt Kostenaufschlüsselung und Verkaufspreis-Vorschläge (30%, 50%, 100% Marge) zurück
 
@@ -151,17 +155,45 @@ Produktbilder:
 - `is_primary` - 1 = Hauptbild, 0 = Zusatzbild
 - `converted_file_id` - Optionale Verknüpfung zu SVG-Bibliothek
 
+### ProductComponent (`models.py`)
+Komponenten-System für komplexe Produkte:
+- `parent_product_id` - Hauptprodukt
+- `component_product_id` - Einzelkomponente
+- `quantity` - Anzahl der Komponente
+- Wird für Produkte aus mehreren Teilen verwendet (z.B. Sets)
+
+### SalesOrder (`models.py`)
+Verkaufsaufträge mit mehreren Positionen:
+- `order_number`, `customer_name`
+- `packaging_cost`, `shipping_cost` - Werden hier erfasst (nicht mehr beim Produkt)
+- `labor_minutes_packaging`, `labor_rate_packaging` - Arbeitszeit für Verpackung
+- `status` - 'pending', 'produced', 'shipped', 'cancelled'
+- Methode: `calculate_total()` - Gesamtsumme aller Positionen + Verpackung/Versand
+- Beziehung: `items` → Liste von SalesOrderItem
+
+### SalesOrderItem (`models.py`)
+Einzelpositionen eines Verkaufsauftrags:
+- `sales_order_id` - Verknüpfung zum Auftrag
+- `product_id` - Verknüpfung zum Produkt
+- `quantity` - Anzahl
+- `unit_price` - Verkaufspreis pro Einheit
+- `production_cost_per_unit` - Selbstkosten (Kopie zum Zeitpunkt des Verkaufs)
+- Methode: `calculate_total()`, `calculate_profit()`
+
 ## Product Types & Categories
 
 ### Product Types (intern)
 - `3d_print` - 3D-gedruckte Objekte
-- `sticker_sheet` - Stickerbögen
+- `sticker_sheet` - Sticker-Sheets
 - `diecut_sticker` - Die-Cut Sticker
+- `stationery` - Schreibwaren (Notizblöcke, Karten, Papierwaren)
 - `paper` - Papierprodukte
 - `laser_engraving` - Laser-gravierte Artikel
 
 ### Categories (User-facing)
-Dekoration, Technik, Ersatzteile, Spielzeug, Werkzeuge, Sticker, Papierprodukte, Sonstiges
+⚠️ **Wichtig**: Kategorie ist in der UI ausgeblendet und wird automatisch auf "Sonstiges" gesetzt.
+
+Historisch: Dekoration, Technik, Ersatzteile, Spielzeug, Werkzeuge, Sticker, Papierprodukte, Sonstiges
 
 ## Dependencies (requirements.txt)
 
@@ -478,9 +510,10 @@ docker-compose up -d    # Erstellt neu
 
 1. **German Language**: Alle User-facing Texte sind auf Deutsch. Neue UI-Texte, Kommentare und Dokumentation sollten auf Deutsch verfasst werden.
 
-2. **No ORM Migrations**: Das Projekt verwendet `Base.metadata.create_all()` beim Start. Schema-Änderungen erfordern:
-   - Modell-Updates
-   - Manuelle DB-Migration oder Neuerstellung (nutze `reset-prod.sh` auf NUC mit Vorsicht)
+2. **Database Migrations with Alembic**: Das Projekt verwendet **Alembic** für Migrationen:
+   - Migrationen werden automatisch beim Deployment ausgeführt
+   - Neue Migration erstellen: `migrate.sh create "Description"`
+   - Siehe Abschnitt "Database Migrations (Alembic)"
 
 3. **Cost Calculation Logic**: Die zentrale Business-Logik ist in `models.py`:
    - `Machine.calculate_cost_per_hour()` - Inkludiert Abschreibung + Strom
@@ -506,12 +539,17 @@ docker-compose up -d    # Erstellt neu
 
 9. **Decimal Parsing**: Die Funktion `parse_decimal()` in `main.py` konvertiert Strings mit Komma oder Punkt als Dezimaltrenner zu float. Wird für alle numerischen Formularfelder verwendet.
 
-10. **Time Conversion**: Die Funktion `minutes_to_hours()` konvertiert Minuten zu Stunden. Formularfelder für Zeit verwenden typischerweise Minuten (User-freundlicher), werden aber als Stunden gespeichert.
+10. **Time Storage**: Arbeitszeit wird als `labor_minutes` (Numeric) in Minuten gespeichert, nicht als Stunden. Berechnung: `labor_hours = labor_minutes / 60`
+
+11. **Multi-Machine Support**: Produkte können mehrere Maschinen haben:
+    - `machine_id` - Primäre Maschine
+    - `additional_machine_ids` - Kommaseparierte IDs (z.B. "2,3") für weitere Maschinen
+    - Wird für Sticker-Sheets und Schreibwaren verwendet (Drucker + Plotter)
 
 11. **Machine Types**: Unterstützte Maschinentypen:
     - `3d_printer` - Zeitbasierte Kostenberechnung (Strom + Abschreibung/Stunde)
-    - `cutter_plotter` - Zeitbasierte Kostenberechnung
-    - `inkjet_printer` - Seitenbasierte Kostenberechnung (Abschreibung/Seite)
+    - `cutter_plotter` - Bogenbasierte Kostenberechnung (`cost_per_sheet`)
+    - `inkjet_printer` - Seitenbasierte Kostenberechnung (`depreciation_per_page`) oder Bogenbasiert (`cost_per_sheet`)
     - `other` - Zeitbasierte Kostenberechnung
 
 12. **Storage Paths**:
@@ -526,3 +564,14 @@ docker-compose up -d    # Erstellt neu
     - Passes (Anzahl Durchläufe)
     - DPI
     - Lines per cm
+
+14. **Sticker/Stationery Workflow**:
+    - `sheet_count` immer = 1 (aus UI entfernt)
+    - `units_per_sheet` = Anzahl Sticker/Produkte pro Bogen
+    - Mehrere Maschinen möglich (Drucker + Plotter via `additional_machine_ids`)
+    - Verpackung/Versand werden im Verkauf erfasst, nicht beim Produkt
+
+15. **Cost Calculation Modes**:
+    - `per_unit` - Kosten werden pro Einheit berechnet
+    - `per_batch` - Kosten pro Batch werden durch `units_per_batch` geteilt
+    - Beispiel: Plotter-Kosten €10 pro Bogen für 20 Sticker = €0.50 pro Sticker

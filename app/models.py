@@ -24,6 +24,9 @@ class Machine(Base):
     lifespan_pages = Column(Numeric(10, 0), nullable=True)  # Lebensdauer in Seiten
     depreciation_per_page = Column(Numeric(10, 4), nullable=True)  # Abschreibung pro Seite (€)
     
+    # Kostenparameter (bogenbasiert - für Plotter/Drucker bei Sticker-Produktion)
+    cost_per_sheet = Column(Numeric(10, 4), nullable=True)  # Kosten pro Bogen (€)
+    
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -45,10 +48,20 @@ class Machine(Base):
             return float(self.depreciation_per_page)
         return 0.0
     
-    def calculate_cost_per_unit(self, production_hours=0, pages=0):
-        """Berechnet Gesamtkosten für Produktion (zeitbasiert oder seitenbasiert)"""
+    def calculate_cost_per_sheet(self):
+        """Berechnet Maschinenkosten pro Bogen (für Plotter/Drucker bei Sticker-Produktion)"""
+        if self.cost_per_sheet:
+            return float(self.cost_per_sheet)
+        return 0.0
+    
+    def calculate_cost_per_unit(self, production_hours=0, pages=0, sheets=0):
+        """Berechnet Gesamtkosten für Produktion (zeitbasiert, seitenbasiert oder bogenbasiert)"""
         if self.machine_type == 'inkjet_printer':
             return pages * self.calculate_cost_per_page()
+        elif sheets > 0 and self.cost_per_sheet:
+            # Bogenbasierte Berechnung (für Plotter/Drucker)
+            return sheets * self.calculate_cost_per_sheet()
+        # Zeitbasierte Berechnung (Standard)
         return production_hours * self.calculate_cost_per_hour()
 
 
@@ -140,6 +153,7 @@ class Product(Base):
     
     # === WICHTIG: Maschinen-Auswahl ===
     machine_id = Column(Integer, ForeignKey("machines.id"), nullable=True)
+    additional_machine_ids = Column(String(255), nullable=True)  # Kommaseparierte IDs für zusätzliche Maschinen (z.B. "2,3")
     
     # === ARBEIT ===
     labor_minutes = Column(Numeric(10, 2), default=0)
@@ -148,6 +162,12 @@ class Product(Base):
     # === KOSTEN ===
     packaging_cost = Column(Numeric(10, 2), default=0)
     shipping_cost = Column(Numeric(10, 2), default=0)
+    
+    # === BERECHNUNGSMODUS ===
+    # "per_unit" = Kosten pro Einheit (altes Verhalten, Standard)
+    # "per_batch" = Kosten gelten für Batch, werden auf Einheit umgerechnet
+    calculation_mode = Column(String(20), default="per_unit")
+    units_per_batch = Column(Integer, default=1)  # Anzahl Einheiten pro Produktionsvorgang
     
     # === NOTIZEN ===
     notes = Column(Text, nullable=True)
@@ -205,21 +225,55 @@ class Product(Base):
             total_material_cost = 0
             costs['sheet_info'] = "Kein Material"
         
-        # Berechnung pro Einheit (Sticker oder Bogen)
-        units_per_sheet = float(self.units_per_sheet or 1)
-        if units_per_sheet > 0:
-            material_cost_per_unit = total_material_cost / units_per_sheet
+        # Maschinenkosten (Plotter/Drucker - pro Bogen)
+        total_machine_cost = 0.0
+        if self.machine_id and self.machine:
+            # Maschine mit cost_per_sheet (Plotter/Drucker)
+            total_machine_cost = self.machine.calculate_cost_per_unit(sheets=float(self.sheet_count or 0))
+            costs['machine_info'] = f"{self.machine.name}"
+            costs['cost_per_sheet'] = self.machine.calculate_cost_per_sheet()
         else:
-            material_cost_per_unit = total_material_cost
+            costs['machine_info'] = "Keine Maschine"
+            costs['cost_per_sheet'] = 0.0
+        
+        costs['total_machine_cost'] = round(total_machine_cost, 2)
+        costs['sheet_count'] = float(self.sheet_count or 0)
+        
+        # Berechnung basierend auf calculation_mode
+        if self.calculation_mode == 'per_batch':
+            # Kosten gelten für den gesamten Batch
+            batch_material_cost = total_material_cost
+            batch_machine_cost = total_machine_cost
+            batch_size = self.units_per_batch if self.units_per_batch > 0 else 1
+            
+            # Kosten pro Einheit = Batch-Kosten / Batch-Größe
+            material_cost_per_unit = batch_material_cost / batch_size
+            machine_cost_per_unit = batch_machine_cost / batch_size
+            
+            costs['calculation_mode'] = 'per_batch'
+            costs['units_per_batch'] = batch_size
+            costs['batch_material_cost'] = round(batch_material_cost, 2)
+            costs['batch_machine_cost'] = round(batch_machine_cost, 2)
+        else:
+            # Standard: pro Einheit (altes Verhalten)
+            units_per_sheet = float(self.units_per_sheet or 1)
+            if units_per_sheet > 0:
+                material_cost_per_unit = total_material_cost / units_per_sheet
+            else:
+                material_cost_per_unit = total_material_cost
+            
+            # Maschinenkosten auch auf Einheit umrechnen
+            if units_per_sheet > 0:
+                machine_cost_per_unit = total_machine_cost / units_per_sheet
+            else:
+                machine_cost_per_unit = total_machine_cost
+            
+            costs['calculation_mode'] = 'per_unit'
+            costs['units_per_sheet'] = units_per_sheet
         
         costs['material_cost'] = round(material_cost_per_unit, 2)
+        costs['machine_cost'] = round(machine_cost_per_unit, 2)
         costs['total_material_cost'] = round(total_material_cost, 2)
-        costs['sheet_count'] = float(self.sheet_count or 0)
-        costs['units_per_sheet'] = units_per_sheet
-        
-        # Keine Maschinenkosten (manuelle Arbeit)
-        costs['machine_cost'] = 0
-        costs['machine_cost_per_hour'] = 0
         costs['cut_time_hours'] = 0
         
         return costs
@@ -308,7 +362,7 @@ class Product(Base):
             type_costs = self.calculate_3d_print_costs()
             material_cost = type_costs['filament_cost']
             machine_cost = type_costs['machine_cost']
-        elif self.product_type in ['sticker_sheet', 'diecut_sticker', 'paper']:
+        elif self.product_type in ['sticker_sheet', 'diecut_sticker', 'stationery', 'paper']:
             type_costs = self.calculate_sticker_costs()
             material_cost = type_costs['material_cost']
             machine_cost = type_costs['machine_cost']
@@ -330,12 +384,23 @@ class Product(Base):
         labor_hours = float(self.labor_minutes) / 60.0
         labor_cost = labor_hours * float(self.labor_rate_per_hour)
         
-        # Gesamtkosten
-        total_cost = (material_cost + 
-                     machine_cost + 
-                     labor_cost + 
-                     float(self.packaging_cost) + 
-                     float(self.shipping_cost))
+        # Bei per_batch: Arbeitskosten auf Einheit umrechnen
+        if self.calculation_mode == 'per_batch' and self.units_per_batch > 0:
+            labor_cost_per_unit = labor_cost / self.units_per_batch
+            # Arbeitskosten pro Batch (für Anzeige)
+            labor_cost_batch = labor_cost
+            labor_cost = labor_cost_per_unit
+        else:
+            labor_cost_batch = labor_cost
+        
+        # Basis-Kosten (Material + Maschine + Arbeit) pro Einheit
+        base_cost_per_unit = material_cost + machine_cost + labor_cost
+        
+        # Verpackung/Versand (werden separat behandelt)
+        packaging_shipping = float(self.packaging_cost) + float(self.shipping_cost)
+        
+        # Gesamtkosten pro Einheit
+        total_cost = base_cost_per_unit
         
         result = {
             'material_cost': round(material_cost, 2),
@@ -344,8 +409,13 @@ class Product(Base):
             'labor_cost': round(labor_cost, 2),
             'labor_hours': labor_hours,
             'labor_minutes': float(self.labor_minutes),
-            'packaging_shipping': round(float(self.packaging_cost) + float(self.shipping_cost), 2),
+            'labor_cost_batch': round(labor_cost_batch, 2) if self.calculation_mode == 'per_batch' else None,
+            'packaging_shipping': round(packaging_shipping, 2),
+            'packaging_cost': float(self.packaging_cost),
+            'shipping_cost': float(self.shipping_cost),
             'total_cost': round(total_cost, 2),
+            'calculation_mode': self.calculation_mode,
+            'units_per_batch': self.units_per_batch if self.calculation_mode == 'per_batch' else None,
             'selling_price_30': round(total_cost * 1.30, 2),
             'selling_price_50': round(total_cost * 1.50, 2),
             'selling_price_100': round(total_cost * 2.00, 2),
@@ -508,3 +578,114 @@ class ProductComponent(Base):
     def calculate_total_cost(self):
         """Berechnet Gesamtkosten für diese Komponente"""
         return float(self.unit_cost) * float(self.quantity)
+        return f"ProductComponent({self.name} x{self.quantity})"
+    
+    def calculate_total_cost(self):
+        """Berechnet Gesamtkosten für diese Komponente"""
+        return float(self.unit_cost) * float(self.quantity)
+
+
+class SalesOrderItem(Base):
+    """Einzelpositionen eines Verkaufsauftrags (Warenkorb-Positionen)"""
+    __tablename__ = "sales_order_items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    sales_order_id = Column(Integer, ForeignKey("sales_orders.id"), nullable=False)
+    
+    # Verknüpfung zum Produkt
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    
+    # Menge und Preise
+    quantity = Column(Integer, default=1)  # Anzahl verkaufter Einheiten
+    unit_price = Column(Numeric(10, 2), nullable=False)  # Verkaufspreis pro Einheit
+    
+    # Produktionskosten (Kopie zum Zeitpunkt des Verkaufs)
+    production_cost_per_unit = Column(Numeric(10, 2), nullable=False)  # Selbstkosten pro Einheit
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Beziehungen
+    sales_order = relationship("SalesOrder", backref="items")
+    product = relationship("Product", backref="sales_order_items")
+    
+    def __repr__(self):
+        return f"SalesOrderItem({self.quantity}x {self.product.name})"
+    
+    def calculate_total(self):
+        """Berechnet Gesamtsumme für diese Position"""
+        return float(self.unit_price) * self.quantity
+    
+    def calculate_profit(self):
+        """Berechnet Gewinn für diese Position"""
+        return (float(self.unit_price) - float(self.production_cost_per_unit)) * self.quantity
+
+
+class SalesOrder(Base):
+    """Verkaufsaufträge - Header mit Kundeninfo und Versandkosten"""
+    __tablename__ = "sales_orders"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Verkaufsinformationen
+    order_number = Column(String(50), nullable=True)  # Optional: Auftragsnummer
+    customer_name = Column(String(255), nullable=True)  # Optional: Kundenname
+    
+    # Verpackung und Versand (werden hier separat erfasst)
+    packaging_cost = Column(Numeric(10, 2), default=0)  # Tatsächliche Verpackungskosten
+    shipping_cost = Column(Numeric(10, 2), default=0)  # Tatsächliche Versandkosten
+    labor_minutes_packaging = Column(Numeric(10, 2), default=0)  # Arbeitszeit Verpackung (Min)
+    labor_rate_packaging = Column(Numeric(10, 2), default=20.00)  # Stundensatz Verpackung (€/h)
+    
+    # Status
+    status = Column(String(20), default="pending")  # 'pending', 'produced', 'shipped', 'cancelled'
+    
+    # Notizen
+    notes = Column(Text, nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    produced_at = Column(DateTime, nullable=True)  # Wann produziert
+    shipped_at = Column(DateTime, nullable=True)  # Wann versendet
+    
+    def __repr__(self):
+        return f"SalesOrder({self.order_number or self.id}: {len(self.items)} Positionen)"
+    
+    def calculate_items_total(self):
+        """Berechnet Summe aller Artikel"""
+        return sum(item.calculate_total() for item in self.items)
+    
+    def calculate_labor_cost(self):
+        """Berechnet Arbeitskosten für Verpackung"""
+        labor_hours = float(self.labor_minutes_packaging) / 60.0
+        return labor_hours * float(self.labor_rate_packaging)
+    
+    def calculate_total(self):
+        """Berechnet Gesamtsumme des Auftrags"""
+        items_total = self.calculate_items_total()
+        packaging_shipping_labor = float(self.packaging_cost) + float(self.shipping_cost) + self.calculate_labor_cost()
+        return items_total + packaging_shipping_labor
+    
+    def calculate_total_production_cost(self):
+        """Berechnet Gesamtkosten aller Artikel inkl. Verpackung/Arbeit"""
+        items_cost = sum(float(item.production_cost_per_unit) * item.quantity for item in self.items)
+        packaging_shipping_labor = float(self.packaging_cost) + float(self.shipping_cost) + self.calculate_labor_cost()
+        return items_cost + packaging_shipping_labor
+    
+    def calculate_profit(self):
+        """Berechnet Gewinn des Auftrags"""
+        items_profit = sum(item.calculate_profit() for item in self.items)
+        packaging_shipping_labor = float(self.packaging_cost) + float(self.shipping_cost) + self.calculate_labor_cost()
+        return items_profit - packaging_shipping_labor
+    
+    def calculate_margin_percent(self):
+        """Berechnet Gewinnmarge in Prozent"""
+        total_revenue = self.calculate_items_total()
+        if total_revenue == 0:
+            return 0.0
+        profit = self.calculate_profit()
+        return (profit / total_revenue) * 100
+    
+    def get_total_quantity(self):
+        """Gesamtanzahl aller Artikel"""
+        return sum(item.quantity for item in self.items)

@@ -6,7 +6,7 @@
 <div class="card">
     <h2>{{ title }}</h2>
     
-    <form method="POST" action="{% if product %}/products/{{ product.id }}/update{% else %}/products/sticker-sheet{% endif %}">
+    <form method="POST" action="{% if product %}/products/{{ product.id }}/update{% else %}/products/stationery{% endif %}">
         <div class="grid">
             <div>
                 <div class="form-group">
@@ -21,7 +21,7 @@
             
             <div>
                 <div class="form-group">
-                    <label for="sheet_material_id">Material (Papier) *</label>
+                    <label for="sheet_material_id">Material (Papier/Karton) *</label>
                     <select id="sheet_material_id" name="sheet_material_id" required>
                         <option value="">-- Bitte wählen --</option>
                         {% for s in sticker_sheets %}
@@ -55,7 +55,7 @@
                         </option>
                     </select>
                     <small style="color: var(--color-text-light);">
-                        <strong>Pro Einheit:</strong> Kosten gelten für 1 Sticker-Sheet<br>
+                        <strong>Pro Einheit:</strong> Kosten gelten für 1 Schreibware<br>
                         <strong>Pro Batch:</strong> Kosten werden auf mehrere Einheiten verteilt
                     </small>
                 </div>
@@ -63,13 +63,13 @@
             
             <div>
                 <div class="form-group" id="units_per_sheet_group">
-                    <label for="units_per_sheet">Bögen pro Materialbogen *</label>
+                    <label for="units_per_sheet">Stück pro Materialbogen *</label>
                     <input type="number" id="units_per_sheet" name="units_per_sheet" 
                            step="1" min="1" required
-                           value="{{ product.units_per_sheet if product else '3' }}"
-                           placeholder="z.B. 3">
+                           value="{{ product.units_per_sheet if product else '1' }}"
+                           placeholder="z.B. 10">
                     <small style="color: var(--color-text-light);">
-                        Wie viele Sticker-Sheets kommen aus einem Materialbogen?
+                        Wie viele Schreibwaren kommen aus einem Materialbogen?
                     </small>
                 </div>
                 
@@ -77,10 +77,10 @@
                     <label for="units_per_batch">Einheiten pro Batch *</label>
                     <input type="number" id="units_per_batch" name="units_per_batch" 
                            step="1" min="1"
-                           value="{{ product.units_per_batch if product else '3' }}"
-                           placeholder="z.B. 3">
+                           value="{{ product.units_per_batch if product else '10' }}"
+                           placeholder="z.B. 10">
                     <small style="color: var(--color-text-light);">
-                        Wie viele Sticker-Sheets werden in einem Durchgang produziert?
+                        Wie viele Schreibwaren werden in einem Durchgang produziert?
                     </small>
                 </div>
             </div>
@@ -96,7 +96,7 @@
                 ➕ Maschine hinzufügen
             </button>
             <small style="color: var(--color-text-light); margin-left: 10px;">
-                z.B. Drucker und Plotter
+                z.B. Drucker, Stanze, Falzmaschine
             </small>
         </div>
         
@@ -162,7 +162,7 @@
                             0.00 €
                         </div>
                         <small style="color: var(--color-text-light); margin-top: 10px; display: block;">
-                            Kosten pro Sticker-Sheet
+                            Kosten pro Schreibware
                         </small>
                     </div>
                 </div>
@@ -171,7 +171,7 @@
         
         <div class="actions">
             <button type="submit" class="btn btn-primary">
-                {% if product %}Aktualisieren{% else %}Sticker-Sheet anlegen{% endif %}
+                {% if product %}Aktualisieren{% else %}Schreibware anlegen{% endif %}
             </button>
             <a href="{% if product %}/products/{{ product.id }}{% else %}/products{% endif %}" 
                class="btn btn-secondary">Abbrechen</a>
@@ -192,7 +192,7 @@
             <div>
                 <div class="form-group">
                     <label>Maschine auswählen</label>
-                    <select name="machine_ids[]" class="machine-select" onchange="updateMachineInfo(this)">
+                    <select name="machine_ids[]" class="machine-select" onchange="updateMachineInfo(this); calculateCosts();">
                         <option value="">-- Bitte wählen --</option>
                         {% for m in machines %}
                         <option value="{{ m.id }}" 
@@ -271,19 +271,6 @@ function updateMachineInfo(select) {
     row.querySelector('.machine-cost-info').textContent = infoText;
 }
 
-// Maschinendaten für JavaScript verfügbar machen
-const machinesData = {
-    {% for m in machines %}
-    {{ m.id }}: {
-        name: "{{ m.name }}",
-        type: "{{ m.machine_type }}",
-        costPerSheet: {{ m.cost_per_sheet or 'null' }},
-        costPerPage: {{ m.depreciation_per_page or 'null' }},
-        costPerHour: {{ m.calculate_cost_per_hour() or 'null' }}
-    }{% if not loop.last %},{% endif %}
-    {% endfor %}
-};
-
 function updateCalculationFields() {
     const mode = document.getElementById('calculation_mode').value;
     const unitsPerSheetGroup = document.getElementById('units_per_sheet_group');
@@ -302,23 +289,9 @@ function updateCalculationFields() {
         unitsPerBatchGroup.style.display = 'none';
         unitsPerBatchInput.required = false;
     }
+    
+    calculateCosts();
 }
-
-// Initialisierung
-updateCalculationFields();
-
-// Erste Maschine automatisch hinzufügen (für neue Produkte)
-{% if not product %}
-addMachineRow();
-{% endif %}
-
-// Event Listener für Kostenberechnung
-document.getElementById('sheet_material_id').addEventListener('change', calculateCosts);
-document.getElementById('units_per_sheet').addEventListener('input', calculateCosts);
-document.getElementById('units_per_batch').addEventListener('input', calculateCosts);
-document.getElementById('calculation_mode').addEventListener('change', calculateCosts);
-document.getElementById('labor_minutes').addEventListener('input', calculateCosts);
-document.getElementById('labor_rate_per_hour').addEventListener('input', calculateCosts);
 
 // Materialpreise für JavaScript verfügbar machen
 const materialPrices = {
@@ -341,7 +314,7 @@ function calculateCosts() {
         unitsPerMaterial = parseInt(document.getElementById('units_per_batch').value) || 1;
     }
     
-    // Materialkosten pro Sticker-Sheet
+    // Materialkosten pro Schreibware
     const materialCostPerUnit = unitsPerMaterial > 0 ? materialPrice / unitsPerMaterial : materialPrice;
     
     // Maschinenkosten berechnen
@@ -354,13 +327,11 @@ function calculateCosts() {
             const costPage = parseFloat(option.getAttribute('data-cost-page')) || 0;
             const costHour = parseFloat(option.getAttribute('data-cost-hour')) || 0;
             
-            // Für Sticker-Sheets nehmen wir an: 1 Bogen pro Sheet
             if (costSheet) {
                 machinesCost += costSheet;
             } else if (costPage) {
-                machinesCost += costPage; // Annahme: 1 Seite pro Sheet
+                machinesCost += costPage;
             } else if (costHour) {
-                // Zeitbasiert - hier vereinfacht angenommen: 1/60 Stunde pro Sheet
                 machinesCost += costHour / 60;
             }
         }
@@ -382,14 +353,21 @@ function calculateCosts() {
     document.getElementById('cost-total').textContent = totalCost.toFixed(2) + ' €';
 }
 
-// Auch bei Maschinenänderungen Kosten neu berechnen
-const originalUpdateMachineInfo = updateMachineInfo;
-updateMachineInfo = function(select) {
-    originalUpdateMachineInfo(select);
-    calculateCosts();
-};
+// Event Listener für Kostenberechnung
+document.getElementById('sheet_material_id').addEventListener('change', calculateCosts);
+document.getElementById('units_per_sheet').addEventListener('input', calculateCosts);
+document.getElementById('units_per_batch').addEventListener('input', calculateCosts);
+document.getElementById('calculation_mode').addEventListener('change', calculateCosts);
+document.getElementById('labor_minutes').addEventListener('input', calculateCosts);
+document.getElementById('labor_rate_per_hour').addEventListener('input', calculateCosts);
+
+// Initialisierung
+updateCalculationFields();
+
+// Erste Maschine automatisch hinzufügen (für neue Produkte)
+{% if not product %}
+addMachineRow();
+{% endif %}
 </script>
 
 {% endblock %}
-
-

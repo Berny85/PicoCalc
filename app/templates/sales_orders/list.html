@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Verkaufsaufträge - Picobellu Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+        <h2>📋 Verkaufsaufträge</h2>
+        <a href="/sales-orders/new" class="btn btn-primary">➕ Neuer Auftrag</a>
+    </div>
+</div>
+
+{% if orders %}
+<div class="card">
+    <div class="table-responsive">
+    <table>
+        <thead>
+            <tr>
+                <th>Auftrag</th>
+                <th>Kunde</th>
+                <th style="text-align: right;">Positionen</th>
+                <th style="text-align: right;">Artikel</th>
+                <th style="text-align: right;">Gesamt</th>
+                <th>Status</th>
+                <th>Aktionen</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for order in orders %}
+            <tr>
+                <td>
+                    <strong>#{{ order.id }}</strong>
+                    {% if order.order_number %}
+                    <br><small>{{ order.order_number }}</small>
+                    {% endif %}
+                </td>
+                <td>{{ order.customer_name or '-' }}</td>
+                <td style="text-align: right;">{{ order.items|length }}</td>
+                <td style="text-align: right;">{{ order.get_total_quantity() }}</td>
+                <td style="text-align: right;">
+                    <strong>{{ "%.2f"|format(order.calculate_total()) }} €</strong>
+                </td>
+                <td>
+                    <span class="category-badge category-{{ order.status }}">
+                        {% if order.status == 'pending' %}⏳ Ausstehend
+                        {% elif order.status == 'produced' %}🏭 Produziert
+                        {% elif order.status == 'shipped' %}📦 Versendet
+                        {% elif order.status == 'cancelled' %}❌ Storniert
+                        {% else %}{{ order.status }}{% endif %}
+                    </span>
+                </td>
+                <td>
+                    <a href="/sales-orders/{{ order.id }}" class="btn btn-primary" style="padding: 4px 8px; font-size: 0.75rem;">👁️</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</div>
+{% else %}
+<div class="card" style="text-align: center; padding: 60px 20px;">
+    <p style="color: var(--color-text-light); font-size: 1.2rem;">
+        📭 Noch keine Verkaufsaufträge vorhanden.
+    </p>
+    <p style="color: var(--color-text-light);">
+        Erstellen Sie einen neuen Auftrag, um den Verkauf zu erfassen.
+    </p>
+    <a href="/sales-orders/new" class="btn btn-primary" style="margin-top: 20px;">
+        ➕ Ersten Auftrag erstellen
+    </a>
+</div>
+{% endif %}
+
+<div class="actions">
+    <a href="/" class="btn btn-secondary">← Zurück zum Dashboard</a>
+</div>
+
+<style>
+.category-pending { background: #fff3cd; color: #856404; }
+.category-produced { background: #d1ecf1; color: #0c5460; }
+.category-shipped { background: #d4edda; color: #155724; }
+.category-cancelled { background: #f8d7da; color: #721c24; }
+</style>
+{% endblock %}

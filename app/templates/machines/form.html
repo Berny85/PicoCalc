@@ -119,6 +119,28 @@
             </div>
         </div>
         
+        <!-- Bogenbasierte Felder (für Plotter/Drucker bei Sticker-Produktion) -->
+        <div id="sheet-based-fields" class="grid" style="margin-top: 20px;">
+            <div>
+                <div class="form-group">
+                    <label for="cost_per_sheet">Kosten pro Bogen (€)</label>
+                    <input type="number" id="cost_per_sheet" name="cost_per_sheet" 
+                           step="0.0001" min="0"
+                           value="{{ machine.cost_per_sheet if machine and machine.cost_per_sheet else '' }}">
+                    <small style="color: var(--color-text-light);">Für Plotter/Drucker: Kosten pro bearbeitetem Bogen</small>
+                </div>
+            </div>
+            
+            <div>
+                <div class="form-group">
+                    <label>Berechnete Kosten pro Bogen</label>
+                    <div id="calculated-cost-sheet" style="padding: 10px; background: var(--color-bg-hover); border-radius: 4px;">
+                        <strong>{% if machine and machine.cost_per_sheet %}{{ "%.4f"|format(machine.calculate_cost_per_sheet()) }} €{% else %}- €{% endif %}</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
         <div class="actions">
             <button type="submit" class="btn btn-primary">
                 {% if machine %}Aktualisieren{% else %}Maschine speichern{% endif %}
@@ -138,6 +160,7 @@ const timeBasedFields = document.getElementById('time-based-fields');
 const pageBasedFields = document.getElementById('page-based-fields');
 const lifespanPagesInput = document.getElementById('lifespan_pages');
 const depreciationPerPageInput = document.getElementById('depreciation_per_page');
+const costPerSheetInput = document.getElementById('cost_per_sheet');
 
 function updateFormFields() {
     const selectedType = machineTypeSelect.value;
@@ -186,13 +209,22 @@ function updateCalculatedCostPerPage() {
     costElement.innerHTML = '<strong>' + costPerPage.toFixed(4) + ' €</strong>';
 }
 
+function updateCalculatedCostPerSheet() {
+    const costPerSheet = parseFloat(costPerSheetInput.value) || 0;
+    
+    const costElement = document.getElementById('calculated-cost-sheet');
+    costElement.innerHTML = '<strong>' + costPerSheet.toFixed(4) + ' €</strong>';
+}
+
 // Event Listener
 depreciationInput.addEventListener('input', updateCalculatedCostHourly);
 lifespanInput.addEventListener('input', updateCalculatedCostHourly);
 powerKwInput.addEventListener('input', updateCalculatedCostHourly);
 depreciationPerPageInput.addEventListener('input', updateCalculatedCostPerPage);
+costPerSheetInput.addEventListener('input', updateCalculatedCostPerSheet);
 
 // Initialisierung
 updateFormFields();
+updateCalculatedCostPerSheet();
 </script>
 {% endblock %}

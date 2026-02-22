@@ -20,10 +20,7 @@
     <div style="display: flex; justify-content: space-between; align-items: start; flex-wrap: wrap; gap: 15px;">
         <div>
             <h2>{{ product.name }}</h2>
-            <span class="category-badge category-{{ product.category|lower }}">
-                {{ product.category }}
-            </span>
-            <span class="category-badge category-{{ product.product_type }}" style="margin-left: 10px;">
+            <span class="category-badge category-{{ product.product_type }}">
                 {{ product.product_type }}
             </span>
         </div>
@@ -210,7 +207,7 @@
             </tr>
         </table>
         </div>
-        {% elif product.product_type == 'sticker_sheet' %}
+        {% elif product.product_type in ['sticker_sheet', 'stationery'] %}
         <div class="table-responsive">
         <table>
             <tr>
@@ -218,15 +215,34 @@
                 <td><strong>{{ product.sheet_material.name if product.sheet_material else '-' }}</strong></td>
             </tr>
             <tr>
-                <td>Anzahl Bögen:</td>
-                <td><strong>{{ product.sheet_count }}</strong></td>
+                <td>Materialbedarf:</td>
+                <td><strong>{{ product.sheet_count }} Bogen</strong></td>
             </tr>
             <tr>
                 <td>Preis/Bogen:</td>
                 <td><strong>{{ product.sheet_material.price_per_unit if product.sheet_material else '0' }} €</strong></td>
             </tr>
+            <tr>
+                <td>Berechnungsmodus:</td>
+                <td><strong>{% if product.calculation_mode == 'per_batch' %}Pro Batch{% else %}Pro Einheit{% endif %}</strong></td>
+            </tr>
+            {% if product.calculation_mode == 'per_batch' %}
+            <tr>
+                <td>Einheiten pro Batch:</td>
+                <td><strong>{{ product.units_per_batch }}</strong></td>
+            </tr>
+            <tr>
+                <td>Batch-Materialkosten:</td>
+                <td><strong>{{ calc.batch_material_cost }} €</strong></td>
+            </tr>
+            {% else %}
+            <tr>
+                <td>Stück pro Materialbogen:</td>
+                <td><strong>{{ product.units_per_sheet }}</strong></td>
+            </tr>
+            {% endif %}
             <tr style="border-top: 2px solid var(--color-primary-dark);">
-                <td>Materialkosten:</td>
+                <td>Materialkosten/Einheit:</td>
                 <td><strong>{{ calc.material_cost }} €</strong></td>
             </tr>
         </table>
@@ -326,11 +342,23 @@
                 <td>Druckzeit:</td>
                 <td><strong>{{ product.print_time_hours }} h</strong></td>
             </tr>
-            {% elif product.product_type == 'sticker_sheet' %}
+            {% elif product.product_type in ['sticker_sheet', 'stationery'] %}
             <tr style="border-bottom: 2px solid var(--color-primary-dark);">
-                <td>Schneidezeit:</td>
-                <td><strong>{{ product.cut_time_hours }} h</strong></td>
+                <td>Genutzte Maschinen:</td>
+                <td><strong>{{ product.machine.name if product.machine else '-' }}</strong></td>
             </tr>
+            {% if product.machine and product.machine.cost_per_sheet %}
+            <tr>
+                <td>Kosten pro Bogen:</td>
+                <td><strong>{{ product.machine.cost_per_sheet }} €</strong></td>
+            </tr>
+            {% if product.calculation_mode == 'per_batch' %}
+            <tr>
+                <td>Batch-Maschinenkosten:</td>
+                <td><strong>{{ calc.batch_machine_cost }} €</strong></td>
+            </tr>
+            {% endif %}
+            {% endif %}
             {% endif %}
             {% if product.product_type != 'assembly' %}
             <tr>

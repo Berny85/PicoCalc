@@ -15,16 +15,8 @@
                            value="{{ product.name if product else '' }}">
                 </div>
                 
-                <div class="form-group">
-                    <label for="category">Kategorie</label>
-                    <select id="category" name="category">
-                        {% for cat in categories %}
-                        <option value="{{ cat }}" {% if product and product.category == cat %}selected{% endif %}>
-                            {{ cat }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
+                <!-- Kategorie ausgeblendet - wird automatisch auf "Sonstiges" gesetzt -->
+                <input type="hidden" name="category" value="Sonstiges">
                 
                 <div class="form-group">
                     <label for="product_type">Produkttyp</label>
@@ -76,7 +68,7 @@
                     <label for="labor_rate_per_hour">Stundensatz (€/h)</label>
                     <input type="number" id="labor_rate_per_hour" name="labor_rate_per_hour" 
                            step="0.01" min="0"
-                           value="{{ product.labor_rate_per_hour if product else '20,00' }}">
+                           value="{{ product.labor_rate_per_hour if product else '20.00' }}">
                 </div>
             </div>
             

@@ -5,7 +5,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError
 from database import engine, get_db, SessionLocal
-from models import Base, Product, Material, MaterialType, Machine, Feedback, Idea, ConvertedFile, ProductImage, ProductComponent, STROM_PREIS_KWH
+from models import Base, Product, Material, MaterialType, Machine, Feedback, Idea, ConvertedFile, ProductImage, ProductComponent, SalesOrder, SalesOrderItem, STROM_PREIS_KWH
 from datetime import datetime
 import time
 import os
@@ -103,6 +103,7 @@ PRODUCT_TYPES = [
     ("sticker_sheet", "Stickerbogen"),
     ("diecut_sticker", "DieCut-Sticker"),
     ("paper", "Papierprodukt"),
+    ("stationery", "Schreibwaren"),
     ("assembly", "Zusammenbau-Produkt"),
 ]
 
@@ -402,6 +403,7 @@ async def create_machine(
     power_kw: str = Form("0"),
     lifespan_pages: str = Form(""),
     depreciation_per_page: str = Form(""),
+    cost_per_sheet: str = Form(""),
     description: str = Form(""),
     db: Session = Depends(get_db)
 ):
@@ -414,6 +416,7 @@ async def create_machine(
         power_kw=parse_decimal(power_kw),
         lifespan_pages=parse_decimal(lifespan_pages) if lifespan_pages else None,
         depreciation_per_page=parse_decimal(depreciation_per_page) if depreciation_per_page else None,
+        cost_per_sheet=parse_decimal(cost_per_sheet) if cost_per_sheet else None,
         description=description
     )
     
@@ -449,6 +452,7 @@ async def update_machine(
     power_kw: str = Form("0"),
     lifespan_pages: str = Form(""),
     depreciation_per_page: str = Form(""),
+    cost_per_sheet: str = Form(""),
     description: str = Form(""),
     db: Session = Depends(get_db)
 ):
@@ -464,6 +468,7 @@ async def update_machine(
     machine.power_kw = parse_decimal(power_kw)
     machine.lifespan_pages = parse_decimal(lifespan_pages) if lifespan_pages else None
     machine.depreciation_per_page = parse_decimal(depreciation_per_page) if depreciation_per_page else None
+    machine.cost_per_sheet = parse_decimal(cost_per_sheet) if cost_per_sheet else None
     machine.description = description
     machine.updated_at = datetime.utcnow()
     
@@ -594,12 +599,15 @@ async def create_3d_print(
 async def new_sticker_sheet_form(request: Request, db: Session = Depends(get_db)):
     """Formular für neues Stickerbogen Produkt"""
     sticker_sheets = db.query(Material).filter(Material.material_type == "sticker_sheet").order_by(Material.name).all()
+    # Lade alle Maschinen
+    machines = db.query(Machine).order_by(Machine.name).all()
     
     return templates.TemplateResponse("products/form_sticker_sheet.html", {
         "request": request,
         "product": None,
         "categories": CATEGORIES,
         "sticker_sheets": sticker_sheets,
+        "machines": machines,
         "title": "Neuer Stickerbogen"
     })
 
@@ -609,29 +617,95 @@ async def create_sticker_sheet(
     name: str = Form(...),
     category: str = Form("Sonstiges"),
     sheet_material_id: int = Form(...),
-    sheet_count: str = Form(...),
-    units_per_sheet: str = Form("3"),  # Standard: 3 Bögen pro Material
-    cut_time_hours: str = Form("0"),
+    units_per_sheet: str = Form("3"),
+    units_per_batch: str = Form("3"),
+    calculation_mode: str = Form("per_unit"),
+    machine_ids: list[int] = Form([]),  # Mehrere Maschinen
     labor_minutes: str = Form("0"),
     labor_rate_per_hour: str = Form("20.00"),
-    packaging_cost: str = Form("0"),
-    shipping_cost: str = Form("0"),
     notes: str = Form(""),
     db: Session = Depends(get_db)
 ):
-    """Neues Stickerbogen Produkt erstellen"""
+    """Neues Sticker-Sheet Produkt erstellen"""
+    # Erste Maschine als Hauptmaschine, restliche als kommaseparierte IDs
+    primary_machine_id = machine_ids[0] if machine_ids else None
+    additional_ids = ",".join(str(mid) for mid in machine_ids[1:]) if len(machine_ids) > 1 else None
+    
     product = Product(
         name=name,
         product_type="sticker_sheet",
         category=category,
         sheet_material_id=sheet_material_id,
-        sheet_count=parse_decimal(sheet_count),
-        units_per_sheet=parse_decimal(units_per_sheet),
-        cut_time_hours=parse_decimal(cut_time_hours),
+        sheet_count=1,  # Immer 1
+        units_per_sheet=parse_decimal(units_per_sheet) if calculation_mode == "per_unit" else 1,
+        units_per_batch=int(units_per_batch) if calculation_mode == "per_batch" else 1,
+        calculation_mode=calculation_mode,
+        machine_id=primary_machine_id,
+        additional_machine_ids=additional_ids,
         labor_minutes=parse_decimal(labor_minutes),
         labor_rate_per_hour=parse_decimal(labor_rate_per_hour),
-        packaging_cost=parse_decimal(packaging_cost),
-        shipping_cost=parse_decimal(shipping_cost),
+        packaging_cost=0,  # Wird beim Verkauf erfasst
+        shipping_cost=0,   # Wird beim Verkauf erfasst
+        notes=notes
+    )
+    
+    db.add(product)
+    db.commit()
+    db.refresh(product)
+    
+    return RedirectResponse(url=f"/products/{product.id}", status_code=303)
+
+# ===== SCHREIBWAREN ROUTES =====
+
+@app.get("/products/stationery/new", response_class=HTMLResponse)
+async def new_stationery_form(request: Request, db: Session = Depends(get_db)):
+    """Formular für neue Schreibwaren"""
+    sticker_sheets = db.query(Material).filter(Material.material_type == "sticker_sheet").order_by(Material.name).all()
+    machines = db.query(Machine).order_by(Machine.name).all()
+    
+    return templates.TemplateResponse("products/form_stationery.html", {
+        "request": request,
+        "product": None,
+        "categories": CATEGORIES,
+        "sticker_sheets": sticker_sheets,
+        "machines": machines,
+        "title": "Neue Schreibware"
+    })
+
+@app.post("/products/stationery")
+async def create_stationery(
+    request: Request,
+    name: str = Form(...),
+    category: str = Form("Sonstiges"),
+    sheet_material_id: int = Form(...),
+    units_per_sheet: str = Form("1"),
+    units_per_batch: str = Form("10"),
+    calculation_mode: str = Form("per_unit"),
+    machine_ids: list[int] = Form([]),
+    labor_minutes: str = Form("0"),
+    labor_rate_per_hour: str = Form("20.00"),
+    notes: str = Form(""),
+    db: Session = Depends(get_db)
+):
+    """Neue Schreibware erstellen"""
+    primary_machine_id = machine_ids[0] if machine_ids else None
+    additional_ids = ",".join(str(mid) for mid in machine_ids[1:]) if len(machine_ids) > 1 else None
+    
+    product = Product(
+        name=name,
+        product_type="stationery",
+        category=category,
+        sheet_material_id=sheet_material_id,
+        sheet_count=1,
+        units_per_sheet=parse_decimal(units_per_sheet) if calculation_mode == "per_unit" else 1,
+        units_per_batch=int(units_per_batch) if calculation_mode == "per_batch" else 1,
+        calculation_mode=calculation_mode,
+        machine_id=primary_machine_id,
+        additional_machine_ids=additional_ids,
+        labor_minutes=parse_decimal(labor_minutes),
+        labor_rate_per_hour=parse_decimal(labor_rate_per_hour),
+        packaging_cost=0,
+        shipping_cost=0,
         notes=notes
     )
     
@@ -895,7 +969,7 @@ async def view_product(
     all_products = []
     if product.product_type == "3d_print":
         filaments = db.query(Material).filter(Material.material_type == "filament").order_by(Material.name).all()
-    elif product.product_type in ["sticker_sheet", "diecut_sticker"]:
+    elif product.product_type in ["sticker_sheet", "diecut_sticker", "stationery"]:
         sticker_sheets = db.query(Material).filter(Material.material_type == "sticker_sheet").order_by(Material.name).all()
     elif product.product_type == "laser_engraving":
         laser_materials = db.query(Material).filter(Material.material_type == "laser_material").order_by(Material.name).all()
@@ -935,10 +1009,13 @@ async def edit_product_form(product_id: int, request: Request, db: Session = Dep
     sticker_sheets = db.query(Material).filter(Material.material_type == "sticker_sheet").order_by(Material.name).all()
     laser_materials = db.query(Material).filter(Material.material_type == "laser_material").order_by(Material.name).all()
     
-    # Lade entsprechende Maschinen (nur für 3D-Druck)
+    # Lade entsprechende Maschinen
     machines = []
     if product.product_type == "3d_print":
         machines = db.query(Machine).filter(Machine.machine_type == "3d_printer").order_by(Machine.name).all()
+    elif product.product_type in ["sticker_sheet", "diecut_sticker", "stationery"]:
+        # Alle Maschinen laden
+        machines = db.query(Machine).order_by(Machine.name).all()
     
     # Wähle das richtige Template je nach Produkttyp
     if product.product_type == "3d_print":
@@ -947,6 +1024,8 @@ async def edit_product_form(product_id: int, request: Request, db: Session = Dep
         template = "products/form_sticker_sheet.html"
     elif product.product_type == "diecut_sticker":
         template = "products/form_diecut_sticker.html"
+    elif product.product_type == "stationery":
+        template = "products/form_stationery.html"
     elif product.product_type == "laser_engraving":
         template = "products/form_laser_engraving.html"
     elif product.product_type == "assembly":
@@ -988,6 +1067,8 @@ async def update_product(
     sheet_material_id: int = Form(None),
     sheet_count: str = Form(None),
     units_per_sheet: str = Form("1"),
+    units_per_batch: str = Form("1"),
+    calculation_mode: str = Form("per_unit"),
     cut_time_hours: str = Form("0"),
     # Laser-Gravur Felder - Layer 1
     laser_material_id: int = Form(None),
@@ -1041,11 +1122,16 @@ async def update_product(
         product.filament_material_id = filament_material_id
         product.filament_weight_g = parse_decimal(filament_weight_g) if filament_weight_g else None
         product.print_time_hours = parse_decimal(print_time_hours)
-    elif product.product_type in ["sticker_sheet", "diecut_sticker"]:
+    elif product.product_type in ["sticker_sheet", "diecut_sticker", "stationery"]:
         product.sheet_material_id = sheet_material_id
-        product.sheet_count = parse_decimal(sheet_count) if sheet_count else None
-        product.units_per_sheet = parse_decimal(units_per_sheet)
-        product.cut_time_hours = parse_decimal(cut_time_hours)
+        product.sheet_count = 1  # Immer 1
+        product.calculation_mode = calculation_mode
+        if calculation_mode == "per_unit":
+            product.units_per_sheet = parse_decimal(units_per_sheet)
+            product.units_per_batch = 1
+        else:
+            product.units_per_batch = int(units_per_batch)
+            product.units_per_sheet = 1
     elif product.product_type == "laser_engraving":
         product.laser_material_id = laser_material_id
         product.laser_design_name = laser_design_name
@@ -1301,6 +1387,116 @@ async def update_idea_status(
     
     return {"success": True, "id": idea_id, "status": status}
 
+
+# ========================================
+# SALES ORDERS - VERKAUFSAUFTRÄGE
+# ========================================
+
+@app.get("/sales-orders", response_class=HTMLResponse)
+async def list_sales_orders(request: Request, db: Session = Depends(get_db)):
+    """Liste aller Verkaufsaufträge"""
+    orders = db.query(SalesOrder).order_by(SalesOrder.created_at.desc()).all()
+    return templates.TemplateResponse("sales_orders/list.html", {
+        "request": request,
+        "orders": orders
+    })
+
+@app.get("/sales-orders/new", response_class=HTMLResponse)
+async def new_sales_order_form(request: Request, product_id: int = None, db: Session = Depends(get_db)):
+    """Formular für neuen Verkaufsauftrag"""
+    products = db.query(Product).order_by(Product.name).all()
+    product = None
+    if product_id:
+        product = db.query(Product).filter(Product.id == product_id).first()
+    return templates.TemplateResponse("sales_orders/form.html", {
+        "request": request,
+        "order": None,
+        "products": products,
+        "product": product,
+        "title": "Neuer Verkaufsauftrag"
+    })
+
+@app.post("/sales-orders")
+async def create_sales_order(
+    request: Request,
+    order_number: str = Form(""),
+    customer_name: str = Form(""),
+    packaging_cost: str = Form("0"),
+    shipping_cost: str = Form("0"),
+    labor_minutes_packaging: str = Form("0"),
+    labor_rate_packaging: str = Form("20.00"),
+    notes: str = Form(""),
+    # Dynamische Felder für Produkte (Arrays)
+    product_id: list[int] = Form([]),
+    quantity: list[str] = Form([]),
+    unit_price: list[str] = Form([]),
+    production_cost_per_unit: list[str] = Form([]),
+    db: Session = Depends(get_db)
+):
+    """Neuen Verkaufsauftrag mit mehreren Produkten erstellen"""
+    
+    # Auftrag (Header) erstellen
+    order = SalesOrder(
+        order_number=order_number if order_number else None,
+        customer_name=customer_name if customer_name else None,
+        packaging_cost=parse_decimal(packaging_cost),
+        shipping_cost=parse_decimal(shipping_cost),
+        labor_minutes_packaging=parse_decimal(labor_minutes_packaging),
+        labor_rate_packaging=parse_decimal(labor_rate_packaging),
+        notes=notes if notes else None,
+        status="pending"
+    )
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+    
+    # Auftragspositionen erstellen
+    for i in range(len(product_id)):
+        if i < len(quantity) and i < len(unit_price):
+            item = SalesOrderItem(
+                sales_order_id=order.id,
+                product_id=product_id[i],
+                quantity=int(quantity[i]),
+                unit_price=parse_decimal(unit_price[i]),
+                production_cost_per_unit=parse_decimal(production_cost_per_unit[i]) if i < len(production_cost_per_unit) else 0
+            )
+            db.add(item)
+    
+    db.commit()
+    return RedirectResponse(url=f"/sales-orders/{order.id}", status_code=303)
+
+@app.get("/sales-orders/{order_id}", response_class=HTMLResponse)
+async def view_sales_order(order_id: int, request: Request, db: Session = Depends(get_db)):
+    """Verkaufsauftrag anzeigen"""
+    order = db.query(SalesOrder).filter(SalesOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
+    
+    return templates.TemplateResponse("sales_orders/detail.html", {
+        "request": request,
+        "order": order
+    })
+
+@app.post("/sales-orders/{order_id}/status")
+async def update_sales_order_status(
+    order_id: int,
+    request: Request,
+    status: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    """Status des Verkaufsauftrags aktualisieren"""
+    order = db.query(SalesOrder).filter(SalesOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
+    
+    order.status = status
+    if status == "produced":
+        order.produced_at = datetime.utcnow()
+    elif status == "shipped":
+        order.shipped_at = datetime.utcnow()
+    
+    db.commit()
+    return RedirectResponse(url=f"/sales-orders/{order.id}", status_code=303)
 
 # ========================================
 # TOOLS - PNG TO SVG CONVERTER

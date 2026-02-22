@@ -1,0 +1,370 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Picobellu Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>{{ title }}</h2>
+    
+    <form method="POST" action="/sales-orders" id="sales-order-form">
+        <div class="grid">
+            <div>
+                <div class="form-group">
+                    <label for="order_number">Auftragsnummer</label>
+                    <input type="text" id="order_number" name="order_number" 
+                           value="{{ order.order_number if order else '' }}"
+                           placeholder="z.B. 2024-001">
+                </div>
+                
+                <div class="form-group">
+                    <label for="customer_name">Kundenname</label>
+                    <input type="text" id="customer_name" name="customer_name" 
+                           value="{{ order.customer_name if order else '' }}">
+                </div>
+            </div>
+            
+            <div>
+                <div class="form-group">
+                    <label for="packaging_cost">Verpackungskosten (€)</label>
+                    <input type="number" id="packaging_cost" name="packaging_cost" 
+                           step="0.01" min="0"
+                           value="{{ order.packaging_cost if order else '0' }}"
+                           onchange="updateTotals()">
+                </div>
+                
+                <div class="form-group">
+                    <label for="shipping_cost">Versandkosten (€)</label>
+                    <input type="number" id="shipping_cost" name="shipping_cost" 
+                           step="0.01" min="0"
+                           value="{{ order.shipping_cost if order else '0' }}"
+                           onchange="updateTotals()">
+                </div>
+                
+                <div class="form-group">
+                    <label for="labor_minutes_packaging">Arbeitszeit Verpackung (Min)</label>
+                    <input type="number" id="labor_minutes_packaging" name="labor_minutes_packaging" 
+                           step="1" min="0"
+                           value="{{ order.labor_minutes_packaging if order else '0' }}"
+                           onchange="updateTotals()">
+                </div>
+                
+                <div class="form-group">
+                    <label for="labor_rate_packaging">Stundensatz Verpackung (€/h)</label>
+                    <input type="number" id="labor_rate_packaging" name="labor_rate_packaging" 
+                           step="0.01" min="0"
+                           value="{{ order.labor_rate_packaging if order else '20.00' }}"
+                           onchange="updateTotals()">
+                </div>
+            </div>
+        </div>
+        
+        <h3 style="margin-top: 30px; color: var(--color-primary-dark);">Produkte</h3>
+        <div id="products-container">
+            <!-- Produkte werden hier dynamisch hinzugefügt -->
+        </div>
+        
+        <div style="margin-top: 15px;">
+            <button type="button" class="btn btn-secondary" onclick="addProductRow()">
+                ➕ Produkt hinzufügen
+            </button>
+        </div>
+        
+        <div class="form-group" style="margin-top: 20px;">
+            <label for="notes">Notizen</label>
+            <textarea id="notes" name="notes">{{ order.notes if order else '' }}</textarea>
+        </div>
+        
+        <!-- GESAMTÜBERSICHT -->
+        <div class="card" style="margin-top: 30px; background: var(--color-bg-hover); border: 2px solid var(--color-primary);">
+            <h3 style="color: var(--color-primary-dark);">📊 Gesamtübersicht</h3>
+            
+            <div class="grid">
+                <div>
+                    <div class="form-group">
+                        <label>Selbstkosten (Produkte)</label>
+                        <div id="total-production-cost" style="padding: 10px; background: white; border-radius: 4px; font-size: 1.1rem;">
+                            0.00 €
+                        </div>
+                        <small style="color: var(--color-text-light);">Summe aller Produkt-Selbstkosten</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Selbstkosten (Verpackung/Versand)</label>
+                        <div id="total-packaging-cost" style="padding: 10px; background: white; border-radius: 4px; font-size: 1.1rem;">
+                            0.00 €
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label style="color: var(--color-primary-dark); font-size: 1.1rem;">GESAMT Selbstkosten</label>
+                        <div id="grand-total-cost" style="padding: 12px; background: white; border-radius: 4px; font-size: 1.3rem; font-weight: bold; border: 2px solid var(--color-primary);">
+                            0.00 €
+                        </div>
+                    </div>
+                </div>
+                
+                <div>
+                    <div class="form-group">
+                        <label>Aktueller Verkaufspreis (Summe)</label>
+                        <div id="current-selling-price" style="padding: 10px; background: white; border-radius: 4px; font-size: 1.1rem;">
+                            0.00 €
+                        </div>
+                        <small style="color: var(--color-text-light);">Produkte + Verpackung + Versand + Arbeit</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="final-selling-price" style="color: var(--color-primary-dark);">Verkaufspreis (GESAMT) *</label>
+                        <input type="number" id="final-selling-price" name="final_selling_price" 
+                               step="0.01" min="0" required
+                               style="font-size: 1.2rem; padding: 12px;"
+                               onchange="updateMarginDisplay()">
+                        <small style="color: var(--color-text-light);">Produkte + Verpackung + Versand + Arbeit (automatisch)</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label style="color: var(--color-primary-dark);">Marge</label>
+                        <div id="margin-display" style="padding: 12px; background: white; border-radius: 4px; font-size: 1.3rem; font-weight: bold;">
+                            -
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="margin-top: 15px; padding: 15px; background: rgba(102, 126, 234, 0.1); border-radius: 8px;">
+                <strong style="color: var(--color-primary-dark);">💡 Margen-Vorschläge basierend auf Gesamtkosten:</strong>
+                <div style="display: flex; gap: 30px; margin-top: 10px; flex-wrap: wrap;">
+                    <div>30% Marge: <strong id="suggestion-30" style="font-size: 1.2rem;">-</strong></div>
+                    <div>50% Marge: <strong id="suggestion-50" style="font-size: 1.2rem;">-</strong></div>
+                    <div>100% Marge: <strong id="suggestion-100" style="font-size: 1.2rem;">-</strong></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="actions" style="margin-top: 30px;">
+            <button type="submit" class="btn btn-primary btn-lg">
+                Auftrag anlegen
+            </button>
+            <a href="/sales-orders" class="btn btn-secondary">Abbrechen</a>
+        </div>
+    </form>
+</div>
+
+<!-- Template für neue Produktzeile -->
+<template id="product-row-template">
+    <div class="product-row" style="border: 1px solid var(--color-border); border-radius: 8px; padding: 15px; margin-bottom: 15px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <strong>Produkt <span class="product-number">1</span></strong>
+            <button type="button" class="btn btn-danger" style="padding: 4px 8px; font-size: 0.75rem;" onclick="removeProductRow(this)">
+                🗑️ Entfernen
+            </button>
+        </div>
+        <div class="grid">
+            <div>
+                <div class="form-group">
+                    <label>Produkt *</label>
+                    <select name="product_id[]" class="product-select" required onchange="updateProductInfo(this)">
+                        <option value="">-- Bitte wählen --</option>
+                        {% for p in products %}
+                        {% set calc = p.calculate_costs() %}
+                        <option value="{{ p.id }}" 
+                                data-cost="{{ calc.total_cost }}"
+                                data-margin-30="{{ calc.selling_price_30 }}"
+                                data-margin-50="{{ calc.selling_price_50 }}"
+                                data-margin-100="{{ calc.selling_price_100 }}">
+                            {{ p.name }} (Selbstkosten: {{ calc.total_cost }} €)
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div>
+                <div class="form-group">
+                    <label>Menge *</label>
+                    <input type="number" name="quantity[]" class="quantity-input" 
+                           step="1" min="1" value="1" required onchange="updateProductInfo(this.closest('.product-row').querySelector('.product-select'))">
+                </div>
+            </div>
+            <div>
+                <div class="form-group">
+                    <label>VK-Preis/Einheit (€)</label>
+                    <input type="number" name="unit_price[]" class="unit-price-input" 
+                           step="0.01" min="0" onchange="updateTotals()">
+                    <small class="price-suggestion" style="color: var(--color-text-light); display: block; margin-top: 3px;"></small>
+                </div>
+            </div>
+            <div>
+                <div class="form-group">
+                    <label>Selbstkosten/Einheit (€)</label>
+                    <input type="number" name="production_cost_per_unit[]" class="cost-input" 
+                           step="0.01" min="0" readonly style="background: #f5f5f5;">
+                </div>
+            </div>
+        </div>
+        <div style="text-align: right; margin-top: 10px; font-weight: bold; color: var(--color-text-light);">
+            Position: <span class="row-total-cost">0.00 €</span> Selbstkosten | 
+            <span class="row-total-price">0.00 €</span> Verkaufspreis
+        </div>
+    </div>
+</template>
+
+<script>
+let productCounter = 0;
+
+function addProductRow() {
+    const template = document.getElementById('product-row-template');
+    const container = document.getElementById('products-container');
+    const clone = template.content.cloneNode(true);
+    
+    productCounter++;
+    clone.querySelector('.product-number').textContent = productCounter;
+    
+    container.appendChild(clone);
+    updateTotals();
+}
+
+function removeProductRow(button) {
+    const row = button.closest('.product-row');
+    row.remove();
+    
+    // Nummern neu zuweisen
+    const rows = document.querySelectorAll('.product-row');
+    rows.forEach((row, index) => {
+        row.querySelector('.product-number').textContent = index + 1;
+    });
+    productCounter = rows.length;
+    
+    updateTotals();
+}
+
+function updateProductInfo(select) {
+    const row = select.closest('.product-row');
+    const option = select.options[select.selectedIndex];
+    const cost = parseFloat(option.getAttribute('data-cost')) || 0;
+    const margin30 = parseFloat(option.getAttribute('data-margin-30')) || 0;
+    const margin50 = parseFloat(option.getAttribute('data-margin-50')) || 0;
+    const margin100 = parseFloat(option.getAttribute('data-margin-100')) || 0;
+    const quantity = parseInt(row.querySelector('.quantity-input').value) || 1;
+    
+    // Kosten speichern
+    row.querySelector('.cost-input').value = cost.toFixed(2);
+    
+    // Verkaufspreis default = Selbstkosten
+    row.querySelector('.unit-price-input').value = cost.toFixed(2);
+    
+    // Margen-Tipps für diese Position anzeigen
+    row.querySelector('.price-suggestion').innerHTML = 
+        '30%: ' + margin30.toFixed(2) + '€ | ' +
+        '50%: ' + margin50.toFixed(2) + '€ | ' +
+        '100%: ' + margin100.toFixed(2) + '€';
+    
+    updateTotals();
+}
+
+function updateTotals() {
+    let totalProductionCost = 0;
+    let currentSellingPrice = 0;
+    
+    document.querySelectorAll('.product-row').forEach(row => {
+        const quantity = parseInt(row.querySelector('.quantity-input').value) || 0;
+        const unitCost = parseFloat(row.querySelector('.cost-input').value) || 0;
+        const unitPrice = parseFloat(row.querySelector('.unit-price-input').value) || 0;
+        
+        const rowCost = quantity * unitCost;
+        const rowPrice = quantity * unitPrice;
+        
+        totalProductionCost += rowCost;
+        currentSellingPrice += rowPrice;
+        
+        // Zeilensummen aktualisieren
+        row.querySelector('.row-total-cost').textContent = rowCost.toFixed(2) + ' €';
+        row.querySelector('.row-total-price').textContent = rowPrice.toFixed(2) + ' €';
+    });
+    
+    const packaging = parseFloat(document.getElementById('packaging_cost').value) || 0;
+    const shipping = parseFloat(document.getElementById('shipping_cost').value) || 0;
+    const laborMinutes = parseFloat(document.getElementById('labor_minutes_packaging').value) || 0;
+    const laborRate = parseFloat(document.getElementById('labor_rate_packaging').value) || 20;
+    
+    // Arbeitszeitkosten berechnen (Minuten -> Stunden)
+    const laborHours = laborMinutes / 60;
+    const laborCost = laborHours * laborRate;
+    
+    const totalPackaging = packaging + shipping + laborCost;
+    const grandTotalCost = totalProductionCost + totalPackaging;
+    
+    // Anzeigen aktualisieren
+    document.getElementById('total-production-cost').textContent = totalProductionCost.toFixed(2) + ' €';
+    document.getElementById('total-packaging-cost').textContent = totalPackaging.toFixed(2) + ' €';
+    document.getElementById('grand-total-cost').textContent = grandTotalCost.toFixed(2) + ' €';
+    document.getElementById('current-selling-price').textContent = (currentSellingPrice + totalPackaging).toFixed(2) + ' €';
+    
+    // Verkaufspreis (GESAMT) = Summe der Produkt-Verkaufspreise + Verpackung + Versand + Arbeit
+    const finalPriceInput = document.getElementById('final-selling-price');
+    const grandTotalSellingPrice = currentSellingPrice + totalPackaging;
+    finalPriceInput.value = grandTotalSellingPrice.toFixed(2);
+    
+    // Margen-Vorschläge aktualisieren
+    updateMarginSuggestions(grandTotalCost);
+    updateMarginDisplay();
+}
+
+function updateMarginSuggestions(totalCost) {
+    if (totalCost <= 0) {
+        document.getElementById('suggestion-30').textContent = '-';
+        document.getElementById('suggestion-50').textContent = '-';
+        document.getElementById('suggestion-100').textContent = '-';
+        return;
+    }
+    
+    const price30 = totalCost * 1.30;
+    const price50 = totalCost * 1.50;
+    const price100 = totalCost * 2.00;
+    
+    document.getElementById('suggestion-30').textContent = price30.toFixed(2) + ' €';
+    document.getElementById('suggestion-50').textContent = price50.toFixed(2) + ' €';
+    document.getElementById('suggestion-100').textContent = price100.toFixed(2) + ' €';
+}
+
+function updateMarginDisplay() {
+    const totalCost = parseFloat(document.getElementById('grand-total-cost').textContent) || 0;
+    const sellingPrice = parseFloat(document.getElementById('final-selling-price').value) || 0;
+    
+    if (totalCost <= 0 || sellingPrice <= 0) {
+        document.getElementById('margin-display').textContent = '-';
+        document.getElementById('margin-display').style.color = 'inherit';
+        return;
+    }
+    
+    const profit = sellingPrice - totalCost;
+    const marginPercent = ((profit / sellingPrice) * 100).toFixed(1);
+    
+    const display = document.getElementById('margin-display');
+    display.textContent = profit.toFixed(2) + ' € (' + marginPercent + '%)';
+    
+    if (profit > 0) {
+        display.style.color = 'green';
+    } else if (profit < 0) {
+        display.style.color = 'red';
+    } else {
+        display.style.color = 'inherit';
+    }
+}
+
+// Event Listener
+document.getElementById('packaging_cost').addEventListener('input', updateTotals);
+document.getElementById('shipping_cost').addEventListener('input', updateTotals);
+document.getElementById('labor_minutes_packaging').addEventListener('input', updateTotals);
+document.getElementById('labor_rate_packaging').addEventListener('input', updateTotals);
+
+// Erstes Produkt automatisch hinzufügen
+addProductRow();
+</script>
+
+<style>
+.btn-lg {
+    padding: 12px 24px;
+    font-size: 1.1rem;
+}
+</style>
+
+{% endblock %}

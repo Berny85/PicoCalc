@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block title %}Auftrag #{{ order.id }} - Picobellu Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: start; flex-wrap: wrap; gap: 15px;">
+        <div>
+            <h2>📋 Verkaufsauftrag #{{ order.id }}</h2>
+            {% if order.order_number %}
+            <p style="color: var(--color-text-light); margin-top: 5px;">Auftragsnummer: {{ order.order_number }}</p>
+            {% endif %}
+        </div>
+        <div>
+            <span class="category-badge category-{{ order.status }}">
+                {% if order.status == 'pending' %}⏳ Ausstehend
+                {% elif order.status == 'produced' %}🏭 Produziert
+                {% elif order.status == 'shipped' %}📦 Versendet
+                {% elif order.status == 'cancelled' %}❌ Storniert
+                {% else %}{{ order.status }}{% endif %}
+            </span>
+        </div>
+    </div>
+</div>
+
+<div class="grid">
+    <div class="card">
+        <h3>Kunde</h3>
+        <p><strong>{{ order.customer_name or 'Kein Name angegeben' }}</strong></p>
+    </div>
+    
+    <div class="card">
+        <h3>Zusammenfassung</h3>
+        <table>
+            <tr>
+                <td>Anzahl Positionen:</td>
+                <td><strong>{{ order.items|length }}</strong></td>
+            </tr>
+            <tr>
+                <td>Gesamtstückzahl:</td>
+                <td><strong>{{ order.get_total_quantity() }}</strong></td>
+            </tr>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Produkte</h3>
+    <div class="table-responsive">
+    <table>
+        <thead>
+            <tr>
+                <th>Produkt</th>
+                <th style="text-align: right;">Menge</th>
+                <th style="text-align: right;">VK-Preis</th>
+                <th style="text-align: right;">Selbstkosten</th>
+                <th style="text-align: right;">Gewinn</th>
+                <th style="text-align: right;">Summe</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in order.items %}
+            <tr>
+                <td>
+                    <a href="/products/{{ item.product.id }}">{{ item.product.name }}</a>
+                </td>
+                <td style="text-align: right;">{{ item.quantity }}</td>
+                <td style="text-align: right;">{{ "%.2f"|format(item.unit_price) }} €</td>
+                <td style="text-align: right;">{{ "%.2f"|format(item.production_cost_per_unit) }} €</td>
+                <td style="text-align: right; {% if item.calculate_profit() > 0 %}color: green{% else %}color: red{% endif %}">
+                    {{ "%.2f"|format(item.calculate_profit()) }} €
+                </td>
+                <td style="text-align: right;"><strong>{{ "%.2f"|format(item.calculate_total()) }} €</strong></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr style="border-top: 2px solid var(--color-primary-dark);">
+                <td colspan="5"><strong>Artikel gesamt:</strong></td>
+                <td style="text-align: right;"><strong>{{ "%.2f"|format(order.calculate_items_total()) }} €</strong></td>
+            </tr>
+        </tfoot>
+    </table>
+    </div>
+</div>
+
+<div class="grid">
+    <div class="card">
+        <h3>Verpackung & Versand</h3>
+        <table>
+            <tr>
+                <td>Verpackungskosten:</td>
+                <td style="text-align: right;"><strong>{{ "%.2f"|format(order.packaging_cost) }} €</strong></td>
+            </tr>
+            <tr>
+                <td>Versandkosten:</td>
+                <td style="text-align: right;"><strong>{{ "%.2f"|format(order.shipping_cost) }} €</strong></td>
+            </tr>
+            <tr>
+                <td>Arbeitszeit Verpackung:</td>
+                <td style="text-align: right;"><strong>{{ order.labor_minutes_packaging }} min</strong></td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="card" style="background: var(--gradient-primary); color: white;">
+        <h3 style="color: white; border-bottom-color: rgba(255,255,255,0.3);">Kosten & Gewinn</h3>
+        <table style="color: white;">
+            <tr>
+                <td>Artikelumsatz:</td>
+                <td style="text-align: right;"><strong>{{ "%.2f"|format(order.calculate_items_total()) }} €</strong></td>
+            </tr>
+            <tr>
+                <td>Selbstkosten:</td>
+                <td style="text-align: right;"><strong>{{ "%.2f"|format(order.calculate_total_production_cost()) }} €</strong></td>
+            </tr>
+            <tr style="border-top: 2px solid rgba(255,255,255,0.3);">
+                <td><strong>GEWINN:</strong></td>
+                <td style="text-align: right;">
+                    <strong style="font-size: 1.3rem;">
+                        {{ "%.2f"|format(order.calculate_profit()) }} € ({{ "%.1f"|format(order.calculate_margin_percent()) }}%)
+                    </strong>
+                </td>
+            </tr>
+            <tr style="border-top: 2px solid rgba(255,255,255,0.3);">
+                <td><strong>GESAMT:</strong></td>
+                <td style="text-align: right;">
+                    <strong style="font-size: 1.5rem;">{{ "%.2f"|format(order.calculate_total()) }} €</strong>
+                </td>
+            </tr>
+        </table>
+    </div>
+</div>
+
+{% if order.notes %}
+<div class="card">
+    <h3>Notizen</h3>
+    <p>{{ order.notes }}</p>
+</div>
+{% endif %}
+
+<div class="card">
+    <h3>Status ändern</h3>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <form method="POST" action="/sales-orders/{{ order.id }}/status" style="display: inline;">
+            <input type="hidden" name="status" value="pending">
+            <button type="submit" class="btn btn-secondary" {% if order.status == 'pending' %}disabled{% endif %}>
+                ⏳ Ausstehend
+            </button>
+        </form>
+        <form method="POST" action="/sales-orders/{{ order.id }}/status" style="display: inline;">
+            <input type="hidden" name="status" value="produced">
+            <button type="submit" class="btn btn-primary" {% if order.status == 'produced' %}disabled{% endif %}>
+                🏭 Produziert
+            </button>
+        </form>
+        <form method="POST" action="/sales-orders/{{ order.id }}/status" style="display: inline;">
+            <input type="hidden" name="status" value="shipped">
+            <button type="submit" class="btn btn-success" {% if order.status == 'shipped' %}disabled{% endif %}>
+                📦 Versendet
+            </button>
+        </form>
+        <form method="POST" action="/sales-orders/{{ order.id }}/status" style="display: inline;">
+            <input type="hidden" name="status" value="cancelled">
+            <button type="submit" class="btn btn-danger" {% if order.status == 'cancelled' %}disabled{% endif %}>
+                ❌ Storniert
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="actions">
+    <a href="/sales-orders" class="btn btn-secondary">← Zurück zur Liste</a>
+</div>
+
+<style>
+.category-pending { background: #fff3cd; color: #856404; }
+.category-produced { background: #d1ecf1; color: #0c5460; }
+.category-shipped { background: #d4edda; color: #155724; }
+.category-cancelled { background: #f8d7da; color: #721c24; }
+</style>
+{% endblock %}
