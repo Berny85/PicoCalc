@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Picobellu Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>{{ title }}</h2>
+    
+    <form method="POST" action="{% if product %}/products/{{ product.id }}/update{% else %}/products/sticker{% endif %}">
+        <div class="grid">
+            <div>
+                <div class="form-group">
+                    <label for="name">Produktname *</label>
+                    <input type="text" id="name" name="name" required 
+                           value="{{ product.name if product else '' }}">
+                </div>
+            </div>
+            
+            <div>
+                <div class="form-group">
+                    <label for="category">Sticker-Kategorie *</label>
+                    <select id="category" name="category" required>
+                        {% for key, label in sticker_categories %}
+                        <option value="{{ key }}" {% if product and product.category == key %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <small style="color: var(--color-text-light);">
+                        Sticker-Sheet = Ganzer Bogen mit mehreren Stickern<br>
+                        DieCut-Sticker = Einzeln geschnittene Sticker
+                    </small>
+                </div>
+            </div>
+        </div>
+        
+        <div class="grid">
+            <div>
+                <div class="form-group">
+                    <label for="sheet_material_id">Material *</label>
+                    <select id="sheet_material_id" name="sheet_material_id" required onchange="calculateTotalCost()">
+                        <option value="">-- Bitte wählen --</option>
+                        {% for m in materials %}
+                        <option value="{{ m.id }}" data-price="{{ m.price_per_unit }}"
+                                {% if product and product.sheet_material_id == m.id %}selected{% endif %}>
+                            {{ m.name }} {% if m.brand %}({{ m.brand }}){% endif %} - {{ m.price_per_unit }}€/{{ m.unit }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <small style="color: var(--color-text-light);">
+                        <a href="/materials/new" target="_blank">Neues Material anlegen →</a>
+                    </small>
+                </div>
+            </div>
+            
+            <div>
+                <!-- sheet_count immer 1 -->
+                <input type="hidden" name="sheet_count" value="1">
+            </div>
+        </div>
+        
+        <h3 style="margin-top: 30px; color: var(--color-primary-dark);">Berechnung</h3>
+        <div class="grid">
+            <div>
+                <div class="form-group">
+                    <label for="units_per_sheet">Produkteinheiten *</label>
+                    <input type="number" id="units_per_sheet" name="units_per_sheet" 
+                           step="1" min="1" required
+                           value="{{ product.units_per_sheet if product else '6' }}"
+                           placeholder="z.B. 6" onchange="calculateTotalCost()">
+                    <small style="color: var(--color-text-light);">
+                        Wie viele Einheiten (Sticker/Bögen) pro Materialbogen?
+                    </small>
+                </div>
+            </div>
+            
+            <div>
+                <div class="form-group">
+                    <label for="calculation_mode">Berechnungsmodus *</label>
+                    <select id="calculation_mode" name="calculation_mode" required onchange="toggleBatchFields()">
+                        <option value="per_unit" {% if product and product.calculation_mode == 'per_unit' %}selected{% endif %}>Kosten pro Einheit</option>
+                        <option value="per_batch" {% if product and product.calculation_mode == 'per_batch' %}selected{% endif %}>Kosten pro Batch</option>
+                    </select>
+                    <small style="color: var(--color-text-light);">
+                        Pro Einheit = Materialkosten ÷ Anzahl<br>
+                        Pro Batch = Materialkosten werden auf Batch-Größe verteilt
+                    </small>
+                </div>
+                
+                <div class="form-group" id="batch-size-group" style="display: none;">
+                    <label for="units_per_batch">Batch-Größe (Einheiten pro Batch) *</label>
+                    <input type="number" id="units_per_batch" name="units_per_batch" 
+                           step="1" min="1"
+                           value="{{ product.units_per_batch if product else '6' }}"
+                           placeholder="z.B. 6" onchange="calculateTotalCost()">
+                </div>
+            </div>
+        </div>
+        
+        <h3 style="margin-top: 30px; color: var(--color-primary-dark);">Maschinen</h3>
+        <div id="machines-container">
+            {% if product and product.machine_id %}
+                <!-- Bestehende Maschinen laden -->
+                {% set all_machine_ids = [product.machine_id] %}
+                {% if product.additional_machine_ids %}
+                    {% set additional = product.additional_machine_ids.split(',') | map('int') | list %}
+                    {% set all_machine_ids = all_machine_ids + additional %}
+                {% endif %}
+                {% for mid in all_machine_ids %}
+                <div class="machine-row" style="display: flex; gap: 10px; margin-bottom: 10px; align-items: flex-end;">
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label>Maschine {{ loop.index }}</label>
+                        <select name="machine_ids" class="machine-select" onchange="calculateTotalCost()">
+                            <option value="">-- Bitte wählen --</option>
+                            {% for m in machines %}
+                            <option value="{{ m.id }}" data-cost="{{ m.cost_per_sheet or 0 }}"
+                                    {% if m.id == mid %}selected{% endif %}>
+                                {{ m.name }} ({{ m.machine_type }}) - {{ m.cost_per_sheet or 0 }}€/Bogen
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% if loop.index > 1 %}
+                    <button type="button" class="btn btn-danger" onclick="removeMachineRow(this)" style="margin-bottom: 0;">×</button>
+                    {% else %}
+                    <button type="button" class="btn btn-secondary" onclick="removeMachineRow(this)" style="margin-bottom: 0; visibility: hidden;">×</button>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            {% else %}
+                <!-- Standard: Eine leere Maschinen-Zeile -->
+                <div class="machine-row" style="display: flex; gap: 10px; margin-bottom: 10px; align-items: flex-end;">
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label>Maschine 1</label>
+                        <select name="machine_ids" class="machine-select" onchange="calculateTotalCost()">
+                            <option value="">-- Bitte wählen --</option>
+                            {% for m in machines %}
+                            <option value="{{ m.id }}" data-cost="{{ m.cost_per_sheet or 0 }}">
+                                {{ m.name }} ({{ m.machine_type }}) - {{ m.cost_per_sheet or 0 }}€/Bogen
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="button" class="btn btn-secondary" onclick="removeMachineRow(this)" style="margin-bottom: 0; visibility: hidden;">×</button>
+                </div>
+            {% endif %}
+        </div>
+        
+        <button type="button" class="btn btn-secondary" onclick="addMachineRow()" style="margin-top: 10px;">
+            + Weitere Maschine
+        </button>
+        
+        <h3 style="margin-top: 30px; color: var(--color-primary-dark);">Produktion</h3>
+        <div class="grid">
+            <div>
+                <div class="form-group">
+                    <label for="labor_minutes">Arbeitszeit (Minuten) *</label>
+                    <input type="text" id="labor_minutes" name="labor_minutes" 
+                           pattern="[0-9]*[.,]?[0-9]*" inputmode="decimal" required
+                           value="{% if product %}{{ product.labor_minutes }}{% else %}0{% endif %}"
+                           onchange="calculateTotalCost()">
+                    <small style="color: var(--color-text-light);">Produktionszeit in Minuten pro Batch</small>
+                </div>
+            </div>
+            
+            <div>
+                <div class="form-group">
+                    <label for="labor_rate_per_hour">Stundensatz (€/h) *</label>
+                    <input type="number" id="labor_rate_per_hour" name="labor_rate_per_hour" 
+                           step="0.01" min="0" required
+                           value="{{ product.labor_rate_per_hour if product else '20.00' }}"
+                           onchange="calculateTotalCost()">
+                </div>
+            </div>
+        </div>
+        
+        <div class="form-group" style="margin-top: 20px;">
+            <label for="notes">Notizen</label>
+            <textarea id="notes" name="notes">{{ product.notes if product else '' }}</textarea>
+        </div>
+        
+        <!-- Live-Kostenberechnung -->
+        <div style="margin-top: 30px; padding: 20px; background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-secondary-light) 100%); border-radius: 8px;">
+            <h3 style="margin: 0 0 15px 0; color: var(--color-primary-dark);">Kostenberechnung (Live)</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                <div>
+                    <strong>Materialkosten:</strong>
+                    <div id="material-cost-display" style="font-size: 1.2em; color: var(--color-primary);">0.00 €</div>
+                </div>
+                <div>
+                    <strong>Maschinenkosten:</strong>
+                    <div id="machine-cost-display" style="font-size: 1.2em; color: var(--color-primary);">0.00 €</div>
+                </div>
+                <div>
+                    <strong>Arbeitskosten:</strong>
+                    <div id="labor-cost-display" style="font-size: 1.2em; color: var(--color-primary);">0.00 €</div>
+                </div>
+                <div style="background: rgba(255,255,255,0.5); padding: 10px; border-radius: 4px;">
+                    <strong>Gesamtkosten pro Einheit:</strong>
+                    <div id="total-cost-display" style="font-size: 1.5em; color: var(--color-success); font-weight: bold;">0.00 €</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="actions">
+            <button type="submit" class="btn btn-primary">
+                {% if product %}Aktualisieren{% else %}Sticker-Produkt anlegen{% endif %}
+            </button>
+            <a href="{% if product %}/products/{{ product.id }}{% else %}/products{% endif %}" 
+               class="btn btn-secondary">Abbrechen</a>
+        </div>
+    </form>
+</div>
+
+<script>
+// Maschinen-Daten für JavaScript verfügbar machen
+const machinesData = {
+    {% for m in machines %}
+    "{{ m.id }}": {
+        name: "{{ m.name }}",
+        costPerSheet: {{ m.cost_per_sheet or 0 }}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+};
+
+function toggleBatchFields() {
+    const mode = document.getElementById('calculation_mode').value;
+    const batchGroup = document.getElementById('batch-size-group');
+    
+    if (mode === 'per_batch') {
+        batchGroup.style.display = 'block';
+        document.getElementById('units_per_batch').required = true;
+    } else {
+        batchGroup.style.display = 'none';
+        document.getElementById('units_per_batch').required = false;
+    }
+    calculateTotalCost();
+}
+
+function calculateTotalCost() {
+    // Materialkosten
+    const materialSelect = document.getElementById('sheet_material_id');
+    const materialCost = parseFloat(materialSelect.selectedOptions[0]?.dataset.price || 0);
+    
+    // Einheiten pro Bogen
+    const unitsPerSheet = parseFloat(document.getElementById('units_per_sheet').value) || 1;
+    
+    // Berechnungsmodus
+    const calculationMode = document.getElementById('calculation_mode').value;
+    const unitsPerBatch = calculationMode === 'per_batch' 
+        ? (parseFloat(document.getElementById('units_per_batch').value) || unitsPerSheet)
+        : unitsPerSheet;
+    
+    // Materialkosten pro Einheit
+    const materialPerUnit = materialCost / unitsPerBatch;
+    
+    // Maschinenkosten (Summe aller ausgewählten Maschinen)
+    let machineCostPerSheet = 0;
+    document.querySelectorAll('.machine-select').forEach(select => {
+        if (select.value && machinesData[select.value]) {
+            machineCostPerSheet += machinesData[select.value].costPerSheet || 0;
+        }
+    });
+    const machinePerUnit = machineCostPerSheet / unitsPerBatch;
+    
+    // Arbeitskosten
+    const laborMinutes = parseFloat(document.getElementById('labor_minutes').value.replace(',', '.')) || 0;
+    const laborRate = parseFloat(document.getElementById('labor_rate_per_hour').value) || 20;
+    const laborPerBatch = (laborMinutes / 60) * laborRate;
+    const laborPerUnit = laborPerBatch / unitsPerBatch;
+    
+    // Gesamtkosten pro Einheit
+    const totalPerUnit = materialPerUnit + machinePerUnit + laborPerUnit;
+    
+    // Anzeige aktualisieren
+    document.getElementById('material-cost-display').textContent = materialPerUnit.toFixed(3) + ' €';
+    document.getElementById('machine-cost-display').textContent = machinePerUnit.toFixed(3) + ' €';
+    document.getElementById('labor-cost-display').textContent = laborPerUnit.toFixed(3) + ' €';
+    document.getElementById('total-cost-display').textContent = totalPerUnit.toFixed(3) + ' €';
+}
+
+function addMachineRow() {
+    const container = document.getElementById('machines-container');
+    const rowCount = container.children.length + 1;
+    
+    const newRow = document.createElement('div');
+    newRow.className = 'machine-row';
+    newRow.style.cssText = 'display: flex; gap: 10px; margin-bottom: 10px; align-items: flex-end;';
+    
+    let machineOptions = '<option value="">-- Bitte wählen --</option>';
+    {% for m in machines %}
+    machineOptions += '<option value="{{ m.id }}" data-cost="{{ m.cost_per_sheet or 0 }}">{{ m.name }} ({{ m.machine_type }}) - {{ m.cost_per_sheet or 0 }}€/Bogen</option>';
+    {% endfor %}
+    
+    newRow.innerHTML = `
+        <div class="form-group" style="flex: 1; margin-bottom: 0;">
+            <label>Maschine ${rowCount}</label>
+            <select name="machine_ids" class="machine-select" onchange="calculateTotalCost()">
+                ${machineOptions}
+            </select>
+        </div>
+        <button type="button" class="btn btn-danger" onclick="removeMachineRow(this)" style="margin-bottom: 0;">×</button>
+    `;
+    
+    container.appendChild(newRow);
+}
+
+function removeMachineRow(button) {
+    const row = button.closest('.machine-row');
+    row.remove();
+    
+    // Labels neu nummerieren
+    document.querySelectorAll('.machine-row').forEach((row, index) => {
+        row.querySelector('label').textContent = `Maschine ${index + 1}`;
+    });
+    
+    calculateTotalCost();
+}
+
+// Initialisierung
+document.addEventListener('DOMContentLoaded', function() {
+    toggleBatchFields();
+    calculateTotalCost();
+});
+</script>
+{% endblock %}

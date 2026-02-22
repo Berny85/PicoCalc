@@ -100,11 +100,15 @@ def get_material_types(db: Session, only_active: bool = True):
 # Produkttypen
 PRODUCT_TYPES = [
     ("3d_print", "3D-Druck"),
-    ("sticker_sheet", "Sticker-Sheet"),
-    ("diecut_sticker", "DieCut-Sticker"),
-    ("paper", "Papierprodukt"),
+    ("sticker", "Sticker"),  # Sticker-Sheet und DieCut zusammengefasst
     ("stationery", "Schreibwaren"),
     ("assembly", "Zusammenbau-Produkt"),
+]
+
+# Sticker-Kategorien (für Sticker-Produkttyp)
+STICKER_CATEGORIES = [
+    ("StickerSheet", "Sticker-Sheet (ganzer Bogen)"),
+    ("DieCut", "DieCut-Sticker (einzeln geschnitten)"),
 ]
 
 @app.get("/", response_class=HTMLResponse)
@@ -593,30 +597,31 @@ async def create_3d_print(
     
     return RedirectResponse(url=f"/products/{product.id}", status_code=303)
 
-# ===== STICKER-BOGEN PRODUKTE =====
+# ===== STICKER PRODUKTE (Sticker-Sheet + DieCut zusammengefasst) =====
 
-@app.get("/products/sticker-sheet/new", response_class=HTMLResponse)
-async def new_sticker_sheet_form(request: Request, db: Session = Depends(get_db)):
-    """Formular für neues Sticker-Sheet Produkt"""
+@app.get("/products/sticker/new", response_class=HTMLResponse)
+async def new_sticker_form(request: Request, db: Session = Depends(get_db)):
+    """Formular für neues Sticker Produkt"""
     # Alle Materialien verfügbar (Filter kann später hinzugefügt werden)
-    sticker_sheets = db.query(Material).order_by(Material.name).all()
+    materials = db.query(Material).order_by(Material.name).all()
     # Lade alle Maschinen
     machines = db.query(Machine).order_by(Machine.name).all()
     
-    return templates.TemplateResponse("products/form_sticker_sheet.html", {
+    return templates.TemplateResponse("products/form_sticker.html", {
         "request": request,
         "product": None,
         "categories": CATEGORIES,
-        "sticker_sheets": sticker_sheets,
+        "sticker_categories": STICKER_CATEGORIES,
+        "materials": materials,
         "machines": machines,
-        "title": "Neues Sticker-Sheet"
+        "title": "Neues Sticker-Produkt"
     })
 
-@app.post("/products/sticker-sheet")
-async def create_sticker_sheet(
+@app.post("/products/sticker")
+async def create_sticker(
     request: Request,
     name: str = Form(...),
-    category: str = Form("Sonstiges"),
+    category: str = Form("StickerSheet"),  # StickerSheet oder DieCut
     sheet_material_id: int = Form(...),
     units_per_sheet: str = Form("3"),
     units_per_batch: str = Form("3"),
@@ -627,15 +632,15 @@ async def create_sticker_sheet(
     notes: str = Form(""),
     db: Session = Depends(get_db)
 ):
-    """Neues Sticker-Sheet Produkt erstellen"""
+    """Neues Sticker Produkt erstellen"""
     # Erste Maschine als Hauptmaschine, restliche als kommaseparierte IDs
     primary_machine_id = machine_ids[0] if machine_ids else None
     additional_ids = ",".join(str(mid) for mid in machine_ids[1:]) if len(machine_ids) > 1 else None
     
     product = Product(
         name=name,
-        product_type="sticker_sheet",
-        category=category,
+        product_type="sticker",
+        category=category,  # StickerSheet oder DieCut
         sheet_material_id=sheet_material_id,
         sheet_count=1,  # Immer 1
         units_per_sheet=parse_decimal(units_per_sheet) if calculation_mode == "per_unit" else 1,
@@ -662,14 +667,14 @@ async def create_sticker_sheet(
 async def new_stationery_form(request: Request, db: Session = Depends(get_db)):
     """Formular für neue Schreibwaren"""
     # Alle Materialien verfügbar (Filter kann später hinzugefügt werden)
-    sticker_sheets = db.query(Material).order_by(Material.name).all()
+    materials = db.query(Material).order_by(Material.name).all()
     machines = db.query(Machine).order_by(Machine.name).all()
     
     return templates.TemplateResponse("products/form_stationery.html", {
         "request": request,
         "product": None,
         "categories": CATEGORIES,
-        "sticker_sheets": sticker_sheets,
+        "materials": materials,
         "machines": machines,
         "title": "Neue Schreibware"
     })
@@ -717,67 +722,21 @@ async def create_stationery(
     
     return RedirectResponse(url=f"/products/{product.id}", status_code=303)
 
-# ===== DIECUT STICKER ROUTES =====
+# Legacy: Alte URLs auf neue weiterleiten
+@app.get("/products/sticker-sheet/new")
+async def redirect_sticker_sheet_new():
+    """Redirect alte Sticker-Sheet URL auf neue Sticker URL"""
+    return RedirectResponse(url="/products/sticker/new", status_code=307)
 
-@app.get("/products/diecut-sticker/new", response_class=HTMLResponse)
-async def new_diecut_sticker_form(request: Request, db: Session = Depends(get_db)):
-    """Formular für neue DieCut Sticker"""
-    # Alle Materialien verfügbar (Filter kann später hinzugefügt werden)
-    sticker_sheets = db.query(Material).order_by(Material.name).all()
-    machines = db.query(Machine).order_by(Machine.name).all()
-    
-    return templates.TemplateResponse("products/form_diecut_sticker.html", {
-        "request": request,
-        "product": None,
+@app.get("/products/diecut-sticker/new")
+async def redirect_diecut_sticker_new():
+    """Redirect alte DieCut-Sticker URL auf neue Sticker URL"""
+    return RedirectResponse(url="/products/sticker/new", status_code=307)
         "categories": CATEGORIES,
         "sticker_sheets": sticker_sheets,
         "machines": machines,
         "title": "Neue DieCut Sticker"
     })
-
-@app.post("/products/diecut-sticker")
-async def create_diecut_sticker(
-    request: Request,
-    name: str = Form(...),
-    category: str = Form("Sonstiges"),
-    sheet_material_id: int = Form(...),
-    units_per_sheet: str = Form("6"),  # Standard: 6 Sticker pro Bogen
-    calculation_mode: str = Form("per_unit"),
-    units_per_batch: str = Form("6"),
-    machine_ids: list[int] = Form([]),  # Mehrere Maschinen
-    labor_minutes: str = Form("0"),
-    labor_rate_per_hour: str = Form("20.00"),
-    notes: str = Form(""),
-    db: Session = Depends(get_db)
-):
-    """Neue DieCut Sticker erstellen"""
-    # Erste Maschine als Hauptmaschine, restliche als kommaseparierte IDs
-    primary_machine_id = machine_ids[0] if machine_ids else None
-    additional_ids = ",".join(str(mid) for mid in machine_ids[1:]) if len(machine_ids) > 1 else None
-    
-    product = Product(
-        name=name,
-        product_type="diecut_sticker",
-        category=category,
-        sheet_material_id=sheet_material_id,
-        sheet_count=1,  # Immer 1 Bogen
-        units_per_sheet=parse_decimal(units_per_sheet) if calculation_mode == "per_unit" else 1,
-        units_per_batch=int(units_per_batch) if calculation_mode == "per_batch" else 1,
-        calculation_mode=calculation_mode,
-        machine_id=primary_machine_id,
-        additional_machine_ids=additional_ids,
-        labor_minutes=parse_decimal(labor_minutes),
-        labor_rate_per_hour=parse_decimal(labor_rate_per_hour),
-        packaging_cost=0,  # Wird beim Verkauf erfasst
-        shipping_cost=0,   # Wird beim Verkauf erfasst
-        notes=notes
-    )
-    
-    db.add(product)
-    db.commit()
-    db.refresh(product)
-    
-    return RedirectResponse(url=f"/products/{product.id}", status_code=303)
 
 # ===== LASER-GRAVUR ROUTES =====
 
@@ -1034,14 +993,45 @@ async def edit_product_form(product_id: int, request: Request, db: Session = Dep
     # Wähle das richtige Template je nach Produkttyp
     if product.product_type == "3d_print":
         template = "products/form_3d_print.html"
-    elif product.product_type == "sticker_sheet":
-        template = "products/form_sticker_sheet.html"
-    elif product.product_type == "diecut_sticker":
-        template = "products/form_diecut_sticker.html"
+        return templates.TemplateResponse(template, {
+            "request": request,
+            "product": product,
+            "categories": CATEGORIES,
+            "filaments": filaments,
+            "machines": machines,
+            "title": f"Produkt bearbeiten"
+        })
+    elif product.product_type == "sticker":
+        template = "products/form_sticker.html"
+        return templates.TemplateResponse(template, {
+            "request": request,
+            "product": product,
+            "categories": CATEGORIES,
+            "sticker_categories": STICKER_CATEGORIES,
+            "materials": sticker_sheets,
+            "machines": machines,
+            "title": f"Sticker-Produkt bearbeiten"
+        })
     elif product.product_type == "stationery":
         template = "products/form_stationery.html"
+        return templates.TemplateResponse(template, {
+            "request": request,
+            "product": product,
+            "categories": CATEGORIES,
+            "materials": sticker_sheets,
+            "machines": machines,
+            "title": f"Schreibware bearbeiten"
+        })
     elif product.product_type == "laser_engraving":
         template = "products/form_laser_engraving.html"
+        return templates.TemplateResponse(template, {
+            "request": request,
+            "product": product,
+            "categories": CATEGORIES,
+            "laser_materials": laser_materials,
+            "machines": machines,
+            "title": f"Laser-Gravur bearbeiten"
+        })
     elif product.product_type == "assembly":
         template = "products/form_assembly.html"
         # Lade alle Produkte für Verknüpfung
@@ -1051,21 +1041,18 @@ async def edit_product_form(product_id: int, request: Request, db: Session = Dep
             "product": product,
             "categories": CATEGORIES,
             "all_products": all_products,
-            "title": f"Produkt bearbeiten"
+            "machines": machines,
+            "title": f"Zusammenbau-Produkt bearbeiten"
         })
     else:
         template = "products/form_generic.html"
-    
-    return templates.TemplateResponse(template, {
-        "request": request,
-        "product": product,
-        "categories": CATEGORIES,
-        "filaments": filaments,
-        "sticker_sheets": sticker_sheets,
-        "laser_materials": laser_materials,
-        "machines": machines,
-        "title": f"Produkt bearbeiten"
-    })
+        return templates.TemplateResponse(template, {
+            "request": request,
+            "product": product,
+            "categories": CATEGORIES,
+            "machines": machines,
+            "title": f"Produkt bearbeiten"
+        })
 
 @app.post("/products/{product_id}/update")
 async def update_product(
@@ -1138,7 +1125,7 @@ async def update_product(
         product.filament_material_id = filament_material_id
         product.filament_weight_g = parse_decimal(filament_weight_g) if filament_weight_g else None
         product.print_time_hours = parse_decimal(print_time_hours)
-    elif product.product_type in ["sticker_sheet", "diecut_sticker", "stationery"]:
+    elif product.product_type in ["sticker", "stationery"]:
         product.sheet_material_id = sheet_material_id
         product.sheet_count = 1  # Immer 1
         product.calculation_mode = calculation_mode
