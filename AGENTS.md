@@ -47,6 +47,12 @@ PicoCalc/
 ├── backup/                       # Backup-Skripte
 │   ├── backup-script.sh          # Automatisiertes PostgreSQL Backup
 │   └── restore-script.sh         # Datenbank-Wiederherstellung
+├── alembic/                      # Datenbank-Migrationen (Alembic)
+│   ├── versions/                 # Migrations-Skripte
+│   └── env.py                    # Alembic Umgebungs-Konfiguration
+├── alembic.ini                   # Alembic Hauptkonfiguration
+├── migrate.ps1                   # Windows Migrationsskript
+├── migrate.sh                    # Linux/Mac Migrationsskript
 ├── .github/workflows/            # CI/CD Konfiguration
 │   └── deploy.yml                # GitHub Actions Workflow
 ├── docker-compose.yaml           # Entwicklungs-Konfiguration
@@ -114,7 +120,7 @@ Repräsentiert Rohmaterialien (Filamente, Stickerbögen, Papier):
 
 ### Product (`models.py`)
 Zentrale Entity mit typ-spezifischen Feldern:
-- **Gemeinsam**: `name`, `product_type`, `category`, `labor_hours`, `labor_rate_per_hour`, `packaging_cost`, `shipping_cost`, `notes`
+- **Gemeinsam**: `name`, `product_type`, `category`, `labor_minutes`, `labor_rate_per_hour`, `packaging_cost`, `shipping_cost`, `notes`
 - **3D-Druck**: `filament_material_id`, `filament_weight_g`, `print_time_hours`, `machine_id`
 - **Sticker/Papier**: `sheet_material_id`, `sheet_count`, `units_per_sheet`, `cut_time_hours`
 - **Laser**: `laser_material_id`, `laser_design_name`, `laser1_*`, `laser2_*`, `laser3_*` (Layer-Konfiguration)
@@ -342,6 +348,57 @@ Aktuell hat das Projekt keine automatisierten Tests. Testing erfolgt manuell:
 - Drag & Drop Funktionalität (AJAX Status-Update)
 - Schnelles Notieren von Verbesserungsideen
 
+## Database Migrations (Alembic)
+
+PicoCalc verwendet **Alembic** für Datenbank-Migrationen.
+
+### Migrationsskripte
+
+| Plattform | Befehl | Beschreibung |
+|-----------|--------|--------------|
+| Windows | `.\migrate.ps1` | Führt ausstehende Migrationen aus |
+| Windows | `.\migrate.ps1 -Command create -Message "..."` | Erstellt neue Migration |
+| Linux/NUC | `./migrate.sh` | Führt ausstehende Migrationen aus |
+| Linux/NUC | `./migrate.sh create "..."` | Erstellt neue Migration |
+
+### Verfügbare Befehle
+
+```bash
+# Migrationen ausführen (Standard)
+./migrate.sh migrate
+
+# Neue Migration erstellen (--autogenerate)
+./migrate.sh create "Added labor_minutes column"
+
+# Letzte Migration zurücksetzen
+./migrate.sh downgrade
+
+# Migrationshistorie anzeigen
+./migrate.sh history
+
+# Aktuelle Migration anzeigen
+./migrate.sh current
+
+# Datenbank als aktuell markieren (ohne Migration)
+./migrate.sh stamp
+```
+
+### Manuelle Alembic-Befehle
+
+```bash
+# Innerhalb des Containers
+docker-compose exec web alembic revision --autogenerate -m "Description"
+docker-compose exec web alembic upgrade head
+docker-compose exec web alembic downgrade -1
+```
+
+### Wichtige Hinweise
+
+- Migrationen werden automatisch beim Deployment ausgeführt (siehe `deploy.sh`)
+- Neue Migrationen müssen ins Git committet werden (`alembic/versions/`)
+- Die `env.py` liest `DATABASE_URL` aus den Umgebungsvariablen
+- Autogenerate erkennt Schema-Änderungen automatisch
+
 ## Common Tasks
 
 ### Adding a New Product Type
@@ -351,11 +408,20 @@ Aktuell hat das Projekt keine automatisierten Tests. Testing erfolgt manuell:
 4. Routes für Create/Edit in `main.py` hinzufügen
 5. Berechnungslogik zu `calculate_costs()` in models erweitern
 
-### Adding Database Fields
+### Adding Database Fields (Mit Alembic Migrationen)
 1. Spalte zu Modell in `models.py` hinzufügen
 2. Formular-Templates aktualisieren
 3. Route Handler in `main.py` aktualisieren
-4. Da kein Migrationssystem existiert, manuelles DB-Update oder Neuerstellung erforderlich
+4. Migration erstellen und ausführen:
+   ```powershell
+   # Windows
+   .\migrate.ps1 -Command create -Message "Added new column"
+   .\migrate.ps1
+
+   # Linux/Mac/NUC
+   ./migrate.sh create "Added new column"
+   ./migrate.sh
+   ```
 
 ### Updating Dependencies
 1. `app/requirements.txt` bearbeiten

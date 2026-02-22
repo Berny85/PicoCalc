@@ -575,7 +575,7 @@ async def create_3d_print(
         filament_weight_g=parse_decimal(filament_weight_g),
         print_time_hours=parse_decimal(print_time_hours),
         machine_id=machine_id,
-        labor_hours=minutes_to_hours(parse_decimal(labor_minutes)),
+        labor_minutes=parse_decimal(labor_minutes),
         labor_rate_per_hour=parse_decimal(labor_rate_per_hour),
         packaging_cost=parse_decimal(packaging_cost),
         shipping_cost=parse_decimal(shipping_cost),
@@ -628,7 +628,7 @@ async def create_sticker_sheet(
         sheet_count=parse_decimal(sheet_count),
         units_per_sheet=parse_decimal(units_per_sheet),
         cut_time_hours=parse_decimal(cut_time_hours),
-        labor_hours=minutes_to_hours(parse_decimal(labor_minutes)),
+        labor_minutes=parse_decimal(labor_minutes),
         labor_rate_per_hour=parse_decimal(labor_rate_per_hour),
         packaging_cost=parse_decimal(packaging_cost),
         shipping_cost=parse_decimal(shipping_cost),
@@ -679,7 +679,7 @@ async def create_diecut_sticker(
         sheet_material_id=sheet_material_id,
         sheet_count=parse_decimal(sheet_count),
         units_per_sheet=parse_decimal(units_per_sheet),
-        labor_hours=minutes_to_hours(parse_decimal(labor_minutes)),
+        labor_minutes=parse_decimal(labor_minutes),
         labor_rate_per_hour=parse_decimal(labor_rate_per_hour),
         packaging_cost=parse_decimal(packaging_cost),
         shipping_cost=parse_decimal(shipping_cost),
@@ -770,7 +770,7 @@ async def create_laser_engraving(
         laser3_passes=int(parse_decimal(laser3_passes)),
         laser3_dpi=int(parse_decimal(laser3_dpi)),
         laser3_lines_per_cm=int(parse_decimal(laser3_lines_per_cm)),
-        labor_hours=minutes_to_hours(parse_decimal(labor_minutes)),
+        labor_minutes=parse_decimal(labor_minutes),
         labor_rate_per_hour=parse_decimal(labor_rate_per_hour),
         packaging_cost=parse_decimal(packaging_cost),
         shipping_cost=parse_decimal(shipping_cost),
@@ -822,7 +822,7 @@ async def create_assembly(
         name=name,
         product_type="assembly",
         category=category,
-        labor_hours=minutes_to_hours(parse_decimal(labor_minutes)),
+        labor_minutes=parse_decimal(labor_minutes),
         labor_rate_per_hour=parse_decimal(labor_rate_per_hour),
         packaging_cost=parse_decimal(packaging_cost),
         shipping_cost=parse_decimal(shipping_cost),
@@ -1106,7 +1106,7 @@ async def update_product(
     # Gemeinsame Felder
     if product.product_type == "3d_print":
         product.machine_id = machine_id
-    product.labor_hours = minutes_to_hours(parse_decimal(labor_minutes))
+    product.labor_minutes = parse_decimal(labor_minutes)
     product.labor_rate_per_hour = parse_decimal(labor_rate_per_hour)
     product.packaging_cost = parse_decimal(packaging_cost)
     product.shipping_cost = parse_decimal(shipping_cost)

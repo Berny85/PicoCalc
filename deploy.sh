@@ -20,6 +20,10 @@ docker compose -f docker-compose.prod.yml down
 echo "[3/4] Baue und starte neue Container..."
 docker compose -f docker-compose.prod.yml up --build -d
 
+echo "[3.5/4] Führe Datenbank-Migrationen aus..."
+sleep 5  # Warte bis Container bereit sind
+docker compose -f docker-compose.prod.yml exec -T web alembic upgrade head
+
 echo "[4/4] Prüfe Status..."
 docker compose -f docker-compose.prod.yml ps
 

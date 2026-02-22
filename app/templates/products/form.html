@@ -66,10 +66,10 @@
         <div class="grid">
             <div>
                 <div class="form-group">
-                    <label for="labor_hours">Arbeitsstunden</label>
-                    <input type="number" id="labor_hours" name="labor_hours" 
-                           step="0.1" min="0"
-                           value="{{ product.labor_hours if product else '0' }}">
+                    <label for="labor_minutes">Arbeitszeit (Minuten)</label>
+                    <input type="number" id="labor_minutes" name="labor_minutes" 
+                           step="1" min="0"
+                           value="{{ product.labor_minutes if product else '0' }}">
                 </div>
                 
                 <div class="form-group">

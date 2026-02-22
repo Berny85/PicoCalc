@@ -142,7 +142,7 @@ class Product(Base):
     machine_id = Column(Integer, ForeignKey("machines.id"), nullable=True)
     
     # === ARBEIT ===
-    labor_hours = Column(Numeric(5, 2), default=0)
+    labor_minutes = Column(Numeric(10, 2), default=0)
     labor_rate_per_hour = Column(Numeric(10, 2), default=20.00)
     
     # === KOSTEN ===
@@ -326,8 +326,9 @@ class Product(Base):
             material_cost = 0
             machine_cost = float(self.print_time_hours or 0) * self.get_machine_cost_per_hour()
         
-        # Arbeitskosten
-        labor_cost = float(self.labor_hours) * float(self.labor_rate_per_hour)
+        # Arbeitskosten (labor_minutes ist in Minuten, daher / 60 für Stunden)
+        labor_hours = float(self.labor_minutes) / 60.0
+        labor_cost = labor_hours * float(self.labor_rate_per_hour)
         
         # Gesamtkosten
         total_cost = (material_cost + 
@@ -341,7 +342,8 @@ class Product(Base):
             'machine_cost': round(machine_cost, 2),
             'machine_cost_per_hour': round(self.get_machine_cost_per_hour(), 3),
             'labor_cost': round(labor_cost, 2),
-            'labor_hours': float(self.labor_hours),
+            'labor_hours': labor_hours,
+            'labor_minutes': float(self.labor_minutes),
             'packaging_shipping': round(float(self.packaging_cost) + float(self.shipping_cost), 2),
             'total_cost': round(total_cost, 2),
             'selling_price_30': round(total_cost * 1.30, 2),

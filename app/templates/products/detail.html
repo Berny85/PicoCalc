@@ -149,6 +149,42 @@
     }
 </script>
 
+<!-- Kalkulation -->
+<div class="card">
+    <h2>📊 Kalkulation</h2>
+    <div class="calculation-box">
+        <h3>Einkaufspreis (Selbstkosten)</h3>
+        <div class="price-item" style="margin-bottom: 20px;">
+            <div class="label">Gesamtkosten</div>
+            <div class="value" style="font-size: 2rem;">{{ calc.total_cost }} €</div>
+        </div>
+        
+        <div style="margin: 20px 0; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 4px;">
+            <strong>Kostenaufschlüsselung:</strong><br>
+            Material: {{ calc.material_cost }} € | 
+            Maschine: {{ calc.machine_cost }} € | 
+            Arbeit: {{ calc.labor_cost }} € | 
+            Verpackung/Versand: {{ calc.packaging_shipping }} €
+        </div>
+        
+        <h3 style="margin-top: 30px;">Verkaufspreise</h3>
+        <div class="price-grid">
+            <div class="price-item">
+                <div class="label">Mit 30% Marge</div>
+                <div class="value">{{ calc.selling_price_30 }} €</div>
+            </div>
+            <div class="price-item">
+                <div class="label">Mit 50% Marge</div>
+                <div class="value">{{ calc.selling_price_50 }} €</div>
+            </div>
+            <div class="price-item">
+                <div class="label">Mit 100% Marge</div>
+                <div class="value">{{ calc.selling_price_100 }} €</div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="grid">
     <div class="card">
         <h2>Material</h2>
@@ -312,7 +348,7 @@
             {% endif %}
             <tr style="border-top: 2px solid var(--color-primary-dark);">
                 <td>Arbeitszeit:</td>
-                <td><strong>{{ (product.labor_hours * 60) }} min</strong> ({{ "%.2f"|format(product.labor_hours) }} h)</td>
+                <td><strong>{{ product.labor_minutes }} min</strong> ({{ "%.2f"|format(calc.labor_hours) }} h)</td>
             </tr>
             <tr>
                 <td>Stundensatz:</td>
@@ -328,42 +364,7 @@
 </div>
 
 <div class="card">
-    <h2>Kalkulation</h2>
-    <div class="calculation-box">
-        <h3>Einkaufspreis (Selbstkosten)</h3>
-        <div class="price-item" style="margin-bottom: 20px;">
-            <div class="label">Gesamtkosten</div>
-            <div class="value" style="font-size: 2rem;">{{ calc.total_cost }} €</div>
-        </div>
-        
-        <div style="margin: 20px 0; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 4px;">
-            <strong>Kostenaufschlüsselung:</strong><br>
-            Material: {{ calc.material_cost }} € | 
-            Maschine: {{ calc.machine_cost }} € | 
-            Arbeit: {{ calc.labor_cost }} € | 
-            Verpackung/Versand: {{ calc.packaging_shipping }} €
-        </div>
-        
-        <h3 style="margin-top: 30px;">Verkaufspreise</h3>
-        <div class="price-grid">
-            <div class="price-item">
-                <div class="label">Mit 30% Marge</div>
-                <div class="value">{{ calc.selling_price_30 }} €</div>
-            </div>
-            <div class="price-item">
-                <div class="label">Mit 50% Marge</div>
-                <div class="value">{{ calc.selling_price_50 }} €</div>
-            </div>
-            <div class="price-item">
-                <div class="label">Mit 100% Marge</div>
-                <div class="value">{{ calc.selling_price_100 }} €</div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="card">
-    <h2>Metadaten</h2>
+    <h2>📋 Metadaten</h2>
     <div class="table-responsive">
     <table>
         <tr>
