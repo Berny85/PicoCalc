@@ -184,11 +184,14 @@ Einzelpositionen eines Verkaufsauftrags:
 
 ### Product Types (intern)
 - `3d_print` - 3D-gedruckte Objekte
-- `sticker_sheet` - Sticker-Sheets
-- `diecut_sticker` - Die-Cut Sticker
+- `sticker` - Sticker-Produkte (Sheet & DieCut)
 - `stationery` - Schreibwaren (Notizblöcke, Karten, Papierwaren)
-- `paper` - Papierprodukte
-- `laser_engraving` - Laser-gravierte Artikel
+- `assembly` - Zusammenbau-Produkte
+
+### Sticker Categories
+Für Produkttyp `sticker` gibt es zwei Unterkategorien:
+- `StickerSheet` - Ganze Bögen mit mehreren Stickern
+- `DieCut` - Einzeln geschnittene Sticker
 
 ### Categories (User-facing)
 ⚠️ **Wichtig**: Kategorie ist in der UI ausgeblendet und wird automatisch auf "Sonstiges" gesetzt.
@@ -566,6 +569,7 @@ docker-compose up -d    # Erstellt neu
     - Lines per cm
 
 14. **Sticker/Stationery Workflow**:
+    - Produkttyp `sticker` mit Kategorie `StickerSheet` oder `DieCut`
     - `sheet_count` immer = 1 (aus UI entfernt)
     - `units_per_sheet` = Anzahl Sticker/Produkte pro Bogen
     - Mehrere Maschinen möglich (Drucker + Plotter via `additional_machine_ids`)
