@@ -732,11 +732,6 @@ async def redirect_sticker_sheet_new():
 async def redirect_diecut_sticker_new():
     """Redirect alte DieCut-Sticker URL auf neue Sticker URL"""
     return RedirectResponse(url="/products/sticker/new", status_code=307)
-        "categories": CATEGORIES,
-        "sticker_sheets": sticker_sheets,
-        "machines": machines,
-        "title": "Neue DieCut Sticker"
-    })
 
 # ===== LASER-GRAVUR ROUTES =====
 
