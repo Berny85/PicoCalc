@@ -609,6 +609,74 @@ jobs:
 11. App ist aktualisiert!
 ```
 
+### 4. Manuelles Deployment (Alternative)
+
+Für direktes Deployment ohne GitHub Actions stehen mehrere Skripte bereit:
+
+#### Für Linux/macOS (Bash)
+
+**`deploy-manual.sh`** - Einfaches Deploy nach Push:
+```bash
+# Nach git push ausführen:
+./deploy-manual.sh
+```
+- Prüft Git-Status
+- Push zu GitHub (optional)
+- SSH-Verbindung zum NUC
+- Führt deploy.sh auf dem NUC aus
+- Zeigt Container-Status
+- Log wird in `deploy-manual.log` gespeichert
+
+**`deploy-and-log.sh`** - Erweitertes Deploy mit Zeitstempel-Logs:
+```bash
+# Standard:
+./deploy-and-log.sh
+
+# Ohne Push (wenn schon gepusht):
+./deploy-and-log.sh --no-push
+
+# Mit Log-Verfolgung:
+./deploy-and-log.sh --watch
+```
+- Logs werden in `logs/deploy_YYYYMMDD_HHMMSS.log` gespeichert
+- Symlink `logs/deploy_latest.log` zeigt auf letzten Deploy
+- Rotation: Nur letzte 1000 Zeilen werden behalten
+
+#### Für Windows (PowerShell)
+
+**`deploy-manual.ps1`**:
+```powershell
+.\deploy-manual.ps1
+```
+- Gleiche Funktionalität wie Bash-Version
+- PowerShell 7+ empfohlen
+
+#### Auf dem NUC (Unraid)
+
+**`auto-deploy.sh`** - Automatisches Deployment via Cron:
+```bash
+# Einrichten:
+./setup-auto-deploy.sh
+
+# Status prüfen:
+./test-auto-deploy.sh
+
+# Manuelle Ausführung:
+./auto-deploy.sh
+```
+
+**Crontab-Eintrag (alle 5 Minuten):**
+```bash
+*/5 * * * * /mnt/user/appdata/picocalc/auto-deploy.sh >> /mnt/user/appdata/picocalc/auto-deploy.log 2>&1
+```
+
+Funktion:
+1. Prüft alle 5 Minuten auf neue Commits
+2. Pullt Code bei Änderungen
+3. Baut Container neu
+4. Führt Migrationen aus
+5. Loggt nach `auto-deploy.log`
+
 ### 4. Datenbank-Migrationen
 
 **Alembic Setup:**

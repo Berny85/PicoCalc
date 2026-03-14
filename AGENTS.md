@@ -260,6 +260,38 @@ docker logs picocalc-db
 
 # Backup vom NUC herunterladen
 .\backup-to-local.ps1
+
+# Manuelles Deploy mit Log (nach git push)
+.\deploy-manual.ps1
+```
+
+### Linux/macOS Deployment (vom Dev-PC)
+```bash
+# Manuelles Deploy mit Log (nach git push)
+./deploy-manual.sh
+
+# Erweitertes Deploy mit Zeitstempel-Logs
+./deploy-and-log.sh           # Standard
+./deploy-and-log.sh --no-push # Ohne Push
+./deploy-and-log.sh --watch   # Mit Log-Verfolgung
+
+# Logs anzeigen
+tail -f logs/deploy_latest.log
+```
+
+### Auto-Deploy auf dem NUC (Unraid)
+```bash
+# Einrichten (erstellt Crontab-Eintrag)
+./setup-auto-deploy.sh
+
+# Status prüfen
+./test-auto-deploy.sh
+
+# Manuelle Ausführung
+./auto-deploy.sh
+
+# Logs anzeigen
+tail -f auto-deploy.log
 ```
 
 ## Development Workflow
