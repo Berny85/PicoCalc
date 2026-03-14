@@ -1,0 +1,301 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Picobellu Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>{{ title }}</h2>
+    
+    <form method="POST" action="{% if article %}/articles/{{ article.id }}{% else %}/articles{% endif %}">
+        <div class="grid">
+            <div>
+                {% if not article %}
+                <div class="form-group">
+                    <label for="category_id">Kategorie *</label>
+                    <select id="category_id" name="category_id" required onchange="updateArticleNumber()">
+                        <option value="">-- Bitte wählen --</option>
+                        {% for cat in categories %}
+                        <option value="{{ cat.id }}" data-prefix="{{ cat.prefix }}" data-next="{{ category_numbers[cat.id] }}" 
+                                {% if selected_product and cat.code == '3D' and selected_product.product_type == '3d_print' %}selected{% endif %}
+                                {% if selected_product and cat.code == 'ST' and selected_product.product_type == 'sticker' %}selected{% endif %}>
+                            {{ cat.name }} ({{ cat.prefix }}...)
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <small style="color: var(--color-text-light);">
+                        Die Artikelnummer wird automatisch vergeben
+                    </small>
+                </div>
+                
+                <div class="form-group" id="article-number-preview" style="display: none;">
+                    <label>Nächste Artikelnummer</label>
+                    <div style="padding: 12px; background: var(--color-bg-hover); border-radius: 8px; font-size: 1.2rem; font-weight: bold; color: var(--color-primary-dark); font-family: monospace;">
+                        <span id="preview-number"></span>
+                    </div>
+                </div>
+                
+                <!-- Produkt-Verknüpfung für neue Artikel -->
+                <div class="form-group" style="background: rgba(102, 126, 234, 0.1); padding: 15px; border-radius: 8px; border: 1px solid var(--color-primary);">
+                    <label for="linked_product_id">
+                        🏭 Mit Produkt verknüpfen (optional)
+                    </label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="hidden" id="linked_product_id" name="linked_product_id" value="{{ selected_product.id if selected_product else '' }}">
+                        <input type="text" id="product_display" readonly 
+                               value="{% if selected_product %}{{ selected_product.name }} (EK: {{ "%.2f"|format(product_costs.total_cost) }} €){% else %}{% endif %}"
+                               style="flex: 1; background: #f5f5f5;" 
+                               placeholder="Kein Produkt ausgewählt">
+                        <button type="button" class="btn btn-secondary" onclick="openProductSearch()">🔍 Suchen</button>
+                        {% if selected_product %}
+                        <button type="button" class="btn btn-danger" onclick="clearProductLink()">✕</button>
+                        {% endif %}
+                    </div>
+                    <small style="color: var(--color-text-light); display: block; margin-top: 5px;">
+                        Wenn ein Produkt verknüpft wird, werden die Produktionskosten automatisch als Einkaufspreis übernommen.
+                    </small>
+                </div>
+                {% else %}
+                <div class="form-group">
+                    <label>Artikelnummer</label>
+                    <div style="padding: 10px; background: #f5f5f5; border-radius: 4px; font-family: monospace; font-size: 1.1rem;">
+                        {{ article.article_number }}
+                    </div>
+                    <input type="hidden" name="category_id" value="{{ article.category_id }}">
+                </div>
+                
+                {% if article.linked_product %}
+                <div class="form-group" style="background: rgba(102, 126, 234, 0.1); padding: 15px; border-radius: 8px;">
+                    <label>Verknüpftes Produkt</label>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <a href="/products/{{ article.linked_product.id }}" style="font-weight: bold;">
+                            🏭 {{ article.linked_product.name }}
+                        </a>
+                        <span style="color: var(--color-text-light);">
+                            EK: {{ "%.2f"|format(article.purchase_price) }} €
+                        </span>
+                    </div>
+                </div>
+                {% endif %}
+                {% endif %}
+                
+                <div class="form-group">
+                    <label for="name">Artikelname *</label>
+                    <input type="text" id="name" name="name" 
+                           value="{% if article %}{{ article.name }}{% elif selected_product %}{{ selected_product.name }}{% endif %}" 
+                           required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="description">Beschreibung</label>
+                    <textarea id="description" name="description" rows="3">{% if article %}{{ article.description or '' }}{% elif selected_product %}{{ selected_product.notes or '' }}{% endif %}</textarea>
+                </div>
+            </div>
+            
+            <div>
+                <div class="form-group">
+                    <label for="purchase_price">Einkaufspreis (EK) *</label>
+                    <input type="number" id="purchase_price" name="purchase_price" step="0.01" min="0"
+                           value="{{ "%.2f"|format(article.purchase_price) if article else '0.00' }}" required
+                           onchange="calculateMargin()">
+                </div>
+                
+                <div class="form-group">
+                    <label for="selling_price">Verkaufspreis (VK) *</label>
+                    <input type="number" id="selling_price" name="selling_price" step="0.01" min="0"
+                           value="{{ "%.2f"|format(article.selling_price) if article else '0.00' }}" required
+                           onchange="calculateMargin()">
+                </div>
+                
+                <div class="form-group">
+                    <label>Marge</label>
+                    <div id="margin-display" style="padding: 12px; background: #f5f5f5; border-radius: 8px; font-weight: bold;">
+                        -
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="stock_quantity">Lagerbestand</label>
+                    <input type="number" id="stock_quantity" name="stock_quantity" step="0.01" min="0"
+                           value="{{ "%.0f"|format(article.stock_quantity) if article else '0' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="unit">Einheit</label>
+                    <select id="unit" name="unit">
+                        <option value="Stück" {% if article and article.unit == 'Stück' %}selected{% endif %}>Stück</option>
+                        <option value="Paar" {% if article and article.unit == 'Paar' %}selected{% endif %}>Paar</option>
+                        <option value="Meter" {% if article and article.unit == 'Meter' %}selected{% endif %}>Meter</option>
+                        <option value="kg" {% if article and article.unit == 'kg' %}selected{% endif %}>kg</option>
+                        <option value="Packung" {% if article and article.unit == 'Packung' %}selected{% endif %}>Packung</option>
+                        <option value="Rolle" {% if article and article.unit == 'Rolle' %}selected{% endif %}>Rolle</option>
+                    </select>
+                </div>
+                
+                {% if article %}
+                <div class="form-group">
+                    <label for="is_active">Status</label>
+                    <select id="is_active" name="is_active">
+                        <option value="1" {% if article.is_active == 1 %}selected{% endif %}>Aktiv</option>
+                        <option value="0" {% if article.is_active == 0 %}selected{% endif %}>Inaktiv</option>
+                    </select>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="actions" style="margin-top: 30px;">
+            <button type="submit" class="btn btn-primary btn-lg">
+                {% if article %}💾 Änderungen speichern{% else %}➕ Artikel anlegen{% endif %}
+            </button>
+            <a href="/articles" class="btn btn-secondary">Abbrechen</a>
+        </div>
+    </form>
+</div>
+
+<!-- Produkt-Suche Modal -->
+<div id="product-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div style="background: white; border-radius: 12px; padding: 30px; max-width: 700px; width: 90%; max-height: 80vh; overflow: auto;">
+        <h3>🏭 Produkt suchen</h3>
+        <div class="form-group">
+            <input type="text" id="product-search-input" placeholder="Produktname eingeben..." 
+                   style="width: 100%;" oninput="searchProducts(this.value)">
+        </div>
+        <div id="product-search-results" style="margin-top: 15px;">
+            <!-- Ergebnisse hier -->
+        </div>
+        <div style="margin-top: 20px; text-align: right;">
+            <button type="button" class="btn btn-secondary" onclick="closeProductSearch()">Schließen</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Produkt-Suche
+function openProductSearch() {
+    document.getElementById('product-modal').style.display = 'flex';
+    document.getElementById('product-search-input').focus();
+    // Alle Produkte laden
+    searchProducts('');
+}
+
+function closeProductSearch() {
+    document.getElementById('product-modal').style.display = 'none';
+    document.getElementById('product-search-input').value = '';
+    document.getElementById('product-search-results').innerHTML = '';
+}
+
+function clearProductLink() {
+    document.getElementById('linked_product_id').value = '';
+    document.getElementById('product_display').value = '';
+    // EK zurücksetzen
+    document.getElementById('purchase_price').value = '0.00';
+    calculateMargin();
+}
+
+let productSearchTimeout;
+function searchProducts(query) {
+    clearTimeout(productSearchTimeout);
+    
+    productSearchTimeout = setTimeout(() => {
+        // Produkte über API laden
+        fetch('/api/products/search?q=' + encodeURIComponent(query))
+            .then(r => r.json())
+            .then(data => {
+                const container = document.getElementById('product-search-results');
+                if (data.length === 0) {
+                    container.innerHTML = '<p style="color: #666; text-align: center;">Keine Produkte gefunden</p>';
+                    return;
+                }
+                
+                container.innerHTML = data.map(p => `
+                    <div onclick="selectProduct(${p.id}, '${p.name.replace(/'/g, "\\'")}', ${p.cost})" 
+                         style="padding: 12px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 8px; cursor: pointer; hover: background: #f5f5f5;">
+                        <div style="font-weight: bold;">${p.name}</div>
+                        <div style="color: #666; font-size: 0.9rem;">
+                            ${p.product_type} | Selbstkosten: ${p.cost.toFixed(2)} €
+                        </div>
+                    </div>
+                `).join('');
+            });
+    }, 100);
+}
+
+function selectProduct(id, name, cost) {
+    document.getElementById('linked_product_id').value = id;
+    document.getElementById('product_display').value = name + ' (EK: ' + cost.toFixed(2) + ' €)';
+    
+    // Name übernehmen wenn leer
+    const nameField = document.getElementById('name');
+    if (!nameField.value) {
+        nameField.value = name;
+    }
+    
+    // EK-Preis automatisch setzen (Produktionskosten)
+    document.getElementById('purchase_price').value = cost.toFixed(2);
+    
+    // VK-Preis Vorschlag (z.B. 50% Marge)
+    const suggestedVK = cost * 1.5;
+    const vkField = document.getElementById('selling_price');
+    if (!vkField.value || vkField.value === '0.00') {
+        vkField.value = suggestedVK.toFixed(2);
+    }
+    
+    calculateMargin();
+    closeProductSearch();
+}
+
+function updateArticleNumber() {
+    const select = document.getElementById('category_id');
+    const selectedOption = select.options[select.selectedIndex];
+    const previewDiv = document.getElementById('article-number-preview');
+    const previewSpan = document.getElementById('preview-number');
+    
+    if (select.value) {
+        const nextNumber = selectedOption.getAttribute('data-next');
+        previewSpan.textContent = nextNumber;
+        previewDiv.style.display = 'block';
+    } else {
+        previewDiv.style.display = 'none';
+    }
+}
+
+function calculateMargin() {
+    const ek = parseFloat(document.getElementById('purchase_price').value) || 0;
+    const vk = parseFloat(document.getElementById('selling_price').value) || 0;
+    const display = document.getElementById('margin-display');
+    
+    if (vk > 0) {
+        const profit = vk - ek;
+        const margin = (profit / vk) * 100;
+        const profitClass = margin >= 50 ? 'green' : (margin >= 30 ? 'orange' : 'red');
+        display.innerHTML = profit.toFixed(2) + ' € Gewinn <span style="color: ' + profitClass + '">(' + margin.toFixed(1) + '% Marge)</span>';
+    } else {
+        display.textContent = '-';
+    }
+}
+
+// Modal schließen bei Klick außerhalb
+document.getElementById('product-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeProductSearch();
+});
+
+// Initiale Berechnung
+{% if article or selected_product %}
+calculateMargin();
+{% endif %}
+
+// Artikelnummer-Vorschau beim Laden anzeigen
+{% if not article %}
+document.addEventListener('DOMContentLoaded', function() {
+    updateArticleNumber();
+});
+{% endif %}
+</script>
+
+<style>
+.btn-lg {
+    padding: 12px 24px;
+    font-size: 1.1rem;
+}
+</style>
+{% endblock %}

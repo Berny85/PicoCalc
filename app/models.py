@@ -588,30 +588,58 @@ class ProductComponent(Base):
 
 
 class SalesOrderItem(Base):
-    """Einzelpositionen eines Verkaufsauftrags (Warenkorb-Positionen)"""
+    """Einzelpositionen eines Verkaufsauftrags (Warenkorb-Positionen)
+    
+    Kann entweder ein Produkt (selbst hergestellt) oder ein Artikel (eingekauft) sein.
+    """
     __tablename__ = "sales_order_items"
     
     id = Column(Integer, primary_key=True, index=True)
     sales_order_id = Column(Integer, ForeignKey("sales_orders.id"), nullable=False)
     
-    # Verknüpfung zum Produkt
-    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    # Verknüpfung zum Produkt (selbst hergestellt) - optional
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=True)
+    
+    # Verknüpfung zum Artikel (eingekauft) - optional
+    article_id = Column(Integer, ForeignKey("articles.id"), nullable=True)
     
     # Menge und Preise
     quantity = Column(Integer, default=1)  # Anzahl verkaufter Einheiten
     unit_price = Column(Numeric(10, 2), nullable=False)  # Verkaufspreis pro Einheit
     
-    # Produktionskosten (Kopie zum Zeitpunkt des Verkaufs)
-    production_cost_per_unit = Column(Numeric(10, 2), nullable=False)  # Selbstkosten pro Einheit
+    # Kosten (Kopie zum Zeitpunkt des Verkaufs)
+    # Bei Produkt: Produktionskosten, bei Artikel: Einkaufspreis
+    cost_per_unit = Column(Numeric(10, 2), default=0)  # Selbstkosten/EK pro Einheit
+    
+    # Positionstyp für einfache Unterscheidung
+    item_type = Column(String(20), default="product")  # 'product' oder 'article'
     
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Beziehungen
     sales_order = relationship("SalesOrder", backref="items")
     product = relationship("Product", backref="sales_order_items")
+    article = relationship("Article", backref="sales_order_items")
     
     def __repr__(self):
-        return f"SalesOrderItem({self.quantity}x {self.product.name})"
+        name = self.product.name if self.product else (self.article.name if self.article else "Unknown")
+        return f"SalesOrderItem({self.quantity}x {name})"
+    
+    def get_name(self):
+        """Gibt den Namen des Produkts oder Artikels zurück"""
+        if self.product:
+            return self.product.name
+        elif self.article:
+            return f"{self.article.article_number} - {self.article.name}"
+        return "Unbekannt"
+    
+    def get_item_link(self):
+        """Gibt den Link zum Produkt oder Artikel zurück"""
+        if self.product:
+            return f"/products/{self.product.id}"
+        elif self.article:
+            return f"/articles/{self.article.id}"
+        return "#"
     
     def calculate_total(self):
         """Berechnet Gesamtsumme für diese Position"""
@@ -619,7 +647,7 @@ class SalesOrderItem(Base):
     
     def calculate_profit(self):
         """Berechnet Gewinn für diese Position"""
-        return (float(self.unit_price) - float(self.production_cost_per_unit)) * self.quantity
+        return (float(self.unit_price) - float(self.cost_per_unit)) * self.quantity
 
 
 class SalesOrder(Base):
@@ -691,3 +719,194 @@ class SalesOrder(Base):
     def get_total_quantity(self):
         """Gesamtanzahl aller Artikel"""
         return sum(item.quantity for item in self.items)
+
+
+# =============================================================================
+# ARTIKEL-VERWALTUNG
+# =============================================================================
+
+class ArticleCategory(Base):
+    """Artikelkategorien mit automatischer Nummernvergabe (Präfix-System)"""
+    __tablename__ = "article_categories"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(10), nullable=False, unique=True)  # z.B. 'ART', 'ST', '3D'
+    name = Column(String(100), nullable=False)  # z.B. 'Sticker', '3D-Druck'
+    description = Column(Text, nullable=True)
+    prefix = Column(String(10), nullable=False)  # z.B. 'ART-', 'ST-', '3D-'
+    next_number = Column(Integer, default=1)  # Nächste fortlaufende Nummer
+    is_active = Column(Integer, default=1)  # 1 = aktiv, 0 = inaktiv
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def __repr__(self):
+        return f"ArticleCategory({self.code}: {self.name})"
+    
+    def generate_article_number(self) -> str:
+        """Generiert die nächste Artikelnummer für diese Kategorie"""
+        number_str = str(self.next_number).zfill(4)  # 0001, 0002, etc.
+        return f"{self.prefix}{number_str}"
+    
+    def increment_number(self):
+        """Erhöht den Nummernzähler"""
+        self.next_number += 1
+
+
+class Article(Base):
+    """Artikelstamm - für Waren die eingekauft und weiterverkauft werden
+    
+    Kann optional mit einem Produkt verknüpft sein, um Produktionskosten zu übernehmen.
+    """
+    __tablename__ = "articles"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    article_number = Column(String(50), nullable=False, unique=True)  # z.B. 'ART-0001', 'ST-0005'
+    
+    # Kategorie
+    category_id = Column(Integer, ForeignKey("article_categories.id"), nullable=False)
+    
+    # Optionale Verknüpfung zu einem Produkt (für Selbstkosten-Übernahme)
+    linked_product_id = Column(Integer, ForeignKey("products.id"), nullable=True)
+    
+    # Basisdaten
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    
+    # Preise
+    purchase_price = Column(Numeric(10, 2), default=0)  # Einkaufspreis (EK) - bei Produkt-Verknüpfung = Produktionskosten
+    selling_price = Column(Numeric(10, 2), default=0)  # Verkaufspreis (VK)
+    
+    # Lager (optional)
+    stock_quantity = Column(Numeric(10, 2), default=0)
+    unit = Column(String(20), default="Stück")  # Stück, Meter, kg, Paar, etc.
+    
+    # Status
+    is_active = Column(Integer, default=1)  # 1 = aktiv, 0 = inaktiv
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Beziehungen
+    category = relationship("ArticleCategory", backref="articles")
+    linked_product = relationship("Product", backref="linked_articles")
+    
+    def __repr__(self):
+        return f"Article({self.article_number}: {self.name})"
+    
+    def calculate_profit(self) -> float:
+        """Berechnet den Gewinn pro Einheit"""
+        return float(self.selling_price) - float(self.purchase_price)
+    
+    def calculate_margin_percent(self) -> float:
+        """Berechnet die Gewinnmarge in Prozent"""
+        if float(self.selling_price) == 0:
+            return 0.0
+        return (self.calculate_profit() / float(self.selling_price)) * 100
+
+
+# =============================================================================
+# RECHNUNGS-VERWALTUNG
+# =============================================================================
+
+class Invoice(Base):
+    """Rechnungen an Kunden"""
+    __tablename__ = "invoices"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Rechnungsnummer (eindeutig, automatisch generiert)
+    invoice_number = Column(String(50), nullable=False, unique=True)
+    
+    # Verknüpfung zu Verkaufsauftrag (optional)
+    sales_order_id = Column(Integer, ForeignKey("sales_orders.id"), nullable=True)
+    
+    # Kundendaten
+    customer_name = Column(String(255), nullable=True)
+    customer_address = Column(Text, nullable=True)  # Rechnungsadresse
+    
+    # Daten
+    invoice_date = Column(DateTime, default=datetime.utcnow)  # Rechnungsdatum
+    due_date = Column(DateTime, nullable=True)  # Fälligkeitsdatum
+    
+    # Status
+    status = Column(String(20), default="draft")  # 'draft', 'sent', 'paid', 'overdue', 'cancelled'
+    
+    # Beträge
+    total_net = Column(Numeric(10, 2), default=0)  # Gesamt netto
+    vat_rate = Column(Numeric(5, 2), default=19.00)  # MwSt-Satz (Standard: 19%)
+    vat_amount = Column(Numeric(10, 2), default=0)  # MwSt-Betrag
+    total_gross = Column(Numeric(10, 2), default=0)  # Gesamt brutto
+    
+    # Notizen
+    notes = Column(Text, nullable=True)  # Interne Notizen
+    footer_text = Column(Text, nullable=True)  # Text am Ende der Rechnung
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    sent_at = Column(DateTime, nullable=True)  # Wann verschickt
+    paid_at = Column(DateTime, nullable=True)  # Wann bezahlt
+    
+    # Beziehungen
+    sales_order = relationship("SalesOrder", backref="invoices")
+    
+    def __repr__(self):
+        return f"Invoice({self.invoice_number}: {self.customer_name or 'Kein Kunde'})"
+    
+    def calculate_totals(self):
+        """Berechnet alle Summen basierend auf den Positionen"""
+        total_net = sum(item.total_net for item in self.items)
+        vat_amount = total_net * (float(self.vat_rate) / 100)
+        total_gross = total_net + vat_amount
+        
+        self.total_net = round(total_net, 2)
+        self.vat_amount = round(vat_amount, 2)
+        self.total_gross = round(total_gross, 2)
+        
+        return {
+            'total_net': self.total_net,
+            'vat_amount': self.vat_amount,
+            'total_gross': self.total_gross
+        }
+
+
+class InvoiceItem(Base):
+    """Einzelpositionen einer Rechnung"""
+    __tablename__ = "invoice_items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=False)
+    
+    # Positionsnummer
+    position = Column(Integer, nullable=False)  # 1, 2, 3, ...
+    
+    # Verknüpfung zum Artikel (optional - manuelle Positionen möglich)
+    article_id = Column(Integer, ForeignKey("articles.id"), nullable=True)
+    
+    # Artikeldaten (Kopie zum Zeitpunkt der Rechnungserstellung)
+    article_number = Column(String(50), nullable=True)  # z.B. "ART-0001"
+    description = Column(String(500), nullable=False)  # Artikelname/Beschreibung
+    
+    # Menge und Preis
+    quantity = Column(Numeric(10, 2), default=1)
+    unit = Column(String(20), default="Stück")
+    unit_price_net = Column(Numeric(10, 2), nullable=False)  # Einzelpreis netto
+    
+    # Gesamtbetrag
+    total_net = Column(Numeric(10, 2), nullable=False)  # Menge × Preis
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Beziehungen
+    invoice = relationship("Invoice", backref="items")
+    article = relationship("Article", backref="invoice_items")
+    
+    def __repr__(self):
+        return f"InvoiceItem({self.position}: {self.description[:30]}...)"
+    
+    def calculate_total(self):
+        """Berechnet den Gesamtbetrag"""
+        return float(self.quantity) * float(self.unit_price_net)

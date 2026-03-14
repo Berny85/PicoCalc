@@ -58,14 +58,17 @@
             </div>
         </div>
         
-        <h3 style="margin-top: 30px; color: var(--color-primary-dark);">Produkte</h3>
+        <h3 style="margin-top: 30px; color: var(--color-primary-dark);">Produkte & Artikel</h3>
         <div id="products-container">
             <!-- Produkte werden hier dynamisch hinzugefügt -->
         </div>
         
-        <div style="margin-top: 15px;">
+        <div style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
             <button type="button" class="btn btn-secondary" onclick="addProductRow()">
                 ➕ Produkt hinzufügen
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="addArticleRow()">
+                📝 Artikel hinzufügen
             </button>
         </div>
         
@@ -151,9 +154,10 @@
 
 <!-- Template für neue Produktzeile -->
 <template id="product-row-template">
-    <div class="product-row" style="border: 1px solid var(--color-border); border-radius: 8px; padding: 15px; margin-bottom: 15px;">
+    <div class="product-row" style="border: 1px solid var(--color-border); border-radius: 8px; padding: 15px; margin-bottom: 15px;" data-type="product">
+        <input type="hidden" name="item_type[]" value="product">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-            <strong>Produkt <span class="product-number">1</span></strong>
+            <strong>🏭 Produkt <span class="product-number">1</span></strong>
             <button type="button" class="btn btn-danger" style="padding: 4px 8px; font-size: 0.75rem;" onclick="removeProductRow(this)">
                 🗑️ Entfernen
             </button>
@@ -195,7 +199,7 @@
             <div>
                 <div class="form-group">
                     <label>Selbstkosten/Einheit (€)</label>
-                    <input type="number" name="production_cost_per_unit[]" class="cost-input" 
+                    <input type="number" name="cost_per_unit[]" class="cost-input" 
                            step="0.01" min="0" readonly style="background: #f5f5f5;">
                 </div>
             </div>
@@ -207,11 +211,92 @@
     </div>
 </template>
 
+<!-- Template für neue Artikelzeile -->
+<template id="article-row-template">
+    <div class="product-row article-row" style="border: 1px solid var(--color-primary); border-radius: 8px; padding: 15px; margin-bottom: 15px; background: rgba(102, 126, 234, 0.05);" data-type="article">
+        <input type="hidden" name="item_type[]" value="article">
+        <input type="hidden" name="product_id[]" value="">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <strong>📝 Artikel <span class="product-number">1</span></strong>
+            <button type="button" class="btn btn-danger" style="padding: 4px 8px; font-size: 0.75rem;" onclick="removeProductRow(this)">
+                🗑️ Entfernen
+            </button>
+        </div>
+        <div class="grid">
+            <div style="grid-column: span 2;">
+                <div class="form-group">
+                    <label>Artikel *</label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="hidden" name="article_id[]" class="article-id-input" required>
+                        <input type="text" class="article-display-input" readonly style="flex: 1; background: #f5f5f5;" placeholder="Artikel auswählen...">
+                        <button type="button" class="btn btn-secondary" onclick="openArticleSearch(this)">🔍 Suchen</button>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <div class="form-group">
+                    <label>Menge *</label>
+                    <input type="number" name="quantity[]" class="quantity-input" 
+                           step="1" min="1" value="1" required onchange="updateArticleRowTotal(this.closest('.article-row'))">
+                </div>
+            </div>
+            <div>
+                <div class="form-group">
+                    <label>VK-Preis/Einheit (€)</label>
+                    <input type="number" name="unit_price[]" class="unit-price-input" 
+                           step="0.01" min="0" onchange="updateTotals()">
+                </div>
+            </div>
+            <div>
+                <div class="form-group">
+                    <label>EK-Preis/Einheit (€)</label>
+                    <input type="number" name="cost_per_unit[]" class="cost-input" 
+                           step="0.01" min="0" readonly style="background: #f5f5f5;">
+                </div>
+            </div>
+        </div>
+        <div style="text-align: right; margin-top: 10px; font-weight: bold; color: var(--color-text-light);">
+            Position: <span class="row-total-cost">0.00 €</span> EK | 
+            <span class="row-total-price">0.00 €</span> VK
+        </div>
+    </div>
+</template>
+
+<!-- Artikel-Suche Modal -->
+<div id="article-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div style="background: white; border-radius: 12px; padding: 30px; max-width: 600px; width: 90%; max-height: 80vh; overflow: auto;">
+        <h3>📝 Artikel suchen</h3>
+        <div class="form-group">
+            <input type="text" id="article-search-input" placeholder="Artikelnummer oder Name eingeben..." 
+                   style="width: 100%;" oninput="searchArticlesForSale(this.value)">
+        </div>
+        <div id="article-search-results" style="margin-top: 15px;">
+            <!-- Ergebnisse hier -->
+        </div>
+        <div style="margin-top: 20px; text-align: right;">
+            <button type="button" class="btn btn-secondary" onclick="closeArticleSearch()">Schließen</button>
+        </div>
+    </div>
+</div>
+
 <script>
 let productCounter = 0;
+let currentArticleRow = null;
 
 function addProductRow() {
     const template = document.getElementById('product-row-template');
+    const container = document.getElementById('products-container');
+    const clone = template.content.cloneNode(true);
+    
+    productCounter++;
+    clone.querySelector('.product-number').textContent = productCounter;
+    
+    container.appendChild(clone);
+    updateTotals();
+}
+
+function addArticleRow() {
+    const template = document.getElementById('article-row-template');
     const container = document.getElementById('products-container');
     const clone = template.content.cloneNode(true);
     
@@ -256,6 +341,20 @@ function updateProductInfo(select) {
         '30%: ' + margin30.toFixed(2) + '€ | ' +
         '50%: ' + margin50.toFixed(2) + '€ | ' +
         '100%: ' + margin100.toFixed(2) + '€';
+    
+    updateTotals();
+}
+
+function updateArticleRowTotal(row) {
+    const quantity = parseInt(row.querySelector('.quantity-input').value) || 0;
+    const unitCost = parseFloat(row.querySelector('.cost-input').value) || 0;
+    const unitPrice = parseFloat(row.querySelector('.unit-price-input').value) || 0;
+    
+    const rowCost = quantity * unitCost;
+    const rowPrice = quantity * unitPrice;
+    
+    row.querySelector('.row-total-cost').textContent = rowCost.toFixed(2) + ' €';
+    row.querySelector('.row-total-price').textContent = rowPrice.toFixed(2) + ' €';
     
     updateTotals();
 }
@@ -350,11 +449,72 @@ function updateMarginDisplay() {
     }
 }
 
+// Artikel-Suche
+function openArticleSearch(button) {
+    currentArticleRow = button.closest('.article-row');
+    document.getElementById('article-modal').style.display = 'flex';
+    document.getElementById('article-search-input').focus();
+}
+
+function closeArticleSearch() {
+    document.getElementById('article-modal').style.display = 'none';
+    document.getElementById('article-search-input').value = '';
+    document.getElementById('article-search-results').innerHTML = '';
+    currentArticleRow = null;
+}
+
+let searchTimeout;
+function searchArticlesForSale(query) {
+    clearTimeout(searchTimeout);
+    if (query.length < 2) {
+        document.getElementById('article-search-results').innerHTML = '';
+        return;
+    }
+    
+    searchTimeout = setTimeout(() => {
+        fetch('/api/articles/search?q=' + encodeURIComponent(query))
+            .then(r => r.json())
+            .then(data => {
+                const container = document.getElementById('article-search-results');
+                if (data.length === 0) {
+                    container.innerHTML = '<p style="color: #666; text-align: center;">Keine Artikel gefunden</p>';
+                    return;
+                }
+                
+                container.innerHTML = data.map(a => `
+                    <div onclick="selectArticleForSale(${a.id}, '${a.article_number}', '${a.name.replace(/'/g, "\\'")}', ${a.selling_price}, ${a.purchase_price})" 
+                         style="padding: 12px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 8px; cursor: pointer; hover: background: #f5f5f5;">
+                        <div style="font-weight: bold;">${a.display}</div>
+                        <div style="color: #666; font-size: 0.9rem;">
+                            VK: ${a.selling_price.toFixed(2)} € | EK: ${a.purchase_price.toFixed(2)} € | ${a.unit}
+                        </div>
+                    </div>
+                `).join('');
+            });
+    }, 300);
+}
+
+function selectArticleForSale(id, articleNumber, name, sellingPrice, purchasePrice) {
+    if (currentArticleRow) {
+        currentArticleRow.querySelector('.article-id-input').value = id;
+        currentArticleRow.querySelector('.article-display-input').value = articleNumber + ' - ' + name;
+        currentArticleRow.querySelector('.unit-price-input').value = sellingPrice.toFixed(2);
+        currentArticleRow.querySelector('.cost-input').value = purchasePrice.toFixed(2);
+        updateArticleRowTotal(currentArticleRow);
+    }
+    closeArticleSearch();
+}
+
 // Event Listener
 document.getElementById('packaging_cost').addEventListener('input', updateTotals);
 document.getElementById('shipping_cost').addEventListener('input', updateTotals);
 document.getElementById('labor_minutes_packaging').addEventListener('input', updateTotals);
 document.getElementById('labor_rate_packaging').addEventListener('input', updateTotals);
+
+// Modal schließen bei Klick außerhalb
+document.getElementById('article-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeArticleSearch();
+});
 
 // Erstes Produkt automatisch hinzufügen
 addProductRow();

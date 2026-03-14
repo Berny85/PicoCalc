@@ -5,7 +5,9 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError
 from database import engine, get_db, SessionLocal
-from models import Base, Product, Material, MaterialType, Machine, Feedback, Idea, ConvertedFile, ProductImage, ProductComponent, SalesOrder, SalesOrderItem, STROM_PREIS_KWH
+from models import (Base, Product, Material, MaterialType, Machine, Feedback, Idea, 
+                     ConvertedFile, ProductImage, ProductComponent, SalesOrder, SalesOrderItem, 
+                     Article, ArticleCategory, Invoice, InvoiceItem, STROM_PREIS_KWH)
 from datetime import datetime
 import time
 import os
@@ -1413,6 +1415,7 @@ async def list_sales_orders(request: Request, db: Session = Depends(get_db)):
 async def new_sales_order_form(request: Request, product_id: int = None, db: Session = Depends(get_db)):
     """Formular für neuen Verkaufsauftrag"""
     products = db.query(Product).order_by(Product.name).all()
+    articles = db.query(Article).filter(Article.is_active == 1).order_by(Article.name).all()
     product = None
     if product_id:
         product = db.query(Product).filter(Product.id == product_id).first()
@@ -1420,6 +1423,7 @@ async def new_sales_order_form(request: Request, product_id: int = None, db: Ses
         "request": request,
         "order": None,
         "products": products,
+        "articles": articles,
         "product": product,
         "title": "Neuer Verkaufsauftrag"
     })
@@ -1434,14 +1438,16 @@ async def create_sales_order(
     labor_minutes_packaging: str = Form("0"),
     labor_rate_packaging: str = Form("20.00"),
     notes: str = Form(""),
-    # Dynamische Felder für Produkte (Arrays)
-    product_id: list[int] = Form([]),
+    # Dynamische Felder für Produkte und Artikel (Arrays)
+    item_type: list[str] = Form([]),
+    product_id: list[str] = Form([]),
+    article_id: list[str] = Form([]),
     quantity: list[str] = Form([]),
     unit_price: list[str] = Form([]),
-    production_cost_per_unit: list[str] = Form([]),
+    cost_per_unit: list[str] = Form([]),
     db: Session = Depends(get_db)
 ):
-    """Neuen Verkaufsauftrag mit mehreren Produkten erstellen"""
+    """Neuen Verkaufsauftrag mit Produkten und/oder Artikeln erstellen"""
     
     # Auftrag (Header) erstellen
     order = SalesOrder(
@@ -1459,16 +1465,38 @@ async def create_sales_order(
     db.refresh(order)
     
     # Auftragspositionen erstellen
-    for i in range(len(product_id)):
+    for i in range(len(item_type)):
         if i < len(quantity) and i < len(unit_price):
-            item = SalesOrderItem(
-                sales_order_id=order.id,
-                product_id=product_id[i],
-                quantity=int(quantity[i]),
-                unit_price=parse_decimal(unit_price[i]),
-                production_cost_per_unit=parse_decimal(production_cost_per_unit[i]) if i < len(production_cost_per_unit) else 0
-            )
-            db.add(item)
+            item_type_val = item_type[i] if i < len(item_type) else 'product'
+            
+            if item_type_val == 'product':
+                # Produkt-Position
+                pid = int(product_id[i]) if i < len(product_id) and product_id[i] else None
+                if pid:
+                    item = SalesOrderItem(
+                        sales_order_id=order.id,
+                        item_type='product',
+                        product_id=pid,
+                        article_id=None,
+                        quantity=int(quantity[i]),
+                        unit_price=parse_decimal(unit_price[i]),
+                        cost_per_unit=parse_decimal(cost_per_unit[i]) if i < len(cost_per_unit) else 0
+                    )
+                    db.add(item)
+            else:
+                # Artikel-Position
+                aid = int(article_id[i]) if i < len(article_id) and article_id[i] else None
+                if aid:
+                    item = SalesOrderItem(
+                        sales_order_id=order.id,
+                        item_type='article',
+                        product_id=None,
+                        article_id=aid,
+                        quantity=int(quantity[i]),
+                        unit_price=parse_decimal(unit_price[i]),
+                        cost_per_unit=parse_decimal(cost_per_unit[i]) if i < len(cost_per_unit) else 0
+                    )
+                    db.add(item)
     
     db.commit()
     return RedirectResponse(url=f"/sales-orders/{order.id}", status_code=303)
@@ -1937,6 +1965,569 @@ async def link_svg_to_product(
         url=f"/products/{product_id}?success=SVG erfolgreich verknüpft", 
         status_code=303
     )
+
+
+# ========================================# ARTIKEL-VERWALTUNG
+# ========================================
+
+# Standard-Artikelkategorien beim ersten Start
+def seed_article_categories(db: Session):
+    """Initialisiert Standard-Artikelkategorien falls noch keine existieren"""
+    existing = db.query(ArticleCategory).first()
+    if existing:
+        return  # Bereits initialisiert
+    
+    default_categories = [
+        ("ART", "Allgemeine Artikel", "Sonstige Waren", "ART-", 1),
+        ("ST", "Sticker", "Alle Sticker-Produkte", "ST-", 1),
+        ("3D", "3D-Druck", "3D-gedruckte Artikel", "3D-", 1),
+        ("TX", "Textil", "T-Shirts, Taschen, Textilien", "TX-", 1),
+        ("PP", "Papierprodukte", "Karten, Blöcke, Papierwaren", "PP-", 1),
+        ("LZ", "Laser/Gravur", "Gegravarte Artikel", "LZ-", 1),
+    ]
+    
+    for code, name, desc, prefix, next_num in default_categories:
+        cat = ArticleCategory(
+            code=code, 
+            name=name, 
+            description=desc, 
+            prefix=prefix,
+            next_number=next_num
+        )
+        db.add(cat)
+    
+    db.commit()
+    print("Standard-Artikelkategorien wurden initialisiert.")
+
+
+@app.get("/articles", response_class=HTMLResponse)
+async def list_articles(
+    request: Request, 
+    category_id: int = None,
+    search: str = "",
+    db: Session = Depends(get_db)
+):
+    """Liste aller Artikel mit Filter"""
+    query = db.query(Article)
+    
+    if category_id:
+        query = query.filter(Article.category_id == category_id)
+    
+    if search:
+        query = query.filter(
+            (Article.name.ilike(f"%{search}%")) |
+            (Article.article_number.ilike(f"%{search}%")) |
+            (Article.description.ilike(f"%{search}%"))
+        )
+    
+    articles = query.filter(Article.is_active == 1).order_by(Article.article_number).all()
+    categories = db.query(ArticleCategory).filter(ArticleCategory.is_active == 1).order_by(ArticleCategory.name).all()
+    
+    return templates.TemplateResponse("articles/list.html", {
+        "request": request,
+        "articles": articles,
+        "categories": categories,
+        "selected_category": category_id,
+        "search": search
+    })
+
+
+@app.get("/articles/new", response_class=HTMLResponse)
+async def new_article_form(request: Request, product_id: int = None, db: Session = Depends(get_db)):
+    """Formular für neuen Artikel - optional mit vorausgefülltem Produkt"""
+    categories = db.query(ArticleCategory).filter(ArticleCategory.is_active == 1).order_by(ArticleCategory.name).all()
+    products = db.query(Product).order_by(Product.name).all()
+    
+    # Vorschau der nächsten Artikelnummer für jede Kategorie
+    category_numbers = {}
+    for cat in categories:
+        category_numbers[cat.id] = cat.generate_article_number()
+    
+    # Wenn Produkt-ID übergeben, lade Produkt-Daten für Vorausfüllung
+    selected_product = None
+    product_costs = None
+    if product_id:
+        selected_product = db.query(Product).filter(Product.id == product_id).first()
+        if selected_product:
+            product_costs = selected_product.calculate_costs()
+    
+    return templates.TemplateResponse("articles/form.html", {
+        "request": request,
+        "article": None,
+        "categories": categories,
+        "products": products,
+        "category_numbers": category_numbers,
+        "selected_product": selected_product,
+        "product_costs": product_costs,
+        "title": "Neuer Artikel"
+    })
+
+
+@app.post("/articles")
+async def create_article(
+    request: Request,
+    category_id: int = Form(...),
+    linked_product_id: str = Form(""),
+    name: str = Form(...),
+    description: str = Form(""),
+    purchase_price: str = Form("0"),
+    selling_price: str = Form("0"),
+    stock_quantity: str = Form("0"),
+    unit: str = Form("Stück"),
+    db: Session = Depends(get_db)
+):
+    """Neuen Artikel erstellen mit automatischer Artikelnummer
+    
+    Optional: Verknüpfung mit einem Produkt für automatische EK-Übernahme
+    """
+    
+    # Kategorie laden für Nummerngenerierung
+    category = db.query(ArticleCategory).filter(ArticleCategory.id == category_id).first()
+    if not category:
+        raise HTTPException(status_code=400, detail="Ungültige Kategorie")
+    
+    # Automatische Artikelnummer generieren
+    article_number = category.generate_article_number()
+    
+    # Produkt-ID verarbeiten (kann leer sein)
+    product_id = int(linked_product_id) if linked_product_id else None
+    
+    # Wenn Produkt verknüpft, EK aus Produktionskosten übernehmen
+    final_purchase_price = parse_decimal(purchase_price)
+    if product_id:
+        product = db.query(Product).filter(Product.id == product_id).first()
+        if product:
+            costs = product.calculate_costs()
+            final_purchase_price = costs['total_cost']
+    
+    # Artikel erstellen
+    article = Article(
+        article_number=article_number,
+        category_id=category_id,
+        linked_product_id=product_id,
+        name=name,
+        description=description if description else None,
+        purchase_price=final_purchase_price,
+        selling_price=parse_decimal(selling_price),
+        stock_quantity=parse_decimal(stock_quantity),
+        unit=unit,
+        is_active=1
+    )
+    db.add(article)
+    
+    # Nummernzähler erhöhen
+    category.increment_number()
+    
+    db.commit()
+    db.refresh(article)
+    
+    return RedirectResponse(url=f"/articles/{article.id}", status_code=303)
+
+
+@app.get("/articles/{article_id}", response_class=HTMLResponse)
+async def view_article(article_id: int, request: Request, db: Session = Depends(get_db)):
+    """Artikel-Detailansicht"""
+    article = db.query(Article).filter(Article.id == article_id).first()
+    if not article:
+        raise HTTPException(status_code=404, detail="Artikel nicht gefunden")
+    
+    return templates.TemplateResponse("articles/detail.html", {
+        "request": request,
+        "article": article
+    })
+
+
+@app.get("/articles/{article_id}/edit", response_class=HTMLResponse)
+async def edit_article_form(article_id: int, request: Request, db: Session = Depends(get_db)):
+    """Formular zum Bearbeiten eines Artikels"""
+    article = db.query(Article).filter(Article.id == article_id).first()
+    if not article:
+        raise HTTPException(status_code=404, detail="Artikel nicht gefunden")
+    
+    categories = db.query(ArticleCategory).filter(ArticleCategory.is_active == 1).order_by(ArticleCategory.name).all()
+    
+    return templates.TemplateResponse("articles/form.html", {
+        "request": request,
+        "article": article,
+        "categories": categories,
+        "category_numbers": {},
+        "title": "Artikel bearbeiten"
+    })
+
+
+@app.post("/articles/{article_id}")
+async def update_article(
+    article_id: int,
+    request: Request,
+    category_id: int = Form(...),
+    name: str = Form(...),
+    description: str = Form(""),
+    purchase_price: str = Form("0"),
+    selling_price: str = Form("0"),
+    stock_quantity: str = Form("0"),
+    unit: str = Form("Stück"),
+    is_active: int = Form(1),
+    db: Session = Depends(get_db)
+):
+    """Artikel aktualisieren"""
+    article = db.query(Article).filter(Article.id == article_id).first()
+    if not article:
+        raise HTTPException(status_code=404, detail="Artikel nicht gefunden")
+    
+    article.category_id = category_id
+    article.name = name
+    article.description = description if description else None
+    article.purchase_price = parse_decimal(purchase_price)
+    article.selling_price = parse_decimal(selling_price)
+    article.stock_quantity = parse_decimal(stock_quantity)
+    article.unit = unit
+    article.is_active = is_active
+    
+    db.commit()
+    db.refresh(article)
+    
+    return RedirectResponse(url=f"/articles/{article.id}", status_code=303)
+
+
+@app.post("/articles/{article_id}/delete")
+async def delete_article(article_id: int, db: Session = Depends(get_db)):
+    """Artikel soft-delete (auf inaktiv setzen)"""
+    article = db.query(Article).filter(Article.id == article_id).first()
+    if not article:
+        raise HTTPException(status_code=404, detail="Artikel nicht gefunden")
+    
+    article.is_active = 0
+    db.commit()
+    
+    return RedirectResponse(url="/articles", status_code=303)
+
+
+# Artikelkategorien-Verwaltung
+@app.get("/article-categories", response_class=HTMLResponse)
+async def list_article_categories(request: Request, db: Session = Depends(get_db)):
+    """Liste aller Artikelkategorien"""
+    categories = db.query(ArticleCategory).order_by(ArticleCategory.name).all()
+    return templates.TemplateResponse("articles/category_list.html", {
+        "request": request,
+        "categories": categories
+    })
+
+
+@app.post("/article-categories")
+async def create_article_category(
+    request: Request,
+    code: str = Form(...),
+    name: str = Form(...),
+    description: str = Form(""),
+    prefix: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    """Neue Artikelkategorie erstellen"""
+    category = ArticleCategory(
+        code=code.upper(),
+        name=name,
+        description=description if description else None,
+        prefix=prefix,
+        next_number=1,
+        is_active=1
+    )
+    db.add(category)
+    db.commit()
+    db.refresh(category)
+    
+    return RedirectResponse(url="/article-categories", status_code=303)
+
+
+# API-Endpunkt für Artikel-Suche (Autocomplete)
+@app.get("/api/articles/search")
+async def search_articles_api(q: str = "", limit: int = 10, db: Session = Depends(get_db)):
+    """API-Endpunkt für Artikel-Suche (Autocomplete)"""
+    if not q or len(q) < 2:
+        return []
+    
+    articles = db.query(Article).filter(
+        Article.is_active == 1,
+        (Article.name.ilike(f"%{q}%")) |
+        (Article.article_number.ilike(f"%{q}%"))
+    ).limit(limit).all()
+    
+    return [
+        {
+            "id": a.id,
+            "article_number": a.article_number,
+            "name": a.name,
+            "selling_price": float(a.selling_price),
+            "purchase_price": float(a.purchase_price),
+            "unit": a.unit,
+            "display": f"{a.article_number} - {a.name}"
+        }
+        for a in articles
+    ]
+
+
+# API-Endpunkt für Produkt-Suche (Autocomplete für Artikel-Erstellung)
+@app.get("/api/products/search")
+async def search_products_api(q: str = "", limit: int = 20, db: Session = Depends(get_db)):
+    """API-Endpunkt für Produkt-Suche (Autocomplete)"""
+    query = db.query(Product)
+    
+    if q and len(q) >= 1:
+        query = query.filter(Product.name.ilike(f"%{q}%"))
+    
+    products = query.order_by(Product.name).limit(limit).all()
+    
+    result = []
+    for p in products:
+        costs = p.calculate_costs()
+        result.append({
+            "id": p.id,
+            "name": p.name,
+            "product_type": p.product_type,
+            "cost": costs['total_cost'],
+            "display": f"{p.name} (EK: {costs['total_cost']:.2f} €)"
+        })
+    
+    return result
+
+
+# ========================================# RECHNUNGS-VERWALTUNG
+# ========================================
+
+def generate_invoice_number(db: Session) -> str:
+    """Generiert die nächste Rechnungsnummer (RE-YYYY-XXXX)"""
+    current_year = datetime.now().year
+    prefix = f"RE-{current_year}-"
+    
+    # Suche die höchste Nummer für dieses Jahr
+    latest_invoice = db.query(Invoice).filter(
+        Invoice.invoice_number.like(f"{prefix}%")
+    ).order_by(Invoice.invoice_number.desc()).first()
+    
+    if latest_invoice:
+        # Extrahiere Nummer aus z.B. "RE-2024-0042"
+        try:
+            last_num = int(latest_invoice.invoice_number.split("-")[-1])
+            next_num = last_num + 1
+        except:
+            next_num = 1
+    else:
+        next_num = 1
+    
+    return f"{prefix}{str(next_num).zfill(4)}"
+
+
+@app.get("/invoices", response_class=HTMLResponse)
+async def list_invoices(
+    request: Request,
+    status: str = "",
+    search: str = "",
+    db: Session = Depends(get_db)
+):
+    """Liste aller Rechnungen"""
+    query = db.query(Invoice)
+    
+    if status:
+        query = query.filter(Invoice.status == status)
+    
+    if search:
+        query = query.filter(
+            (Invoice.invoice_number.ilike(f"%{search}%")) |
+            (Invoice.customer_name.ilike(f"%{search}%"))
+        )
+    
+    invoices = query.order_by(Invoice.created_at.desc()).all()
+    
+    return templates.TemplateResponse("invoices/list.html", {
+        "request": request,
+        "invoices": invoices,
+        "filter_status": status,
+        "search": search
+    })
+
+
+@app.get("/invoices/new", response_class=HTMLResponse)
+async def new_invoice_form(
+    request: Request,
+    sales_order_id: int = None,
+    db: Session = Depends(get_db)
+):
+    """Formular für neue Rechnung"""
+    sales_order = None
+    if sales_order_id:
+        sales_order = db.query(SalesOrder).filter(SalesOrder.id == sales_order_id).first()
+    
+    # Generiere Vorschau der Rechnungsnummer
+    invoice_number_preview = generate_invoice_number(db)
+    
+    # Lade aktive Artikel für Dropdown
+    articles = db.query(Article).filter(Article.is_active == 1).order_by(Article.name).all()
+    
+    return templates.TemplateResponse("invoices/form.html", {
+        "request": request,
+        "invoice": None,
+        "sales_order": sales_order,
+        "invoice_number": invoice_number_preview,
+        "articles": articles,
+        "today": datetime.now().strftime("%Y-%m-%d"),
+        "title": "Neue Rechnung"
+    })
+
+
+@app.post("/invoices")
+async def create_invoice(
+    request: Request,
+    invoice_number: str = Form(...),
+    customer_name: str = Form(""),
+    customer_address: str = Form(""),
+    invoice_date: str = Form(...),
+    due_date: str = Form(""),
+    vat_rate: str = Form("19.00"),
+    notes: str = Form(""),
+    footer_text: str = Form(""),
+    sales_order_id: int = Form(None),
+    # Positionen (Arrays)
+    position_desc: list[str] = Form([]),
+    position_article_id: list[str] = Form([]),
+    position_qty: list[str] = Form([]),
+    position_unit: list[str] = Form([]),
+    position_price: list[str] = Form([]),
+    db: Session = Depends(get_db)
+):
+    """Neue Rechnung erstellen"""
+    
+    # Rechnung erstellen
+    invoice = Invoice(
+        invoice_number=invoice_number,
+        sales_order_id=sales_order_id,
+        customer_name=customer_name if customer_name else None,
+        customer_address=customer_address if customer_address else None,
+        invoice_date=datetime.strptime(invoice_date, "%Y-%m-%d"),
+        due_date=datetime.strptime(due_date, "%Y-%m-%d") if due_date else None,
+        vat_rate=parse_decimal(vat_rate),
+        notes=notes if notes else None,
+        footer_text=footer_text if footer_text else None,
+        status="draft"
+    )
+    db.add(invoice)
+    db.commit()
+    db.refresh(invoice)
+    
+    # Positionen hinzufügen
+    total_net = 0
+    for i in range(len(position_desc)):
+        if position_desc[i].strip():  # Nur wenn Beschreibung vorhanden
+            qty = parse_decimal(position_qty[i]) if i < len(position_qty) else 1
+            price = parse_decimal(position_price[i]) if i < len(position_price) else 0
+            item_total = qty * price
+            
+            article_id = int(position_article_id[i]) if i < len(position_article_id) and position_article_id[i] else None
+            
+            item = InvoiceItem(
+                invoice_id=invoice.id,
+                position=i + 1,
+                article_id=article_id,
+                article_number=None,  # Wird unten gefüllt wenn Artikel vorhanden
+                description=position_desc[i],
+                quantity=qty,
+                unit=position_unit[i] if i < len(position_unit) else "Stück",
+                unit_price_net=price,
+                total_net=item_total
+            )
+            
+            # Wenn Artikel verknüpft, Artikelnummer kopieren
+            if article_id:
+                article = db.query(Article).filter(Article.id == article_id).first()
+                if article:
+                    item.article_number = article.article_number
+            
+            db.add(item)
+            total_net += item_total
+    
+    # Summen berechnen
+    invoice.total_net = total_net
+    invoice.vat_amount = total_net * (float(invoice.vat_rate) / 100)
+    invoice.total_gross = invoice.total_net + invoice.vat_amount
+    
+    db.commit()
+    db.refresh(invoice)
+    
+    return RedirectResponse(url=f"/invoices/{invoice.id}", status_code=303)
+
+
+@app.get("/invoices/{invoice_id}", response_class=HTMLResponse)
+async def view_invoice(invoice_id: int, request: Request, db: Session = Depends(get_db)):
+    """Rechnungs-Detailansicht"""
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Rechnung nicht gefunden")
+    
+    return templates.TemplateResponse("invoices/detail.html", {
+        "request": request,
+        "invoice": invoice
+    })
+
+
+@app.get("/invoices/{invoice_id}/print", response_class=HTMLResponse)
+async def print_invoice(invoice_id: int, request: Request, db: Session = Depends(get_db)):
+    """Druckansicht der Rechnung"""
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Rechnung nicht gefunden")
+    
+    return templates.TemplateResponse("invoices/print.html", {
+        "request": request,
+        "invoice": invoice,
+        "print_mode": True
+    })
+
+
+@app.post("/invoices/{invoice_id}/status")
+async def update_invoice_status(
+    invoice_id: int,
+    status: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    """Status der Rechnung aktualisieren"""
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Rechnung nicht gefunden")
+    
+    invoice.status = status
+    
+    if status == "sent":
+        invoice.sent_at = datetime.utcnow()
+    elif status == "paid":
+        invoice.paid_at = datetime.utcnow()
+    
+    db.commit()
+    return RedirectResponse(url=f"/invoices/{invoice.id}", status_code=303)
+
+
+@app.post("/invoices/{invoice_id}/delete")
+async def delete_invoice(invoice_id: int, db: Session = Depends(get_db)):
+    """Rechnung löschen (nur wenn Status 'draft')"""
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Rechnung nicht gefunden")
+    
+    if invoice.status != "draft":
+        raise HTTPException(status_code=400, detail="Nur Entwürfe können gelöscht werden")
+    
+    db.delete(invoice)
+    db.commit()
+    
+    return RedirectResponse(url="/invoices", status_code=303)
+
+
+# ========================================# Initialisiere Standarddaten
+# ========================================
+
+# Starte Initialisierung der Artikelkategorien
+db = SessionLocal()
+try:
+    seed_article_categories(db)
+finally:
+    db.close()
 
 
 if __name__ == "__main__":

@@ -45,15 +45,16 @@
 </div>
 
 <div class="card">
-    <h3>Produkte</h3>
+    <h3>Produkte & Artikel</h3>
     <div class="table-responsive">
     <table>
         <thead>
             <tr>
-                <th>Produkt</th>
+                <th>Typ</th>
+                <th>Bezeichnung</th>
                 <th style="text-align: right;">Menge</th>
                 <th style="text-align: right;">VK-Preis</th>
-                <th style="text-align: right;">Selbstkosten</th>
+                <th style="text-align: right;">Kosten/Einheit</th>
                 <th style="text-align: right;">Gewinn</th>
                 <th style="text-align: right;">Summe</th>
             </tr>
@@ -62,11 +63,18 @@
             {% for item in order.items %}
             <tr>
                 <td>
-                    <a href="/products/{{ item.product.id }}">{{ item.product.name }}</a>
+                    {% if item.item_type == 'article' %}
+                    <span style="background: var(--color-primary); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem;">📝 Artikel</span>
+                    {% else %}
+                    <span style="background: #28a745; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem;">🏭 Produkt</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <a href="{{ item.get_item_link() }}">{{ item.get_name() }}</a>
                 </td>
                 <td style="text-align: right;">{{ item.quantity }}</td>
                 <td style="text-align: right;">{{ "%.2f"|format(item.unit_price) }} €</td>
-                <td style="text-align: right;">{{ "%.2f"|format(item.production_cost_per_unit) }} €</td>
+                <td style="text-align: right;">{{ "%.2f"|format(item.cost_per_unit) }} €</td>
                 <td style="text-align: right; {% if item.calculate_profit() > 0 %}color: green{% else %}color: red{% endif %}">
                     {{ "%.2f"|format(item.calculate_profit()) }} €
                 </td>
@@ -76,7 +84,7 @@
         </tbody>
         <tfoot>
             <tr style="border-top: 2px solid var(--color-primary-dark);">
-                <td colspan="5"><strong>Artikel gesamt:</strong></td>
+                <td colspan="6"><strong>Artikel gesamt:</strong></td>
                 <td style="text-align: right;"><strong>{{ "%.2f"|format(order.calculate_items_total()) }} €</strong></td>
             </tr>
         </tfoot>
@@ -167,6 +175,26 @@
             </button>
         </form>
     </div>
+</div>
+
+<!-- Rechnung erstellen -->
+<div class="card">
+    <h3>📄 Rechnung</h3>
+    {% if order.invoices %}
+    <p>Folgende Rechnungen wurden zu diesem Auftrag erstellt:</p>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 15px;">
+        {% for inv in order.invoices %}
+        <a href="/invoices/{{ inv.id }}" class="btn btn-secondary">
+            {{ inv.invoice_number }} ({{ "%.2f"|format(inv.total_gross) }} €)
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p style="color: var(--color-text-light);">Noch keine Rechnung zu diesem Auftrag erstellt.</p>
+    <a href="/invoices/new?sales_order_id={{ order.id }}" class="btn btn-primary" style="margin-top: 15px;">
+        ➕ Rechnung erstellen
+    </a>
+    {% endif %}
 </div>
 
 <div class="actions">

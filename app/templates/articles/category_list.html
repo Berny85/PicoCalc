@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}Artikelkategorien - Picobellu Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+        <h2>🏷️ Artikelkategorien</h2>
+        <a href="/articles" class="btn btn-secondary">← Zurück zu Artikeln</a>
+    </div>
+</div>
+
+<!-- Neue Kategorie -->
+<div class="card">
+    <h3>Neue Kategorie anlegen</h3>
+    <form method="POST" action="/article-categories" style="margin-top: 15px;">
+        <div class="grid">
+            <div class="form-group">
+                <label for="code">Code *</label>
+                <input type="text" id="code" name="code" maxlength="10" required 
+                       placeholder="z.B. ART, ST, 3D"
+                       style="text-transform: uppercase;">
+                <small>Kurzcode für die Kategorie (z.B. ST für Sticker)</small>
+            </div>
+            
+            <div class="form-group">
+                <label for="name">Name *</label>
+                <input type="text" id="name" name="name" required 
+                       placeholder="z.B. Sticker">
+            </div>
+            
+            <div class="form-group">
+                <label for="prefix">Präfix *</label>
+                <input type="text" id="prefix" name="prefix" required 
+                       placeholder="z.B. ST-"
+                       oninput="document.getElementById('prefix-preview').textContent = this.value + '0001'">
+                <small>Vorschau: <code id="prefix-preview" style="background: #f0f0f0; padding: 2px 6px;">ART-0001</code></small>
+            </div>
+            
+            <div class="form-group">
+                <label for="description">Beschreibung</label>
+                <input type="text" id="description" name="description" 
+                       placeholder="Optionale Beschreibung">
+            </div>
+        </div>
+        
+        <div style="margin-top: 20px;">
+            <button type="submit" class="btn btn-primary">➕ Kategorie anlegen</button>
+        </div>
+    </form>
+</div>
+
+<!-- Bestehende Kategorien -->
+<div class="card">
+    <h3>Vorhandene Kategorien</h3>
+    
+    {% if categories %}
+    <div class="table-responsive" style="margin-top: 15px;">
+    <table>
+        <thead>
+            <tr>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Präfix</th>
+                <th>Beschreibung</th>
+                <th>Nächste Nr.</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cat in categories %}
+            <tr>
+                <td><code style="background: #f0f0f0; padding: 2px 6px; border-radius: 4px;">{{ cat.code }}</code></td>
+                <td><strong>{{ cat.name }}</strong></td>
+                <td><code>{{ cat.prefix }}</code></td>
+                <td>{{ cat.description or '-' }}</td>
+                <td>{{ cat.generate_article_number() }}</td>
+                <td>
+                    {% if cat.is_active == 1 %}
+                    <span style="color: green;">✓ Aktiv</span>
+                    {% else %}
+                    <span style="color: red;">✗ Inaktiv</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p style="color: var(--color-text-light); text-align: center; padding: 30px;">
+        Noch keine Kategorien vorhanden.
+    </p>
+    {% endif %}
+</div>
+
+<div class="card" style="background: var(--color-bg-hover);">
+    <h3>💡 Hinweise zum Nummernsystem</h3>
+    <ul style="margin-left: 20px; line-height: 1.8;">
+        <li>Jede Kategorie hat ihr eigenes Nummernkontingent</li>
+        <li>Die Nummern werden automatisch fortlaufend vergeben (0001, 0002, ...)</li>
+        <li>Ein Präfix wie "ST-" erzeugt Nummern wie: ST-0001, ST-0002, etc.</li>
+        <li>Standardmäßig gibt es Kategorien für Sticker, 3D-Druck, Textil, etc.</li>
+        <li>Gelöschte Artikel behalten ihre Nummer (Lücken sind normal)</li>
+    </ul>
+</div>
+{% endblock %}

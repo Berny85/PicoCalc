@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Artikelverwaltung - Picobellu Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+        <h2>📝 Artikelverwaltung</h2>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <a href="/article-categories" class="btn btn-secondary">Kategorien</a>
+            <a href="/articles/new" class="btn btn-primary">➕ Neuer Artikel</a>
+        </div>
+    </div>
+</div>
+
+<!-- Filter -->
+<div class="card">
+    <form method="GET" action="/articles" style="display: flex; gap: 15px; flex-wrap: wrap; align-items: end;">
+        <div class="form-group" style="flex: 1; min-width: 200px;">
+            <label for="search">Suche</label>
+            <input type="text" id="search" name="search" value="{{ search }}" 
+                   placeholder="Artikelnummer oder Name...">
+        </div>
+        
+        <div class="form-group" style="min-width: 180px;">
+            <label for="category_id">Kategorie</label>
+            <select id="category_id" name="category_id">
+                <option value="">-- Alle --</option>
+                {% for cat in categories %}
+                <option value="{{ cat.id }}" {% if selected_category == cat.id %}selected{% endif %}>
+                    {{ cat.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div>
+            <button type="submit" class="btn btn-primary">🔍 Filtern</button>
+            <a href="/articles" class="btn btn-secondary">Zurücksetzen</a>
+        </div>
+    </form>
+</div>
+
+<!-- Artikel-Tabelle -->
+<div class="card">
+    {% if articles %}
+    <div class="table-responsive">
+    <table>
+        <thead>
+            <tr>
+                <th>Art.-Nr.</th>
+                <th>Name</th>
+                <th>Kategorie</th>
+                <th style="text-align: right;">EK-Preis</th>
+                <th style="text-align: right;">VK-Preis</th>
+                <th style="text-align: right;">Marge</th>
+                <th style="text-align: right;">Lager</th>
+                <th>Aktionen</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for article in articles %}
+            <tr>
+                <td><code style="background: #f0f0f0; padding: 2px 6px; border-radius: 4px;">{{ article.article_number }}</code></td>
+                <td><strong>{{ article.name }}</strong></td>
+                <td>{{ article.category.name if article.category else '-' }}</td>
+                <td style="text-align: right;">{{ "%.2f"|format(article.purchase_price) }} €</td>
+                <td style="text-align: right; font-weight: bold;">{{ "%.2f"|format(article.selling_price) }} €</td>
+                <td style="text-align: right;">
+                    {% set margin = article.calculate_margin_percent() %}
+                    <span style="color: {% if margin >= 50 %}green{% elif margin >= 30 %}orange{% else %}red{% endif %}">
+                        {{ "%.1f"|format(margin) }}%
+                    </span>
+                </td>
+                <td style="text-align: right;">
+                    {{ "%.0f"|format(article.stock_quantity) }} {{ article.unit }}
+                </td>
+                <td>
+                    <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                        <a href="/articles/{{ article.id }}" class="btn btn-sm btn-secondary">👁️</a>
+                        <a href="/articles/{{ article.id }}/edit" class="btn btn-sm btn-primary">✏️</a>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 40px; color: var(--color-text-light);">
+        <p style="font-size: 1.2rem;">📭 Keine Artikel gefunden</p>
+        <p>Legen Sie Ihren ersten Artikel an oder passen Sie die Filter an.</p>
+        <a href="/articles/new" class="btn btn-primary" style="margin-top: 15px;">➕ Artikel anlegen</a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Info-Karte -->
+<div class="card" style="background: var(--gradient-primary); color: white;">
+    <h3 style="color: white; border-bottom-color: rgba(255,255,255,0.3);">💡 Artikel-Nummernsystem</h3>
+    <p>Artikel werden automatisch nummeriert:</p>
+    <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-top: 15px;">
+        {% for cat in categories %}
+        <div style="background: rgba(255,255,255,0.2); padding: 10px 15px; border-radius: 8px;">
+            <strong>{{ cat.prefix }}XXXX</strong><br>
+            <small>{{ cat.name }}</small>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

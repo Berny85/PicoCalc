@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}Rechnungen - Picobellu Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+        <div>
+            <h2>📄 Rechnungs-Verwaltung</h2>
+            <p style="color: var(--color-text-light); margin-top: 5px;">
+                Rechnungen können nur als "Entwurf" gelöscht werden. Bereits versendete Rechnungen müssen storniert werden.
+            </p>
+        </div>
+        <a href="/invoices/new" class="btn btn-primary btn-lg">➕ Neue Rechnung</a>
+    </div>
+</div>
+
+<!-- Filter -->
+<div class="card">
+    <form method="GET" action="/invoices" style="display: flex; gap: 15px; flex-wrap: wrap; align-items: end;">
+        <div class="form-group" style="min-width: 200px;">
+            <label for="search">Suche</label>
+            <input type="text" id="search" name="search" value="{{ search }}" 
+                   placeholder="Rechnungsnr. oder Kunde...">
+        </div>
+        
+        <div class="form-group" style="min-width: 150px;">
+            <label for="status">Status</label>
+            <select id="status" name="status">
+                <option value="">-- Alle --</option>
+                <option value="draft" {% if filter_status == 'draft' %}selected{% endif %}>Entwurf</option>
+                <option value="sent" {% if filter_status == 'sent' %}selected{% endif %}>Versendet</option>
+                <option value="paid" {% if filter_status == 'paid' %}selected{% endif %}>Bezahlt</option>
+                <option value="overdue" {% if filter_status == 'overdue' %}selected{% endif %}>Überfällig</option>
+            </select>
+        </div>
+        
+        <div>
+            <button type="submit" class="btn btn-primary">🔍 Filtern</button>
+            <a href="/invoices" class="btn btn-secondary">Zurücksetzen</a>
+        </div>
+    </form>
+</div>
+
+<!-- Rechnungen-Tabelle -->
+<div class="card">
+    {% if invoices %}
+    <div class="table-responsive">
+    <table>
+        <thead>
+            <tr>
+                <th>Rechnungsnr.</th>
+                <th>Kunde</th>
+                <th>Datum</th>
+                <th style="text-align: right;">Betrag</th>
+                <th>Status</th>
+                <th>Aktionen</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for invoice in invoices %}
+            <tr>
+                <td>
+                    <code style="background: #f0f0f0; padding: 2px 6px; border-radius: 4px; font-weight: bold;">
+                        {{ invoice.invoice_number }}
+                    </code>
+                </td>
+                <td>{{ invoice.customer_name or 'Kein Kunde' }}</td>
+                <td>{{ invoice.invoice_date.strftime('%d.%m.%Y') if invoice.invoice_date else '-' }}</td>
+                <td style="text-align: right; font-weight: bold;">{{ "%.2f"|format(invoice.total_gross) }} €</td>
+                <td>
+                    {% if invoice.status == 'draft' %}
+                    <span style="background: #6c757d; color: white; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem;">📝 Entwurf</span>
+                    {% elif invoice.status == 'sent' %}
+                    <span style="background: #007bff; color: white; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem;">📧 Versendet</span>
+                    {% elif invoice.status == 'paid' %}
+                    <span style="background: #28a745; color: white; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem;">💰 Bezahlt</span>
+                    {% elif invoice.status == 'overdue' %}
+                    <span style="background: #dc3545; color: white; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem;">⚠️ Überfällig</span>
+                    {% elif invoice.status == 'cancelled' %}
+                    <span style="background: #6c757d; color: white; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem; text-decoration: line-through;">🚫 Storniert</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                        <a href="/invoices/{{ invoice.id }}" class="btn btn-sm btn-secondary" title="Anzeigen">👁️</a>
+                        <a href="/invoices/{{ invoice.id }}/print" target="_blank" class="btn btn-sm btn-primary" title="Drucken">🖨️</a>
+                        {% if invoice.status == 'draft' %}
+                        <form method="POST" action="/invoices/{{ invoice.id }}/delete" style="display: inline;" 
+                              onsubmit="return confirm('Rechnung {{ invoice.invoice_number }} wirklich löschen?');">
+                            <button type="submit" class="btn btn-sm btn-danger" title="Löschen">🗑️</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 40px; color: var(--color-text-light);">
+        <p style="font-size: 1.2rem;">📭 Keine Rechnungen gefunden</p>
+        <a href="/invoices/new" class="btn btn-primary" style="margin-top: 15px;">➕ Erste Rechnung erstellen</a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Status-Legende -->
+<div class="card" style="background: var(--color-bg-hover);">
+    <h3>Status-Erklärung</h3>
+    <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-top: 15px;">
+        <div><span style="background: #6c757d; color: white; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem;">📝 Entwurf</span> - Noch nicht fertig (löschbar)</div>
+        <div><span style="background: #007bff; color: white; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem;">📧 Versendet</span> - An Kunden gesendet</div>
+        <div><span style="background: #28a745; color: white; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem;">💰 Bezahlt</span> - Zahlung eingegangen</div>
+        <div><span style="background: #dc3545; color: white; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem;">⚠️ Überfällig</span> - Zahlungsfrist abgelaufen</div>
+        <div><span style="background: #6c757d; color: white; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem; text-decoration: line-through;">🚫 Storniert</span> - Ungültig gemacht</div>
+    </div>
+</div>
+{% endblock %}

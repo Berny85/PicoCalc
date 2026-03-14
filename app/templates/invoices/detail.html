@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block title %}Rechnung {{ invoice.invoice_number }} - Picobellu Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: start; flex-wrap: wrap; gap: 15px;">
+        <div>
+            <h2>📄 Rechnung {{ invoice.invoice_number }}</h2>
+            <p style="color: var(--color-text-light); margin-top: 5px;">
+                Rechnungsdatum: {{ invoice.invoice_date.strftime('%d.%m.%Y') if invoice.invoice_date else '-' }}
+                {% if invoice.due_date %}
+                | Fällig: {{ invoice.due_date.strftime('%d.%m.%Y') }}
+                {% endif %}
+            </p>
+        </div>
+        <div>
+            {% if invoice.status == 'draft' %}
+            <span style="background: #6c757d; color: white; padding: 8px 16px; border-radius: 12px; font-size: 0.9rem;">Entwurf</span>
+            {% elif invoice.status == 'sent' %}
+            <span style="background: #007bff; color: white; padding: 8px 16px; border-radius: 12px; font-size: 0.9rem;">Versendet</span>
+            {% elif invoice.status == 'paid' %}
+            <span style="background: #28a745; color: white; padding: 8px 16px; border-radius: 12px; font-size: 0.9rem;">Bezahlt</span>
+            {% elif invoice.status == 'overdue' %}
+            <span style="background: #dc3545; color: white; padding: 8px 16px; border-radius: 12px; font-size: 0.9rem;">Überfällig</span>
+            {% elif invoice.status == 'cancelled' %}
+            <span style="background: #6c757d; color: white; padding: 8px 16px; border-radius: 12px; font-size: 0.9rem;">Storniert</span>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="grid">
+    <div class="card">
+        <h3>👤 Kunde</h3>
+        {% if invoice.customer_name %}
+        <p><strong>{{ invoice.customer_name }}</strong></p>
+        {% endif %}
+        {% if invoice.customer_address %}
+        <pre style="white-space: pre-wrap; font-family: inherit; margin-top: 10px;">{{ invoice.customer_address }}</pre>
+        {% else %}
+        <p style="color: #666;">Keine Adresse hinterlegt</p>
+        {% endif %}
+    </div>
+    
+    <div class="card">
+        <h3>📋 Informationen</h3>
+        <table>
+            <tr>
+                <td>Rechnungsnr.:</td>
+                <td><strong>{{ invoice.invoice_number }}</strong></td>
+            </tr>
+            <tr>
+                <td>Datum:</td>
+                <td>{{ invoice.invoice_date.strftime('%d.%m.%Y') if invoice.invoice_date else '-' }}</td>
+            </tr>
+            <tr>
+                <td>Fällig:</td>
+                <td>{{ invoice.due_date.strftime('%d.%m.%Y') if invoice.due_date else '-' }}</td>
+            </tr>
+            {% if invoice.sales_order %}
+            <tr>
+                <td>Auftrag:</td>
+                <td><a href="/sales-orders/{{ invoice.sales_order.id }}">#{{ invoice.sales_order.id }}</a></td>
+            </tr>
+            {% endif %}
+        </table>
+    </div>
+</div>
+
+<!-- Positionen -->
+<div class="card">
+    <h3>📦 Positionen</h3>
+    <div class="table-responsive" style="margin-top: 15px;">
+    <table>
+        <thead>
+            <tr>
+                <th>Pos</th>
+                <th>Art.-Nr.</th>
+                <th>Beschreibung</th>
+                <th style="text-align: right;">Menge</th>
+                <th style="text-align: right;">Einzelpreis</th>
+                <th style="text-align: right;">Gesamt</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in invoice.items|sort(attribute='position') %}
+            <tr>
+                <td>{{ item.position }}</td>
+                <td>
+                    {% if item.article_number %}
+                    <code style="background: #f0f0f0; padding: 2px 6px; border-radius: 4px;">{{ item.article_number }}</code>
+                    {% else %}-{% endif %}
+                </td>
+                <td>{{ item.description }}</td>
+                <td style="text-align: right;">{{ "%.2f"|format(item.quantity) }} {{ item.unit }}</td>
+                <td style="text-align: right;">{{ "%.2f"|format(item.unit_price_net) }} €</td>
+                <td style="text-align: right; font-weight: bold;">{{ "%.2f"|format(item.total_net) }} €</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot style="border-top: 2px solid var(--color-primary-dark);">
+            <tr>
+                <td colspan="5" style="text-align: right;">Nettosumme:</td>
+                <td style="text-align: right; font-weight: bold;">{{ "%.2f"|format(invoice.total_net) }} €</td>
+            </tr>
+            <tr>
+                <td colspan="5" style="text-align: right;">MwSt ({{ "%.0f"|format(invoice.vat_rate) }}%):</td>
+                <td style="text-align: right;">{{ "%.2f"|format(invoice.vat_amount) }} €</td>
+            </tr>
+            <tr style="font-size: 1.2rem;">
+                <td colspan="5" style="text-align: right;"><strong>GESAMT:</strong></td>
+                <td style="text-align: right; font-weight: bold; color: var(--color-primary-dark);">
+                    {{ "%.2f"|format(invoice.total_gross) }} €
+                </td>
+            </tr>
+        </tfoot>
+    </table>
+    </div>
+</div>
+
+{% if invoice.footer_text %}
+<div class="card">
+    <h3>📝 Fußzeile</h3>
+    <p style="white-space: pre-wrap;">{{ invoice.footer_text }}</p>
+</div>
+{% endif %}
+
+{% if invoice.notes %}
+<div class="card" style="background: var(--color-bg-hover);">
+    <h3>🗒️ Interne Notizen</h3>
+    <p>{{ invoice.notes }}</p>
+</div>
+{% endif %}
+
+<!-- Status-Änderung -->
+<div class="card">
+    <h3>Status ändern</h3>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 15px;">
+        <form method="POST" action="/invoices/{{ invoice.id }}/status" style="display: inline;">
+            <input type="hidden" name="status" value="draft">
+            <button type="submit" class="btn btn-secondary" {% if invoice.status == 'draft' %}disabled{% endif %}>
+                📝 Entwurf
+            </button>
+        </form>
+        <form method="POST" action="/invoices/{{ invoice.id }}/status" style="display: inline;">
+            <input type="hidden" name="status" value="sent">
+            <button type="submit" class="btn btn-primary" {% if invoice.status == 'sent' %}disabled{% endif %}>
+                📧 Versendet
+            </button>
+        </form>
+        <form method="POST" action="/invoices/{{ invoice.id }}/status" style="display: inline;">
+            <input type="hidden" name="status" value="paid">
+            <button type="submit" class="btn btn-success" {% if invoice.status == 'paid' %}disabled{% endif %}>
+                💰 Bezahlt
+            </button>
+        </form>
+        <form method="POST" action="/invoices/{{ invoice.id }}/status" style="display: inline;">
+            <input type="hidden" name="status" value="overdue">
+            <button type="submit" class="btn btn-danger" {% if invoice.status == 'overdue' %}disabled{% endif %}>
+                ⚠️ Überfällig
+            </button>
+        </form>
+        <form method="POST" action="/invoices/{{ invoice.id }}/status" style="display: inline;">
+            <input type="hidden" name="status" value="cancelled">
+            <button type="submit" class="btn btn-secondary" {% if invoice.status == 'cancelled' %}disabled{% endif %}>
+                🚫 Storniert
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Aktionen -->
+<div class="card">
+    <h3>Aktionen</h3>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 15px;">
+        <a href="/invoices/{{ invoice.id }}/print" target="_blank" class="btn btn-primary">
+            🖨️ Drucken / PDF
+        </a>
+        {% if invoice.status == 'draft' %}
+        <form method="POST" action="/invoices/{{ invoice.id }}/delete" style="display: inline;" onsubmit="return confirm('Rechnung wirklich löschen?');">
+            <button type="submit" class="btn btn-danger">
+                🗑️ Löschen
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="actions">
+    <a href="/invoices" class="btn btn-secondary">← Zurück zur Liste</a>
+</div>
+{% endblock %}

@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Picobellu Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>{{ title }}</h2>
+    
+    <form method="POST" action="/invoices" id="invoice-form">
+        <!-- Versteckte Felder -->
+        {% if sales_order %}
+        <input type="hidden" name="sales_order_id" value="{{ sales_order.id }}">
+        {% endif %}
+        
+        <div class="grid">
+            <div>
+                <div class="form-group">
+                    <label for="invoice_number">Rechnungsnummer *</label>
+                    <input type="text" id="invoice_number" name="invoice_number" value="{{ invoice_number }}" required
+                           style="font-family: monospace; font-weight: bold;">
+                </div>
+                
+                <div class="form-group">
+                    <label for="customer_name">Kundenname</label>
+                    <input type="text" id="customer_name" name="customer_name" 
+                           value="{{ sales_order.customer_name if sales_order else '' }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="customer_address">Rechnungsadresse</label>
+                    <textarea id="customer_address" name="customer_address" rows="4"
+                              placeholder="Name&#10;Straße&#10;PLZ Ort">{{ sales_order.customer_name if sales_order else '' }}</textarea>
+                </div>
+            </div>
+            
+            <div>
+                <div class="form-group">
+                    <label for="invoice_date">Rechnungsdatum *</label>
+                    <input type="date" id="invoice_date" name="invoice_date" value="{{ today }}" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="due_date">Fälligkeitsdatum</label>
+                    <input type="date" id="due_date" name="due_date">
+                </div>
+                
+                <div class="form-group">
+                    <label for="vat_rate">MwSt-Satz (%)</label>
+                    <select id="vat_rate" name="vat_rate" onchange="calculateTotals()">
+                        <option value="19.00" selected>19%</option>
+                        <option value="7.00">7%</option>
+                        <option value="0.00">0% (steuerfrei)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        
+        <h3 style="margin-top: 30px; color: var(--color-primary-dark);">Positionen</h3>
+        
+        <div id="positions-container">
+            <!-- Positionen werden hier dynamisch hinzugefügt -->
+        </div>
+        
+        <div style="margin-top: 15px;">
+            <button type="button" class="btn btn-secondary" onclick="addPosition()">
+                ➕ Position hinzufügen
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="addArticlePosition()" style="margin-left: 10px;">
+                📦 Artikel suchen
+            </button>
+        </div>
+        
+        <div class="form-group" style="margin-top: 20px;">
+            <label for="notes">Interne Notizen</label>
+            <textarea id="notes" name="notes" rows="2"></textarea>
+        </div>
+        
+        <div class="form-group">
+            <label for="footer_text">Fußzeile (wird auf Rechnung gedruckt)</label>
+            <textarea id="footer_text" name="footer_text" rows="2" 
+                      placeholder="Zahlungsziel: 14 Tage nach Rechnungsdatum&#10;Bitte bei Zahlung Rechnungsnummer angeben."></textarea>
+        </div>
+        
+        <!-- Summen -->
+        <div class="card" style="margin-top: 30px; background: var(--color-bg-hover); border: 2px solid var(--color-primary);">
+            <h3 style="color: var(--color-primary-dark);">📊 Summen</h3>
+            <table style="width: 100%; max-width: 400px; margin-left: auto;">
+                <tr>
+                    <td>Nettosumme:</td>
+                    <td style="text-align: right; font-weight: bold;"><span id="total-net">0.00</span> €</td>
+                </tr>
+                <tr>
+                    <td>MwSt (<span id="vat-rate-display">19</span>%):</td>
+                    <td style="text-align: right;"><span id="vat-amount">0.00</span> €</td>
+                </tr>
+                <tr style="border-top: 2px solid var(--color-primary); font-size: 1.3rem;">
+                    <td><strong>GESAMT:</strong></td>
+                    <td style="text-align: right; font-weight: bold; color: var(--color-primary-dark);">
+                        <span id="total-gross">0.00</span> €
+                    </td>
+                </tr>
+            </table>
+        </div>
+        
+        <div class="actions" style="margin-top: 30px;">
+            <button type="submit" class="btn btn-primary btn-lg">
+                💾 Rechnung speichern
+            </button>
+            <a href="/invoices" class="btn btn-secondary">Abbrechen</a>
+        </div>
+    </form>
+</div>
+
+<!-- Template für neue Position -->
+<template id="position-template">
+    <div class="position-row" style="border: 1px solid var(--color-border); border-radius: 8px; padding: 15px; margin-bottom: 15px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <strong>Position <span class="position-number">1</span></strong>
+            <button type="button" class="btn btn-danger" style="padding: 4px 8px; font-size: 0.75rem;" onclick="removePosition(this)">
+                🗑️
+            </button>
+        </div>
+        <div class="grid">
+            <div style="grid-column: span 2;">
+                <div class="form-group">
+                    <label>Beschreibung *</label>
+                    <input type="text" name="position_desc[]" class="position-desc" required 
+                           placeholder="Artikelbeschreibung">
+                    <input type="hidden" name="position_article_id[]" class="position-article-id" value="">
+                </div>
+            </div>
+            <div>
+                <div class="form-group">
+                    <label>Menge</label>
+                    <input type="number" name="position_qty[]" class="position-qty" 
+                           step="0.01" min="0" value="1" onchange="calculateTotals()">
+                </div>
+            </div>
+            <div>
+                <div class="form-group">
+                    <label>Einheit</label>
+                    <input type="text" name="position_unit[]" class="position-unit" value="Stück">
+                </div>
+            </div>
+            <div>
+                <div class="form-group">
+                    <label>Einzelpreis (netto) €</label>
+                    <input type="number" name="position_price[]" class="position-price" 
+                           step="0.01" min="0" value="0" onchange="calculateTotals()">
+                </div>
+            </div>
+            <div>
+                <div class="form-group">
+                    <label>Gesamt</label>
+                    <div class="position-total" style="padding: 10px; background: #f5f5f5; border-radius: 4px; text-align: right; font-weight: bold;">
+                        0.00 €
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Artikel-Suche Modal -->
+<div id="article-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div style="background: white; border-radius: 12px; padding: 30px; max-width: 600px; width: 90%; max-height: 80vh; overflow: auto;">
+        <h3>📦 Artikel suchen</h3>
+        <div class="form-group">
+            <input type="text" id="article-search" placeholder="Artikelnummer oder Name eingeben..." 
+                   style="width: 100%;" oninput="searchArticles(this.value)">
+        </div>
+        <div id="article-search-results" style="margin-top: 15px;">
+            <!-- Ergebnisse hier -->
+        </div>
+        <div style="margin-top: 20px; text-align: right;">
+            <button type="button" class="btn btn-secondary" onclick="closeArticleModal()">Schließen</button>
+        </div>
+    </div>
+</div>
+
+<script>
+let positionCounter = 0;
+let currentPositionRow = null;
+
+function addPosition() {
+    const template = document.getElementById('position-template');
+    const container = document.getElementById('positions-container');
+    const clone = template.content.cloneNode(true);
+    
+    positionCounter++;
+    clone.querySelector('.position-number').textContent = positionCounter;
+    
+    container.appendChild(clone);
+    calculateTotals();
+}
+
+function removePosition(button) {
+    const row = button.closest('.position-row');
+    row.remove();
+    
+    // Nummern neu zuweisen
+    const rows = document.querySelectorAll('.position-row');
+    rows.forEach((row, index) => {
+        row.querySelector('.position-number').textContent = index + 1;
+    });
+    positionCounter = rows.length;
+    
+    calculateTotals();
+}
+
+function calculateTotals() {
+    let totalNet = 0;
+    
+    document.querySelectorAll('.position-row').forEach(row => {
+        const qty = parseFloat(row.querySelector('.position-qty').value) || 0;
+        const price = parseFloat(row.querySelector('.position-price').value) || 0;
+        const rowTotal = qty * price;
+        
+        row.querySelector('.position-total').textContent = rowTotal.toFixed(2) + ' €';
+        totalNet += rowTotal;
+    });
+    
+    const vatRate = parseFloat(document.getElementById('vat_rate').value) || 0;
+    const vatAmount = totalNet * (vatRate / 100);
+    const totalGross = totalNet + vatAmount;
+    
+    document.getElementById('total-net').textContent = totalNet.toFixed(2);
+    document.getElementById('vat-rate-display').textContent = vatRate;
+    document.getElementById('vat-amount').textContent = vatAmount.toFixed(2);
+    document.getElementById('total-gross').textContent = totalGross.toFixed(2);
+}
+
+// Artikel-Suche Modal
+function addArticlePosition() {
+    document.getElementById('article-modal').style.display = 'flex';
+    document.getElementById('article-search').focus();
+}
+
+function closeArticleModal() {
+    document.getElementById('article-modal').style.display = 'none';
+    document.getElementById('article-search').value = '';
+    document.getElementById('article-search-results').innerHTML = '';
+}
+
+let searchTimeout;
+function searchArticles(query) {
+    clearTimeout(searchTimeout);
+    if (query.length < 2) {
+        document.getElementById('article-search-results').innerHTML = '';
+        return;
+    }
+    
+    searchTimeout = setTimeout(() => {
+        fetch('/api/articles/search?q=' + encodeURIComponent(query))
+            .then(r => r.json())
+            .then(data => {
+                const container = document.getElementById('article-search-results');
+                if (data.length === 0) {
+                    container.innerHTML = '<p style="color: #666; text-align: center;">Keine Artikel gefunden</p>';
+                    return;
+                }
+                
+                container.innerHTML = data.map(a => `
+                    <div onclick="selectArticle(${a.id}, '${a.article_number}', '${a.name.replace(/'/g, "\\'")}', ${a.selling_price}, '${a.unit}')" 
+                         style="padding: 12px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 8px; cursor: pointer; hover: background: #f5f5f5;">
+                        <div style="font-weight: bold;">${a.display}</div>
+                        <div style="color: #666; font-size: 0.9rem;">
+                            VK: ${a.selling_price.toFixed(2)} € | EK: ${a.purchase_price.toFixed(2)} €
+                        </div>
+                    </div>
+                `).join('');
+            });
+    }, 300);
+}
+
+function selectArticle(id, articleNumber, name, price, unit) {
+    // Neue Position hinzufügen oder bestehende füllen
+    addPosition();
+    const rows = document.querySelectorAll('.position-row');
+    const lastRow = rows[rows.length - 1];
+    
+    lastRow.querySelector('.position-desc').value = articleNumber + ' - ' + name;
+    lastRow.querySelector('.position-article-id').value = id;
+    lastRow.querySelector('.position-price').value = price.toFixed(2);
+    lastRow.querySelector('.position-unit').value = unit;
+    
+    closeArticleModal();
+    calculateTotals();
+}
+
+// Initiale Position
+addPosition();
+
+// Modal schließen bei Klick außerhalb
+document.getElementById('article-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeArticleModal();
+});
+</script>
+
+<style>
+.btn-lg {
+    padding: 12px 24px;
+    font-size: 1.1rem;
+}
+</style>
+{% endblock %}

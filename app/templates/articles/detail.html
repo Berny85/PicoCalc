@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}{{ article.article_number }} - {{ article.name }} - Picobellu Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: start; flex-wrap: wrap; gap: 15px;">
+        <div>
+            <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                <h2>{{ article.name }}</h2>
+                {% if article.is_active == 0 %}
+                <span style="background: #dc3545; color: white; padding: 4px 12px; border-radius: 12px; font-size: 0.8rem;">Inaktiv</span>
+                {% endif %}
+            </div>
+            <p style="color: var(--color-text-light); margin-top: 5px; font-size: 1.1rem;">
+                <code style="background: #f0f0f0; padding: 4px 10px; border-radius: 4px; font-size: 1.2rem;">{{ article.article_number }}</code>
+                <span style="margin-left: 15px;">{{ article.category.name if article.category else '-' }}</span>
+                {% if article.linked_product %}
+                <span style="margin-left: 15px; background: var(--color-primary); color: white; padding: 4px 10px; border-radius: 8px; font-size: 0.9rem;">
+                    🏭 Verknüpft mit: <a href="/products/{{ article.linked_product.id }}" style="color: white; text-decoration: underline;">{{ article.linked_product.name }}</a>
+                </span>
+                {% endif %}
+            </p>
+        </div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <a href="/articles/{{ article.id }}/edit" class="btn btn-primary">✏️ Bearbeiten</a>
+            <form method="POST" action="/articles/{{ article.id }}/delete" style="display: inline;" onsubmit="return confirm('Artikel wirklich löschen?');">
+                <button type="submit" class="btn btn-danger">🗑️ Löschen</button>
+            </form>
+        </div>
+    </div>
+    
+    {% if article.description %}
+    <div style="margin-top: 20px; padding: 15px; background: var(--color-bg-hover); border-radius: 8px;">
+        {{ article.description }}
+    </div>
+    {% endif %}
+</div>
+
+<div class="grid">
+    <div class="card" style="background: var(--gradient-primary); color: white;">
+        <h3 style="color: white; border-bottom-color: rgba(255,255,255,0.3);">💰 Preise</h3>
+        <table style="color: white;">
+            <tr>
+                <td>Einkaufspreis (EK):</td>
+                <td style="text-align: right;"><strong>{{ "%.2f"|format(article.purchase_price) }} €</strong></td>
+            </tr>
+            <tr>
+                <td>Verkaufspreis (VK):</td>
+                <td style="text-align: right;"><strong style="font-size: 1.3rem;">{{ "%.2f"|format(article.selling_price) }} €</strong></td>
+            </tr>
+            <tr style="border-top: 2px solid rgba(255,255,255,0.3);">
+                <td>Gewinn pro Einheit:</td>
+                <td style="text-align: right;">
+                    <strong style="font-size: 1.2rem;">{{ "%.2f"|format(article.calculate_profit()) }} €</strong>
+                </td>
+            </tr>
+            <tr>
+                <td>Marge:</td>
+                <td style="text-align: right;">
+                    {% set margin = article.calculate_margin_percent() %}
+                    <strong style="font-size: 1.2rem; color: {% if margin >= 50 %}#90EE90{% elif margin >= 30 %}#FFD700{% else %}#FFB6C1{% endif %}">
+                        {{ "%.1f"|format(margin) }}%
+                    </strong>
+                </td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="card">
+        <h3>📦 Lager</h3>
+        <table>
+            <tr>
+                <td>Aktueller Bestand:</td>
+                <td style="text-align: right;">
+                    <strong style="font-size: 1.3rem;">{{ "%.0f"|format(article.stock_quantity) }}</strong> {{ article.unit }}
+                </td>
+            </tr>
+            <tr>
+                <td>Lagerwert (EK):</td>
+                <td style="text-align: right;">
+                    <strong>{{ "%.2f"|format(article.stock_quantity * article.purchase_price) }} €</strong>
+                </td>
+            </tr>
+            <tr>
+                <td>Status:</td>
+                <td style="text-align: right;">
+                    {% if article.is_active == 1 %}
+                    <span style="color: green;">✓ Aktiv</span>
+                    {% else %}
+                    <span style="color: red;">✗ Inaktiv</span>
+                    {% endif %}
+                </td>
+            </tr>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h3>📊 Zusammenfassung</h3>
+    <div class="grid" style="margin-top: 15px;">
+        <div style="padding: 20px; background: var(--color-bg-hover); border-radius: 8px; text-align: center;">
+            <div style="font-size: 2rem; font-weight: bold; color: var(--color-primary-dark);">
+                {{ "%.2f"|format(article.selling_price - article.purchase_price) }} €
+            </div>
+            <div style="color: var(--color-text-light);">Gewinn/Einheit</div>
+        </div>
+        <div style="padding: 20px; background: var(--color-bg-hover); border-radius: 8px; text-align: center;">
+            <div style="font-size: 2rem; font-weight: bold; color: var(--color-primary-dark);">
+                {{ "%.0f"|format(article.stock_quantity) }}
+            </div>
+            <div style="color: var(--color-text-light);">{{ article.unit }} auf Lager</div>
+        </div>
+        <div style="padding: 20px; background: var(--color-bg-hover); border-radius: 8px; text-align: center;">
+            <div style="font-size: 2rem; font-weight: bold; color: var(--color-primary-dark);">
+                {{ "%.2f"|format(article.stock_quantity * article.selling_price) }} €
+            </div>
+            <div style="color: var(--color-text-light);">Verkaufswert Lager</div>
+        </div>
+    </div>
+</div>
+
+<div class="actions">
+    <a href="/articles" class="btn btn-secondary">← Zurück zur Liste</a>
+</div>
+{% endblock %}
