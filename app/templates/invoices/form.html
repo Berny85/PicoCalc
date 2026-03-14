@@ -11,6 +11,7 @@
         {% if sales_order %}
         <input type="hidden" name="sales_order_id" value="{{ sales_order.id }}">
         {% endif %}
+        <input type="hidden" id="customer_id" name="customer_id" value="{{ customer.id if customer else '' }}">
         
         <div class="grid">
             <div>
@@ -20,16 +21,36 @@
                            style="font-family: monospace; font-weight: bold;">
                 </div>
                 
+                <!-- Kundenauswahl -->
                 <div class="form-group">
-                    <label for="customer_name">Kundenname</label>
+                    <label>Kunde</label>
+                    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                        <input type="text" id="customer_display" class="form-control" readonly 
+                               style="flex: 1; background: #f5f5f5;"
+                               value="{{ customer.display_name if customer else '' }}"
+                               placeholder="Kunde auswählen...">
+                        <button type="button" class="btn btn-secondary" onclick="openCustomerSearch()">🔍 Suchen</button>
+                        <button type="button" class="btn btn-danger" onclick="clearCustomer()" id="clear_customer_btn" 
+                                {% if not customer %}style="display: none;"{% endif %}>❌</button>
+                    </div>
+                    <div style="font-size: 0.85em; color: #666;">
+                        <a href="/customers/new" target="_blank">➕ Neuen Kunden anlegen</a>
+                        <span style="margin: 0 10px;">|</span>
+                        <a href="/customers" target="_blank">📋 Kundenliste</a>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="customer_name">Kundenname (manuell)</label>
                     <input type="text" id="customer_name" name="customer_name" 
-                           value="{{ sales_order.customer_name if sales_order else '' }}">
+                           value="{{ customer.display_name if customer else (sales_order.customer_name if sales_order else '') }}">
+                    <small style="color: var(--color-text-light);">Wird automatisch gefüllt bei Kundenauswahl</small>
                 </div>
                 
                 <div class="form-group">
                     <label for="customer_address">Rechnungsadresse</label>
                     <textarea id="customer_address" name="customer_address" rows="4"
-                              placeholder="Name&#10;Straße&#10;PLZ Ort">{{ sales_order.customer_name if sales_order else '' }}</textarea>
+                              placeholder="Name&#10;Straße&#10;PLZ Ort">{{ customer.full_address if customer else (sales_order.customer_name if sales_order else '') }}</textarea>
                 </div>
             </div>
             
@@ -47,9 +68,9 @@
                 <div class="form-group">
                     <label for="vat_rate">MwSt-Satz (%)</label>
                     <select id="vat_rate" name="vat_rate" onchange="calculateTotals()">
-                        <option value="19.00" selected>19%</option>
+                        <option value="0.00" selected>0% (Kleinunternehmer §19 UStG)</option>
+                        <option value="19.00">19%</option>
                         <option value="7.00">7%</option>
-                        <option value="0.00">0% (steuerfrei)</option>
                     </select>
                 </div>
             </div>
@@ -124,28 +145,28 @@
             <div style="grid-column: span 2;">
                 <div class="form-group">
                     <label>Beschreibung *</label>
-                    <input type="text" name="position_desc[]" class="position-desc" required 
+                    <input type="text" name="position_desc" class="position-desc" required 
                            placeholder="Artikelbeschreibung">
-                    <input type="hidden" name="position_article_id[]" class="position-article-id" value="">
+                    <input type="hidden" name="position_article_id" class="position-article-id" value="">
                 </div>
             </div>
             <div>
                 <div class="form-group">
                     <label>Menge</label>
-                    <input type="number" name="position_qty[]" class="position-qty" 
+                    <input type="number" name="position_qty" class="position-qty" 
                            step="0.01" min="0" value="1" onchange="calculateTotals()">
                 </div>
             </div>
             <div>
                 <div class="form-group">
                     <label>Einheit</label>
-                    <input type="text" name="position_unit[]" class="position-unit" value="Stück">
+                    <input type="text" name="position_unit" class="position-unit" value="Stück">
                 </div>
             </div>
             <div>
                 <div class="form-group">
                     <label>Einzelpreis (netto) €</label>
-                    <input type="number" name="position_price[]" class="position-price" 
+                    <input type="number" name="position_price" class="position-price" 
                            step="0.01" min="0" value="0" onchange="calculateTotals()">
                 </div>
             </div>
@@ -174,6 +195,23 @@
         </div>
         <div style="margin-top: 20px; text-align: right;">
             <button type="button" class="btn btn-secondary" onclick="closeArticleModal()">Schließen</button>
+        </div>
+    </div>
+</div>
+
+<!-- Kunden-Suche Modal -->
+<div id="customer-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div style="background: white; border-radius: 12px; padding: 30px; max-width: 700px; width: 90%; max-height: 80vh; overflow: auto;">
+        <h3>👤 Kunde suchen</h3>
+        <div class="form-group">
+            <input type="text" id="customer-search" placeholder="Kundennummer, Name oder Firma eingeben..." 
+                   style="width: 100%;" oninput="searchCustomers(this.value)">
+        </div>
+        <div id="customer-search-results" style="margin-top: 15px;">
+            <!-- Ergebnisse hier -->
+        </div>
+        <div style="margin-top: 20px; text-align: right;">
+            <button type="button" class="btn btn-secondary" onclick="closeCustomerModal()">Schließen</button>
         </div>
     </div>
 </div>
@@ -288,12 +326,79 @@ function selectArticle(id, articleNumber, name, price, unit) {
     calculateTotals();
 }
 
+// =============================================================================
+// KUNDEN-FUNKTIONEN
+// =============================================================================
+
+function openCustomerSearch() {
+    document.getElementById('customer-modal').style.display = 'flex';
+    document.getElementById('customer-search').focus();
+}
+
+function closeCustomerModal() {
+    document.getElementById('customer-modal').style.display = 'none';
+    document.getElementById('customer-search').value = '';
+    document.getElementById('customer-search-results').innerHTML = '';
+}
+
+function searchCustomers(query) {
+    clearTimeout(searchTimeout);
+    if (query.length < 2) {
+        document.getElementById('customer-search-results').innerHTML = '';
+        return;
+    }
+    
+    searchTimeout = setTimeout(() => {
+        fetch('/api/customers/search?q=' + encodeURIComponent(query))
+            .then(r => r.json())
+            .then(data => {
+                const container = document.getElementById('customer-search-results');
+                if (data.length === 0) {
+                    container.innerHTML = '<p style="color: #666; text-align: center;">Keine Kunden gefunden</p>';
+                    return;
+                }
+                
+                container.innerHTML = data.map(c => `
+                    <div onclick="selectCustomer(${c.id}, '${c.display.replace(/'/g, "\\'")}', '${c.full_address.replace(/'/g, "\\'").replace(/\n/g, "\\n")}', '${c.first_name}', '${c.last_name}')" 
+                         style="padding: 12px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 8px; cursor: pointer; hover: background: #f5f5f5;">
+                        <div style="font-weight: bold;">${c.display}</div>
+                        <div style="color: #666; font-size: 0.9rem;">
+                            ${c.customer_number} | ${c.postal_code || ''} ${c.city || ''}
+                        </div>
+                    </div>
+                `).join('');
+            });
+    }, 300);
+}
+
+function selectCustomer(id, displayName, fullAddress, firstName, lastName) {
+    document.getElementById('customer_id').value = id;
+    document.getElementById('customer_display').value = displayName;
+    document.getElementById('customer_name').value = displayName;
+    document.getElementById('customer_address').value = fullAddress.replace(/\\n/g, '\n');
+    
+    // Clear-Button anzeigen
+    document.getElementById('clear_customer_btn').style.display = 'inline-block';
+    
+    closeCustomerModal();
+}
+
+function clearCustomer() {
+    document.getElementById('customer_id').value = '';
+    document.getElementById('customer_display').value = '';
+    document.getElementById('clear_customer_btn').style.display = 'none';
+}
+
 // Initiale Position
 addPosition();
 
 // Modal schließen bei Klick außerhalb
 document.getElementById('article-modal').addEventListener('click', function(e) {
     if (e.target === this) closeArticleModal();
+});
+
+document.getElementById('customer-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeCustomerModal();
 });
 </script>
 

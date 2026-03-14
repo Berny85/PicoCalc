@@ -155,7 +155,7 @@
 <!-- Template für neue Produktzeile -->
 <template id="product-row-template">
     <div class="product-row" style="border: 1px solid var(--color-border); border-radius: 8px; padding: 15px; margin-bottom: 15px;" data-type="product">
-        <input type="hidden" name="item_type[]" value="product">
+        <input type="hidden" name="item_type" value="product">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
             <strong>🏭 Produkt <span class="product-number">1</span></strong>
             <button type="button" class="btn btn-danger" style="padding: 4px 8px; font-size: 0.75rem;" onclick="removeProductRow(this)">
@@ -166,7 +166,7 @@
             <div>
                 <div class="form-group">
                     <label>Produkt *</label>
-                    <select name="product_id[]" class="product-select" required onchange="updateProductInfo(this)">
+                    <select name="product_id" class="product-select" required onchange="updateProductInfo(this)">
                         <option value="">-- Bitte wählen --</option>
                         {% for p in products %}
                         {% set calc = p.calculate_costs() %}
@@ -184,14 +184,14 @@
             <div>
                 <div class="form-group">
                     <label>Menge *</label>
-                    <input type="number" name="quantity[]" class="quantity-input" 
+                    <input type="number" name="quantity" class="quantity-input" 
                            step="1" min="1" value="1" required onchange="updateProductInfo(this.closest('.product-row').querySelector('.product-select'))">
                 </div>
             </div>
             <div>
                 <div class="form-group">
                     <label>VK-Preis/Einheit (€)</label>
-                    <input type="number" name="unit_price[]" class="unit-price-input" 
+                    <input type="number" name="unit_price" class="unit-price-input" 
                            step="0.01" min="0" onchange="updateTotals()">
                     <small class="price-suggestion" style="color: var(--color-text-light); display: block; margin-top: 3px;"></small>
                 </div>
@@ -199,7 +199,7 @@
             <div>
                 <div class="form-group">
                     <label>Selbstkosten/Einheit (€)</label>
-                    <input type="number" name="cost_per_unit[]" class="cost-input" 
+                    <input type="number" name="cost_per_unit" class="cost-input" 
                            step="0.01" min="0" readonly style="background: #f5f5f5;">
                 </div>
             </div>
@@ -214,8 +214,8 @@
 <!-- Template für neue Artikelzeile -->
 <template id="article-row-template">
     <div class="product-row article-row" style="border: 1px solid var(--color-primary); border-radius: 8px; padding: 15px; margin-bottom: 15px; background: rgba(102, 126, 234, 0.05);" data-type="article">
-        <input type="hidden" name="item_type[]" value="article">
-        <input type="hidden" name="product_id[]" value="">
+        <input type="hidden" name="item_type" value="article">
+        <input type="hidden" name="product_id" value="">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
             <strong>📝 Artikel <span class="product-number">1</span></strong>
             <button type="button" class="btn btn-danger" style="padding: 4px 8px; font-size: 0.75rem;" onclick="removeProductRow(this)">
@@ -227,7 +227,7 @@
                 <div class="form-group">
                     <label>Artikel *</label>
                     <div style="display: flex; gap: 10px;">
-                        <input type="hidden" name="article_id[]" class="article-id-input" required>
+                        <input type="hidden" name="article_id" class="article-id-input" required>
                         <input type="text" class="article-display-input" readonly style="flex: 1; background: #f5f5f5;" placeholder="Artikel auswählen...">
                         <button type="button" class="btn btn-secondary" onclick="openArticleSearch(this)">🔍 Suchen</button>
                     </div>
@@ -236,21 +236,21 @@
             <div>
                 <div class="form-group">
                     <label>Menge *</label>
-                    <input type="number" name="quantity[]" class="quantity-input" 
+                    <input type="number" name="quantity" class="quantity-input" 
                            step="1" min="1" value="1" required onchange="updateArticleRowTotal(this.closest('.article-row'))">
                 </div>
             </div>
             <div>
                 <div class="form-group">
                     <label>VK-Preis/Einheit (€)</label>
-                    <input type="number" name="unit_price[]" class="unit-price-input" 
+                    <input type="number" name="unit_price" class="unit-price-input" 
                            step="0.01" min="0" onchange="updateTotals()">
                 </div>
             </div>
             <div>
                 <div class="form-group">
                     <label>EK-Preis/Einheit (€)</label>
-                    <input type="number" name="cost_per_unit[]" class="cost-input" 
+                    <input type="number" name="cost_per_unit" class="cost-input" 
                            step="0.01" min="0" readonly style="background: #f5f5f5;">
                 </div>
             </div>

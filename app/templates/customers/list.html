@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Kunden - Picobellu Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="page-header">
+        <h1>👥 Kunden</h1>
+        <a href="/customers/new" class="btn btn-primary">➕ Neuer Kunde</a>
+    </div>
+    
+    <!-- Suchfeld -->
+    <div class="search-box" style="margin-bottom: 25px;">
+        <form method="GET" action="/customers" style="display: flex; gap: 10px;">
+            <input type="text" name="search" value="{{ search }}" 
+                   placeholder="Kundennummer, Name, Firma oder E-Mail suchen..."
+                   style="flex: 1; padding: 10px 15px; border: 1px solid var(--color-border); border-radius: 6px;">
+            <button type="submit" class="btn btn-secondary">🔍 Suchen</button>
+            {% if search %}
+            <a href="/customers" class="btn btn-secondary">❌ Zurücksetzen</a>
+            {% endif %}
+        </form>
+    </div>
+    
+    <!-- Kunden-Tabelle -->
+    {% if customers %}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Kunden-Nr.</th>
+                <th>Name / Firma</th>
+                <th>Adresse</th>
+                <th>Kontakt</th>
+                <th style="width: 120px;">Aktionen</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for customer in customers %}
+            <tr>
+                <td><strong>{{ customer.customer_number }}</strong></td>
+                <td>
+                    {% if customer.company_name %}
+                        <div><strong>{{ customer.company_name }}</strong></div>
+                        <div style="font-size: 0.9em; color: #666;">{{ customer.first_name }} {{ customer.last_name }}</div>
+                    {% else %}
+                        <strong>{{ customer.first_name }} {{ customer.last_name }}</strong>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if customer.postal_code or customer.city %}
+                        {{ customer.postal_code }} {{ customer.city }}
+                    {% else %}
+                        <em style="color: #999;">-</em>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if customer.email %}
+                        <div>📧 {{ customer.email }}</div>
+                    {% endif %}
+                    {% if customer.phone %}
+                        <div>📞 {{ customer.phone }}</div>
+                    {% endif %}
+                </td>
+                <td>
+                    <div class="action-buttons">
+                        <a href="/customers/{{ customer.id }}" class="btn btn-sm btn-secondary" title="Anzeigen">👁️</a>
+                        <a href="/customers/{{ customer.id }}/edit" class="btn btn-sm btn-secondary" title="Bearbeiten">✏️</a>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state" style="text-align: center; padding: 60px 20px; color: #666;">
+        <div style="font-size: 4rem; margin-bottom: 20px;">👤</div>
+        <h3>Keine Kunden gefunden</h3>
+        {% if search %}
+        <p>Keine Kunden passen zur Suche "{{ search }}".</p>
+        <a href="/customers" class="btn btn-secondary">Alle anzeigen</a>
+        {% else %}
+        <p>Legen Sie Ihren ersten Kunden an.</p>
+        <a href="/customers/new" class="btn btn-primary">Neuer Kunde</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 25px;
+    }
+    
+    .data-table th {
+        background: var(--color-bg-hover);
+        padding: 12px 15px;
+        text-align: left;
+        font-weight: 600;
+        border-bottom: 2px solid var(--color-border);
+    }
+    
+    .data-table td {
+        padding: 15px;
+        border-bottom: 1px solid var(--color-border);
+        vertical-align: top;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 5px;
+    }
+    
+    .btn-sm {
+        padding: 6px 10px;
+        font-size: 0.9rem;
+    }
+</style>
+{% endblock %}

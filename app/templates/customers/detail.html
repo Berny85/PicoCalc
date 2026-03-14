@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}{{ customer.display_name }} - Picobellu Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="page-header">
+        <div>
+            <h1>👤 {{ customer.display_name }}</h1>
+            <div style="color: #666; margin-top: 5px;">
+                Kundennummer: <strong>{{ customer.customer_number }}</strong>
+            </div>
+        </div>
+        <div class="action-buttons">
+            <a href="/customers/{{ customer.id }}/edit" class="btn btn-secondary">✏️ Bearbeiten</a>
+            <a href="/invoices/new?customer_id={{ customer.id }}" class="btn btn-primary">📝 Neue Rechnung</a>
+        </div>
+    </div>
+    
+    <div class="grid" style="margin-top: 30px;">
+        <!-- Adresse -->
+        <div class="info-box">
+            <h3>📍 Adresse</h3>
+            <div class="address-block">
+                {% if customer.company_name %}
+                    <strong>{{ customer.company_name }}</strong><br>
+                {% endif %}
+                {{ customer.first_name }} {{ customer.last_name }}<br>
+                {% if customer.address_line1 %}
+                    {{ customer.address_line1 }}<br>
+                {% endif %}
+                {% if customer.address_line2 %}
+                    {{ customer.address_line2 }}<br>
+                {% endif %}
+                {% if customer.postal_code or customer.city %}
+                    {{ customer.postal_code }} {{ customer.city }}<br>
+                {% endif %}
+                {% if customer.country and customer.country != 'Deutschland' %}
+                    {{ customer.country }}
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Kontakt -->
+        <div class="info-box">
+            <h3>📞 Kontakt</h3>
+            {% if customer.email %}
+                <div class="info-row">
+                    <span class="info-label">E-Mail:</span>
+                    <a href="mailto:{{ customer.email }}">{{ customer.email }}</a>
+                </div>
+            {% endif %}
+            {% if customer.phone %}
+                <div class="info-row">
+                    <span class="info-label">Telefon:</span>
+                    <a href="tel:{{ customer.phone }}">{{ customer.phone }}</a>
+                </div>
+            {% endif %}
+            {% if customer.vat_id %}
+                <div class="info-row">
+                    <span class="info-label">USt-IdNr.:</span>
+                    {{ customer.vat_id }}
+                </div>
+            {% endif %}
+            {% if not customer.email and not customer.phone and not customer.vat_id %}
+                <em style="color: #999;">Keine Kontaktdaten hinterlegt</em>
+            {% endif %}
+        </div>
+    </div>
+    
+    {% if customer.notes %}
+    <div class="info-box" style="margin-top: 20px;">
+        <h3>📝 Notizen</h3>
+        <p style="white-space: pre-wrap;">{{ customer.notes }}</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Rechnungen des Kunden -->
+<div class="card" style="margin-top: 25px;">
+    <h2>📄 Rechnungen</h2>
+    
+    {% if invoices %}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Rechnungsnr.</th>
+                <th>Datum</th>
+                <th>Status</th>
+                <th style="text-align: right;">Betrag</th>
+                <th style="width: 100px;">Aktion</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for invoice in invoices %}
+            <tr>
+                <td><strong>{{ invoice.invoice_number }}</strong></td>
+                <td>{{ invoice.invoice_date.strftime('%d.%m.%Y') if invoice.invoice_date else '-' }}</td>
+                <td>
+                    {% if invoice.status == 'draft' %}
+                        <span class="badge badge-draft">Entwurf</span>
+                    {% elif invoice.status == 'sent' %}
+                        <span class="badge badge-sent">Versendet</span>
+                    {% elif invoice.status == 'paid' %}
+                        <span class="badge badge-paid">Bezahlt</span>
+                    {% elif invoice.status == 'overdue' %}
+                        <span class="badge badge-overdue">Überfällig</span>
+                    {% else %}
+                        <span class="badge">{{ invoice.status }}</span>
+                    {% endif %}
+                </td>
+                <td style="text-align: right;">{{ "%.2f"|format(invoice.total_gross) }} €</td>
+                <td>
+                    <a href="/invoices/{{ invoice.id }}" class="btn btn-sm btn-secondary">Anzeigen</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state" style="text-align: center; padding: 40px; color: #666;">
+        <p>Noch keine Rechnungen für diesen Kunden.</p>
+        <a href="/invoices/new?customer_id={{ customer.id }}" class="btn btn-primary" style="margin-top: 15px;">
+            📝 Erste Rechnung erstellen
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Löschen-Button -->
+<div class="card" style="margin-top: 25px; background: #fff5f5; border-color: #ffcdd2;">
+    <h3 style="color: #d32f2f;">⚠️ Gefahrenzone</h3>
+    <p>Der Kunde wird gelöscht oder als inaktiv markiert (falls Rechnungen vorhanden).</p>
+    <form method="POST" action="/customers/{{ customer.id }}/delete" 
+          onsubmit="return confirm('Möchten Sie diesen Kunden wirklich löschen?');"
+          style="margin-top: 15px;">
+        <button type="submit" class="btn btn-danger">🗑️ Kunde löschen</button>
+    </form>
+</div>
+
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+    }
+    
+    .info-box {
+        background: var(--color-bg-hover);
+        padding: 20px;
+        border-radius: 8px;
+    }
+    
+    .info-box h3 {
+        margin-top: 0;
+        margin-bottom: 15px;
+        color: var(--color-primary-dark);
+        font-size: 1.1rem;
+    }
+    
+    .address-block {
+        line-height: 1.8;
+    }
+    
+    .info-row {
+        margin-bottom: 10px;
+    }
+    
+    .info-label {
+        display: inline-block;
+        width: 100px;
+        color: #666;
+    }
+    
+    .badge {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+    
+    .badge-draft {
+        background: #fff3cd;
+        color: #856404;
+    }
+    
+    .badge-sent {
+        background: #cce5ff;
+        color: #004085;
+    }
+    
+    .badge-paid {
+        background: #d4edda;
+        color: #155724;
+    }
+    
+    .badge-overdue {
+        background: #f8d7da;
+        color: #721c24;
+    }
+    
+    .btn-sm {
+        padding: 6px 12px;
+        font-size: 0.9rem;
+    }
+</style>
+{% endblock %}

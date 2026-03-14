@@ -11,151 +11,250 @@
         }
         
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Arial, sans-serif;
             font-size: 11pt;
-            line-height: 1.5;
+            line-height: 1.6;
             color: #333;
-            padding: 40px;
-            max-width: 800px;
+            max-width: 210mm;
+            min-height: 297mm;
             margin: 0 auto;
+            padding: 20mm;
+            background: white;
         }
         
+        /* Header-Bereich */
         .header {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 40px;
+            margin-bottom: 60px;
         }
         
-        .company-info {
-            font-size: 10pt;
-            color: #666;
+        .customer-info {
+            font-size: 11pt;
+            line-height: 1.5;
+            max-width: 250px;
         }
         
-        .company-info h1 {
-            font-size: 18pt;
-            color: #333;
-            margin-bottom: 10px;
-        }
-        
-        .invoice-meta {
+        .company-header {
             text-align: right;
         }
         
-        .invoice-meta h2 {
-            font-size: 24pt;
-            color: #667eea;
-            margin-bottom: 10px;
+        .logo {
+            font-family: 'Brush Script MT', cursive;
+            font-size: 42pt;
+            color: #333;
+            line-height: 1;
+            margin-bottom: 5px;
         }
         
-        .invoice-meta table {
+        .logo-design {
+            font-family: Arial, sans-serif;
+            font-size: 18pt;
+            font-weight: bold;
+            letter-spacing: 3px;
+            color: #333;
+            margin-bottom: 15px;
+        }
+        
+        .company-address {
             font-size: 10pt;
+            line-height: 1.5;
+            color: #555;
         }
         
-        .invoice-meta td {
+        /* Rechnungstitel-Bereich */
+        .invoice-title-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 30px;
+        }
+        
+        .invoice-title h1 {
+            font-size: 28pt;
+            font-weight: normal;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .invoice-number {
+            font-size: 12pt;
+            font-style: italic;
+            color: #555;
+        }
+        
+        .invoice-dates {
+            text-align: right;
+            font-size: 11pt;
+        }
+        
+        .invoice-dates table {
+            border-collapse: collapse;
+        }
+        
+        .invoice-dates td {
             padding: 2px 0 2px 20px;
         }
         
-        .customer-address {
-            margin-bottom: 40px;
-            min-height: 100px;
+        .invoice-dates td:first-child {
+            text-align: left;
+            padding-left: 0;
         }
         
-        .customer-address pre {
-            font-family: inherit;
-            white-space: pre-wrap;
-        }
-        
-        .positions {
+        /* Ansprache */
+        .greeting {
             margin-bottom: 30px;
+        }
+        
+        .greeting p {
+            margin-bottom: 10px;
+        }
+        
+        /* Positionstabelle */
+        .positions {
+            margin-bottom: 0;
         }
         
         .positions table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 10pt;
+            font-size: 11pt;
         }
         
         .positions th {
-            background: #667eea;
-            color: white;
-            padding: 10px;
+            background: #F5D5D5;
+            color: #333;
+            padding: 12px 15px;
             text-align: left;
-            font-weight: bold;
+            font-weight: normal;
+            border: none;
         }
         
-        .positions th:last-child,
-        .positions td:last-child {
+        .positions th:last-child {
             text-align: right;
+            font-weight: bold;
         }
         
         .positions td {
-            padding: 8px 10px;
-            border-bottom: 1px solid #ddd;
+            padding: 10px 15px;
+            border-bottom: 1px solid #eee;
+            vertical-align: top;
         }
         
-        .positions tr:nth-child(even) {
-            background: #f9f9f9;
-        }
-        
-        .totals {
-            width: 300px;
-            margin-left: auto;
-            margin-bottom: 40px;
-        }
-        
-        .totals table {
-            width: 100%;
-            font-size: 10pt;
-        }
-        
-        .totals td {
-            padding: 5px 10px;
-        }
-        
-        .totals td:last-child {
+        .positions td:nth-child(2),
+        .positions td:nth-child(3),
+        .positions td:nth-child(4) {
             text-align: right;
         }
         
-        .totals .total-row {
+        /* Gesamtsumme */
+        .total-section {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 30px;
+        }
+        
+        .total-box {
+            background: #F5D5D5;
+            padding: 15px 30px;
+            display: flex;
+            gap: 40px;
+            align-items: center;
+            min-width: 280px;
+            justify-content: space-between;
+        }
+        
+        .total-label {
+            font-size: 11pt;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .total-amount {
             font-size: 14pt;
             font-weight: bold;
-            border-top: 2px solid #667eea;
-            padding-top: 10px;
         }
         
-        .totals .total-row td {
-            padding-top: 10px;
-            color: #667eea;
+        /* Hinweise */
+        .notes {
+            margin-bottom: 30px;
+            font-size: 11pt;
         }
         
+        .notes p {
+            margin-bottom: 10px;
+        }
+        
+        /* Unterschrift */
+        .signature {
+            margin-top: 40px;
+            margin-bottom: 60px;
+        }
+        
+        .signature-text {
+            font-family: 'Brush Script MT', cursive;
+            font-size: 36pt;
+            color: #2E5090;
+            transform: rotate(-5deg);
+            display: inline-block;
+        }
+        
+        /* Fußzeile */
         .footer {
-            margin-top: 60px;
-            padding-top: 20px;
-            border-top: 1px solid #ddd;
-            font-size: 9pt;
-            color: #666;
+            background: #F5D5D5;
+            padding: 25px 30px;
+            text-align: center;
+            font-size: 10pt;
+            line-height: 1.8;
+            color: #333;
+            margin-top: auto;
         }
         
-        .footer pre {
-            font-family: inherit;
-            white-space: pre-wrap;
+        .footer-contact {
+            margin-bottom: 8px;
+        }
+        
+        .footer-bank {
+            font-size: 9pt;
+        }
+        
+        /* Druck-Buttons */
+        .no-print {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f5f5f5;
+            border-radius: 8px;
         }
         
         @media print {
             body {
-                padding: 0;
+                padding: 15mm;
             }
             
             .no-print {
                 display: none !important;
             }
+            
+            .footer {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                margin: 0 15mm;
+            }
+        }
+        
+        @page {
+            size: A4;
+            margin: 0;
         }
     </style>
 </head>
 <body>
     <!-- Druck-Button -->
-    <div class="no-print" style="text-align: center; margin-bottom: 30px; padding: 20px; background: #f5f5f5; border-radius: 8px;">
-        <button onclick="window.print()" style="padding: 12px 30px; font-size: 14pt; background: #667eea; color: white; border: none; border-radius: 6px; cursor: pointer;">
+    <div class="no-print">
+        <button onclick="window.print()" style="padding: 12px 30px; font-size: 14pt; background: #F5D5D5; color: #333; border: none; border-radius: 6px; cursor: pointer;">
             🖨️ Drucken / Als PDF speichern
         </button>
         <button onclick="window.close()" style="padding: 12px 30px; font-size: 14pt; background: #6c757d; color: white; border: none; border-radius: 6px; cursor: pointer; margin-left: 10px;">
@@ -163,112 +262,119 @@
         </button>
     </div>
 
-    <!-- Header -->
+    <!-- Header mit Kundenadresse und Firmenlogo -->
     <div class="header">
-        <div class="company-info">
-            <h1>Picobellu</h1>
-            <p>Ihr Ansprechpartner für 3D-Druck, Sticker & mehr</p>
-            <p style="margin-top: 10px;">
-                Musterstraße 123<br>
-                12345 Musterstadt<br>
-                Tel: 0123 / 456789<br>
-                E-Mail: info@picobellu.de
-            </p>
+        <div class="customer-info">
+            {% if invoice.customer_address %}
+                {{ invoice.customer_address|replace('\n', '<br>')|safe }}
+            {% elif invoice.customer_name %}
+                {{ invoice.customer_name }}
+            {% else %}
+                <em>Keine Adresse hinterlegt</em>
+            {% endif %}
         </div>
-        <div class="invoice-meta">
-            <h2>RECHNUNG</h2>
+        <div class="company-header">
+            <div class="logo">Picobellu</div>
+            <div class="logo-design">DESIGN</div>
+            <div class="company-address">
+                Tina Bernhardt<br>
+                Klostermoorweg 11<br>
+                26180 Rastede
+            </div>
+        </div>
+    </div>
+
+    <!-- Rechnungstitel und Daten -->
+    <div class="invoice-title-section">
+        <div class="invoice-title">
+            <h1>Rechnung</h1>
+            <div class="invoice-number">Rechnungsnummer {{ invoice.invoice_number }}</div>
+        </div>
+        <div class="invoice-dates">
             <table>
                 <tr>
-                    <td>Rechnungsnummer:</td>
-                    <td><strong>{{ invoice.invoice_number }}</strong></td>
-                </tr>
-                <tr>
-                    <td>Rechnungsdatum:</td>
+                    <td>Rechnungsdatum</td>
                     <td>{{ invoice.invoice_date.strftime('%d.%m.%Y') if invoice.invoice_date else '-' }}</td>
                 </tr>
                 <tr>
-                    <td>Fälligkeitsdatum:</td>
-                    <td>{{ invoice.due_date.strftime('%d.%m.%Y') if invoice.due_date else '-' }}</td>
+                    <td>Lieferdatum</td>
+                    <td>{{ invoice.invoice_date.strftime('%d.%m.%Y') if invoice.invoice_date else '-' }}</td>
                 </tr>
             </table>
         </div>
     </div>
 
-    <!-- Kundenadresse -->
-    <div class="customer-address">
-        <strong>Rechnungsempfänger:</strong><br><br>
-        {% if invoice.customer_name or invoice.customer_address %}
-        <pre>{% if invoice.customer_name %}{{ invoice.customer_name }}{% endif %}{% if invoice.customer_address %}
-
-{{ invoice.customer_address }}{% endif %}</pre>
+    <!-- Ansprache -->
+    <div class="greeting">
+        {% if invoice.customer_name %}
+            {% set first_name = invoice.customer_name.split()[1] if invoice.customer_name.split()|length > 1 else invoice.customer_name %}
+            <p>Sehr geehrte/r {{ first_name }},</p>
         {% else %}
-        <em>Keine Adresse hinterlegt</em>
+            <p>Sehr geehrte Damen und Herren,</p>
         {% endif %}
+        <p>anbei sende ich Ihnen die Rechnung für die erbrachten Leistungen im vereinbarten Zeitraum.</p>
     </div>
 
-    <!-- Positionen -->
+    <!-- Positionstabelle -->
     <div class="positions">
         <table>
             <thead>
                 <tr>
-                    <th style="width: 50px;">Pos</th>
-                    <th style="width: 100px;">Art.-Nr.</th>
-                    <th>Beschreibung</th>
-                    <th style="width: 80px; text-align: right;">Menge</th>
-                    <th style="width: 100px; text-align: right;">Einzelpreis</th>
-                    <th style="width: 100px; text-align: right;">Gesamt</th>
+                    <th style="width: 45%;">Produkt</th>
+                    <th style="width: 15%; text-align: center;">Stück</th>
+                    <th style="width: 20%;">Einzelpreis</th>
+                    <th style="width: 20%;">Summe</th>
                 </tr>
             </thead>
             <tbody>
                 {% for item in invoice.items|sort(attribute='position') %}
                 <tr>
-                    <td>{{ item.position }}</td>
-                    <td>{{ item.article_number or '-' }}</td>
                     <td>{{ item.description }}</td>
-                    <td style="text-align: right;">{{ "%.2f"|format(item.quantity) }} {{ item.unit }}</td>
-                    <td style="text-align: right;">{{ "%.2f"|format(item.unit_price_net) }} €</td>
-                    <td style="text-align: right;">{{ "%.2f"|format(item.total_net) }} €</td>
+                    <td style="text-align: center;">{{ "%g"|format(item.quantity|float) }}</td>
+                    <td>{{ "%.2f"|format(item.unit_price_net)|replace('.', ',') }} €</td>
+                    <td style="font-weight: 500;">{{ "%.2f"|format(item.total_net)|replace('.', ',') }} €</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 
-    <!-- Summen -->
-    <div class="totals">
-        <table>
-            <tr>
-                <td>Nettosumme:</td>
-                <td>{{ "%.2f"|format(invoice.total_net) }} €</td>
-            </tr>
-            <tr>
-                <td>zzgl. MwSt ({{ "%.0f"|format(invoice.vat_rate) }}%):</td>
-                <td>{{ "%.2f"|format(invoice.vat_amount) }} €</td>
-            </tr>
-            <tr class="total-row">
-                <td>Gesamtsumme:</td>
-                <td>{{ "%.2f"|format(invoice.total_gross) }} €</td>
-            </tr>
-        </table>
+    <!-- Gesamtsumme -->
+    <div class="total-section">
+        <div class="total-box">
+            <span class="total-label">GESAMT</span>
+            <span class="total-amount">{{ "%.2f"|format(invoice.total_gross)|replace('.', ',') }} €</span>
+        </div>
+    </div>
+
+    <!-- Hinweise -->
+    <div class="notes">
+        {% if invoice.vat_rate == 0 %}
+        <p>Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.</p>
+        {% endif %}
+        
+        {% if invoice.footer_text %}
+        <p>{{ invoice.footer_text|replace('\n', '<br>')|safe }}</p>
+        {% else %}
+        <p>Bitte überweisen Sie den Rechnungsbetrag innerhalb der nächsten 14 Tage auf das unten genannte Konto.</p>
+        {% endif %}
+        
+        <p>Vielen Dank für Ihren Auftrag!</p>
+    </div>
+
+    <!-- Unterschrift -->
+    <div class="signature">
+        <span class="signature-text">Bernhardt</span>
     </div>
 
     <!-- Fußzeile -->
     <div class="footer">
-        {% if invoice.footer_text %}
-        <pre>{{ invoice.footer_text }}</pre>
-        <br><br>
-        {% endif %}
-        
-        <p style="text-align: center;">
-            Vielen Dank für Ihr Vertrauen!<br><br>
-            
-            <strong>Bankverbindung:</strong><br>
-            IBAN: DE12 3456 7890 1234 5678 90<br>
-            BIC: ABCDEFGHXXX<br>
-            Bank: Musterbank<br><br>
-            
-            USt-IdNr.: DE123456789
-        </p>
+        <div class="footer-contact">
+            (0152) 37709958 / info@picobellu.de
+        </div>
+        <div class="footer-bank">
+            Revolut Bank UAB - IBAN DE61 1001 0178 4978 2800 27 - BIC REVODEB2
+        </div>
     </div>
 </body>
 </html>

@@ -7,7 +7,7 @@ from sqlalchemy.exc import OperationalError
 from database import engine, get_db, SessionLocal
 from models import (Base, Product, Material, MaterialType, Machine, Feedback, Idea, 
                      ConvertedFile, ProductImage, ProductComponent, SalesOrder, SalesOrderItem, 
-                     Article, ArticleCategory, Invoice, InvoiceItem, STROM_PREIS_KWH)
+                     Article, ArticleCategory, Invoice, InvoiceItem, Customer, STROM_PREIS_KWH)
 from datetime import datetime
 import time
 import os
@@ -2349,12 +2349,18 @@ async def list_invoices(
 async def new_invoice_form(
     request: Request,
     sales_order_id: int = None,
+    customer_id: int = None,
     db: Session = Depends(get_db)
 ):
     """Formular für neue Rechnung"""
     sales_order = None
     if sales_order_id:
         sales_order = db.query(SalesOrder).filter(SalesOrder.id == sales_order_id).first()
+    
+    # Lade Kunde wenn übergeben
+    customer = None
+    if customer_id:
+        customer = db.query(Customer).filter(Customer.id == customer_id).first()
     
     # Generiere Vorschau der Rechnungsnummer
     invoice_number_preview = generate_invoice_number(db)
@@ -2366,6 +2372,7 @@ async def new_invoice_form(
         "request": request,
         "invoice": None,
         "sales_order": sales_order,
+        "customer": customer,
         "invoice_number": invoice_number_preview,
         "articles": articles,
         "today": datetime.now().strftime("%Y-%m-%d"),
@@ -2377,6 +2384,7 @@ async def new_invoice_form(
 async def create_invoice(
     request: Request,
     invoice_number: str = Form(...),
+    customer_id: int = Form(None),
     customer_name: str = Form(""),
     customer_address: str = Form(""),
     invoice_date: str = Form(...),
@@ -2395,10 +2403,18 @@ async def create_invoice(
 ):
     """Neue Rechnung erstellen"""
     
+    # Wenn Kunde ausgewählt wurde, Daten aus Kundenstamm übernehmen
+    if customer_id:
+        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        if customer:
+            customer_name = customer.display_name
+            customer_address = customer.full_address
+    
     # Rechnung erstellen
     invoice = Invoice(
         invoice_number=invoice_number,
         sales_order_id=sales_order_id,
+        customer_id=customer_id,
         customer_name=customer_name if customer_name else None,
         customer_address=customer_address if customer_address else None,
         invoice_date=datetime.strptime(invoice_date, "%Y-%m-%d"),
@@ -2513,10 +2529,233 @@ async def delete_invoice(invoice_id: int, db: Session = Depends(get_db)):
     if invoice.status != "draft":
         raise HTTPException(status_code=400, detail="Nur Entwürfe können gelöscht werden")
     
+    # Zuerst alle Positionen löschen
+    db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice_id).delete()
+    
+    # Dann die Rechnung löschen
     db.delete(invoice)
     db.commit()
     
     return RedirectResponse(url="/invoices", status_code=303)
+
+
+# =============================================================================
+# KUNDEN-VERWALTUNG
+# =============================================================================
+
+def generate_customer_number(db: Session) -> str:
+    """Generiert die nächste Kundennummer (K-0001, K-0002, ...)"""
+    last_customer = db.query(Customer).order_by(Customer.id.desc()).first()
+    next_num = 1
+    if last_customer and last_customer.customer_number:
+        # Versuche Nummer aus letzter Kundennummer zu extrahieren
+        try:
+            parts = last_customer.customer_number.split('-')
+            if len(parts) == 2 and parts[1].isdigit():
+                next_num = int(parts[1]) + 1
+        except:
+            pass
+    return f"K-{next_num:04d}"
+
+@app.get("/customers", response_class=HTMLResponse)
+async def list_customers(request: Request, search: str = "", db: Session = Depends(get_db)):
+    """Kundenliste mit Suche"""
+    query = db.query(Customer).filter(Customer.is_active == 1)
+    
+    if search:
+        search_filter = (
+            Customer.customer_number.ilike(f"%{search}%") |
+            Customer.company_name.ilike(f"%{search}%") |
+            Customer.first_name.ilike(f"%{search}%") |
+            Customer.last_name.ilike(f"%{search}%") |
+            Customer.email.ilike(f"%{search}%")
+        )
+        query = query.filter(search_filter)
+    
+    customers = query.order_by(Customer.last_name, Customer.first_name).all()
+    
+    return templates.TemplateResponse("customers/list.html", {
+        "request": request,
+        "customers": customers,
+        "search": search
+    })
+
+@app.get("/customers/new", response_class=HTMLResponse)
+async def new_customer_form(request: Request, db: Session = Depends(get_db)):
+    """Formular für neuen Kunden"""
+    customer_number = generate_customer_number(db)
+    
+    return templates.TemplateResponse("customers/form.html", {
+        "request": request,
+        "customer": None,
+        "customer_number": customer_number,
+        "title": "Neuer Kunde"
+    })
+
+@app.post("/customers")
+async def create_customer(
+    request: Request,
+    customer_number: str = Form(...),
+    company_name: str = Form(""),
+    first_name: str = Form(...),
+    last_name: str = Form(...),
+    address_line1: str = Form(""),
+    address_line2: str = Form(""),
+    postal_code: str = Form(""),
+    city: str = Form(""),
+    country: str = Form("Deutschland"),
+    email: str = Form(""),
+    phone: str = Form(""),
+    vat_id: str = Form(""),
+    notes: str = Form(""),
+    db: Session = Depends(get_db)
+):
+    """Neuen Kunden anlegen"""
+    customer = Customer(
+        customer_number=customer_number,
+        company_name=company_name if company_name else None,
+        first_name=first_name,
+        last_name=last_name,
+        address_line1=address_line1 if address_line1 else None,
+        address_line2=address_line2 if address_line2 else None,
+        postal_code=postal_code if postal_code else None,
+        city=city if city else None,
+        country=country,
+        email=email if email else None,
+        phone=phone if phone else None,
+        vat_id=vat_id if vat_id else None,
+        notes=notes if notes else None,
+        is_active=1
+    )
+    
+    db.add(customer)
+    db.commit()
+    db.refresh(customer)
+    
+    return RedirectResponse(url=f"/customers/{customer.id}", status_code=303)
+
+@app.get("/customers/{customer_id}", response_class=HTMLResponse)
+async def view_customer(customer_id: int, request: Request, db: Session = Depends(get_db)):
+    """Kunden-Detailansicht"""
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Kunde nicht gefunden")
+    
+    # Rechnungen des Kunden laden
+    invoices = db.query(Invoice).filter(
+        Invoice.customer_id == customer_id
+    ).order_by(Invoice.invoice_date.desc()).all()
+    
+    return templates.TemplateResponse("customers/detail.html", {
+        "request": request,
+        "customer": customer,
+        "invoices": invoices
+    })
+
+@app.get("/customers/{customer_id}/edit", response_class=HTMLResponse)
+async def edit_customer_form(customer_id: int, request: Request, db: Session = Depends(get_db)):
+    """Formular zum Bearbeiten eines Kunden"""
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Kunde nicht gefunden")
+    
+    return templates.TemplateResponse("customers/form.html", {
+        "request": request,
+        "customer": customer,
+        "customer_number": customer.customer_number,
+        "title": "Kunde bearbeiten"
+    })
+
+@app.post("/customers/{customer_id}")
+async def update_customer(
+    customer_id: int,
+    request: Request,
+    company_name: str = Form(""),
+    first_name: str = Form(...),
+    last_name: str = Form(...),
+    address_line1: str = Form(""),
+    address_line2: str = Form(""),
+    postal_code: str = Form(""),
+    city: str = Form(""),
+    country: str = Form("Deutschland"),
+    email: str = Form(""),
+    phone: str = Form(""),
+    vat_id: str = Form(""),
+    notes: str = Form(""),
+    db: Session = Depends(get_db)
+):
+    """Kunden aktualisieren"""
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Kunde nicht gefunden")
+    
+    customer.company_name = company_name if company_name else None
+    customer.first_name = first_name
+    customer.last_name = last_name
+    customer.address_line1 = address_line1 if address_line1 else None
+    customer.address_line2 = address_line2 if address_line2 else None
+    customer.postal_code = postal_code if postal_code else None
+    customer.city = city if city else None
+    customer.country = country
+    customer.email = email if email else None
+    customer.phone = phone if phone else None
+    customer.vat_id = vat_id if vat_id else None
+    customer.notes = notes if notes else None
+    
+    db.commit()
+    
+    return RedirectResponse(url=f"/customers/{customer_id}", status_code=303)
+
+@app.post("/customers/{customer_id}/delete")
+async def delete_customer(customer_id: int, db: Session = Depends(get_db)):
+    """Kunden als inaktiv markieren (Soft Delete)"""
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Kunde nicht gefunden")
+    
+    # Prüfe ob Kunde Rechnungen hat
+    invoice_count = db.query(Invoice).filter(Invoice.customer_id == customer_id).count()
+    if invoice_count > 0:
+        # Soft Delete: Nur als inaktiv markieren
+        customer.is_active = 0
+        db.commit()
+    else:
+        # Hard Delete: Kunden ohne Rechnungen komplett löschen
+        db.delete(customer)
+        db.commit()
+    
+    return RedirectResponse(url="/customers", status_code=303)
+
+@app.get("/api/customers/search")
+async def search_customers(q: str = "", db: Session = Depends(get_db)):
+    """AJAX API für Kundensuche (für Rechnungsformular)"""
+    if len(q) < 2:
+        return []
+    
+    customers = db.query(Customer).filter(
+        Customer.is_active == 1
+    ).filter(
+        (Customer.customer_number.ilike(f"%{q}%")) |
+        (Customer.company_name.ilike(f"%{q}%")) |
+        (Customer.first_name.ilike(f"%{q}%")) |
+        (Customer.last_name.ilike(f"%{q}%"))
+    ).limit(10).all()
+    
+    return [
+        {
+            "id": c.id,
+            "customer_number": c.customer_number,
+            "display": f"{c.customer_number} - {c.display_name}",
+            "company_name": c.company_name,
+            "first_name": c.first_name,
+            "last_name": c.last_name,
+            "full_address": c.full_address,
+            "email": c.email,
+            "phone": c.phone,
+            "vat_id": c.vat_id
+        }
+        for c in customers
+    ]
 
 
 # ========================================# Initialisiere Standarddaten

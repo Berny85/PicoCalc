@@ -807,6 +807,79 @@ class Article(Base):
 
 
 # =============================================================================
+# KUNDEN-VERWALTUNG
+# =============================================================================
+
+class Customer(Base):
+    """Kundenstamm"""
+    __tablename__ = "customers"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Kundennummer (eindeutig, automatisch generiert)
+    customer_number = Column(String(50), nullable=False, unique=True, index=True)
+    
+    # Firmendaten
+    company_name = Column(String(255), nullable=True)
+    
+    # Ansprechpartner
+    first_name = Column(String(100), nullable=True)
+    last_name = Column(String(100), nullable=False)
+    
+    # Adresse
+    address_line1 = Column(String(255), nullable=True)  # Straße + Nr
+    address_line2 = Column(String(255), nullable=True)  # Zusatz (Etage, etc.)
+    postal_code = Column(String(20), nullable=True)
+    city = Column(String(100), nullable=True)
+    country = Column(String(100), nullable=True, default="Deutschland")
+    
+    # Kontakt
+    email = Column(String(255), nullable=True)
+    phone = Column(String(50), nullable=True)
+    
+    # Geschäftsdaten
+    vat_id = Column(String(50), nullable=True)  # USt-IdNr.
+    
+    # Notizen
+    notes = Column(Text, nullable=True)
+    
+    # Status
+    is_active = Column(Integer, default=1)  # 1 = aktiv, 0 = inaktiv
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Beziehungen
+    invoices = relationship("Invoice", back_populates="customer")
+    
+    def __repr__(self):
+        return f"Customer({self.customer_number}: {self.display_name})"
+    
+    @property
+    def display_name(self):
+        """Anzeigename für Dropdowns"""
+        if self.company_name:
+            return f"{self.company_name} ({self.first_name} {self.last_name})"
+        return f"{self.first_name} {self.last_name}".strip()
+    
+    @property
+    def full_address(self):
+        """Komplette Adresse als Text"""
+        lines = []
+        if self.company_name:
+            lines.append(self.company_name)
+        lines.append(f"{self.first_name} {self.last_name}".strip())
+        lines.append(self.address_line1 or "")
+        if self.address_line2:
+            lines.append(self.address_line2)
+        lines.append(f"{self.postal_code or ''} {self.city or ''}".strip())
+        if self.country and self.country != "Deutschland":
+            lines.append(self.country)
+        return "\n".join(filter(None, lines))
+
+
+# =============================================================================
 # RECHNUNGS-VERWALTUNG
 # =============================================================================
 
@@ -822,7 +895,10 @@ class Invoice(Base):
     # Verknüpfung zu Verkaufsauftrag (optional)
     sales_order_id = Column(Integer, ForeignKey("sales_orders.id"), nullable=True)
     
-    # Kundendaten
+    # Verknüpfung zum Kunden (optional für Abwärtskompatibilität)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
+    
+    # Kundendaten (Cache für den Fall dass Kunde gelöscht wird)
     customer_name = Column(String(255), nullable=True)
     customer_address = Column(Text, nullable=True)  # Rechnungsadresse
     
@@ -851,6 +927,7 @@ class Invoice(Base):
     
     # Beziehungen
     sales_order = relationship("SalesOrder", backref="invoices")
+    customer = relationship("Customer", back_populates="invoices")
     
     def __repr__(self):
         return f"Invoice({self.invoice_number}: {self.customer_name or 'Kein Kunde'})"
