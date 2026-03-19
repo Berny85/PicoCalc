@@ -339,6 +339,26 @@
         </table>
     </div>
 
+    <!-- Zwischensummen -->
+    <div style="display: flex; justify-content: flex-end; margin-bottom: 10px; font-size: 10pt; color: #555;">
+        <table style="text-align: right;">
+            <tr>
+                <td style="padding: 2px 15px;">Nettosumme:</td>
+                <td style="padding: 2px 0;">{{ "%.2f"|format(invoice.total_net)|replace('.', ',') }} €</td>
+            </tr>
+            {% if invoice.discount_percent > 0 %}
+            <tr style="color: #dc3545;">
+                <td style="padding: 2px 15px;">Rabatt ({{ "%.0f"|format(invoice.discount_percent) }}%):</td>
+                <td style="padding: 2px 0;">-{{ "%.2f"|format(invoice.discount_amount)|replace('.', ',') }} €</td>
+            </tr>
+            {% endif %}
+            <tr>
+                <td style="padding: 2px 15px;">MwSt ({{ "%.0f"|format(invoice.vat_rate) }}%):</td>
+                <td style="padding: 2px 0;">{{ "%.2f"|format(invoice.vat_amount)|replace('.', ',') }} €</td>
+            </tr>
+        </table>
+    </div>
+
     <!-- Gesamtsumme -->
     <div class="total-section">
         <div class="total-box">

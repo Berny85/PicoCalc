@@ -73,6 +73,23 @@
                         <option value="7.00">7%</option>
                     </select>
                 </div>
+                
+                <div class="form-group">
+                    <label for="discount_percent">Rabatt (%)</label>
+                    <select id="discount_percent" name="discount_percent" onchange="calculateTotals()">
+                        <option value="0.00" selected>0%</option>
+                        <option value="5.00">5%</option>
+                        <option value="10.00">10%</option>
+                        <option value="15.00">15%</option>
+                        <option value="20.00">20%</option>
+                        <option value="25.00">25%</option>
+                        <option value="30.00">30%</option>
+                        <option value="35.00">35%</option>
+                        <option value="40.00">40%</option>
+                        <option value="45.00">45%</option>
+                        <option value="50.00">50%</option>
+                    </select>
+                </div>
             </div>
         </div>
         
@@ -109,6 +126,14 @@
                 <tr>
                     <td>Nettosumme:</td>
                     <td style="text-align: right; font-weight: bold;"><span id="total-net">0.00</span> €</td>
+                </tr>
+                <tr id="discount-row" style="color: #dc3545; display: none;">
+                    <td>Rabatt (<span id="discount-display">0</span>%):</td>
+                    <td style="text-align: right;">-<span id="discount-amount">0.00</span> €</td>
+                </tr>
+                <tr id="net-after-discount-row" style="display: none;">
+                    <td>Netto nach Rabatt:</td>
+                    <td style="text-align: right; font-weight: bold;"><span id="net-after-discount">0.00</span> €</td>
                 </tr>
                 <tr>
                     <td>MwSt (<span id="vat-rate-display">19</span>%):</td>
@@ -259,13 +284,35 @@ function calculateTotals() {
     });
     
     const vatRate = parseFloat(document.getElementById('vat_rate').value) || 0;
-    const vatAmount = totalNet * (vatRate / 100);
-    const totalGross = totalNet + vatAmount;
+    const discountPercent = parseFloat(document.getElementById('discount_percent').value) || 0;
     
+    // Rabatt berechnen
+    const discountAmount = totalNet * (discountPercent / 100);
+    const netAfterDiscount = totalNet - discountAmount;
+    
+    // MwSt auf den Betrag nach Rabatt
+    const vatAmount = netAfterDiscount * (vatRate / 100);
+    const totalGross = netAfterDiscount + vatAmount;
+    
+    // Anzeige aktualisieren
     document.getElementById('total-net').textContent = totalNet.toFixed(2);
     document.getElementById('vat-rate-display').textContent = vatRate;
     document.getElementById('vat-amount').textContent = vatAmount.toFixed(2);
     document.getElementById('total-gross').textContent = totalGross.toFixed(2);
+    
+    // Rabatt-Anzeige
+    document.getElementById('discount-display').textContent = discountPercent;
+    document.getElementById('discount-amount').textContent = discountAmount.toFixed(2);
+    document.getElementById('net-after-discount').textContent = netAfterDiscount.toFixed(2);
+    
+    // Rabatt-Zeilen ein-/ausblenden
+    if (discountPercent > 0) {
+        document.getElementById('discount-row').style.display = 'table-row';
+        document.getElementById('net-after-discount-row').style.display = 'table-row';
+    } else {
+        document.getElementById('discount-row').style.display = 'none';
+        document.getElementById('net-after-discount-row').style.display = 'none';
+    }
 }
 
 // Artikel-Suche Modal

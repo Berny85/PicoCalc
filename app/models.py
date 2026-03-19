@@ -910,10 +910,12 @@ class Invoice(Base):
     status = Column(String(20), default="draft")  # 'draft', 'sent', 'paid', 'overdue', 'cancelled'
     
     # Beträge
-    total_net = Column(Numeric(10, 2), default=0)  # Gesamt netto
+    total_net = Column(Numeric(10, 2), default=0)  # Gesamt netto (vor Rabatt)
+    discount_percent = Column(Numeric(5, 2), default=0)  # Rabatt in % (Standard: 0, in 5er-Schritten)
+    discount_amount = Column(Numeric(10, 2), default=0)  # Rabatt-Betrag
     vat_rate = Column(Numeric(5, 2), default=19.00)  # MwSt-Satz (Standard: 19%)
     vat_amount = Column(Numeric(10, 2), default=0)  # MwSt-Betrag
-    total_gross = Column(Numeric(10, 2), default=0)  # Gesamt brutto
+    total_gross = Column(Numeric(10, 2), default=0)  # Gesamt brutto (nach Rabatt)
     
     # Notizen
     notes = Column(Text, nullable=True)  # Interne Notizen
@@ -933,17 +935,27 @@ class Invoice(Base):
         return f"Invoice({self.invoice_number}: {self.customer_name or 'Kein Kunde'})"
     
     def calculate_totals(self):
-        """Berechnet alle Summen basierend auf den Positionen"""
+        """Berechnet alle Summen basierend auf den Positionen (inkl. Rabatt)"""
         total_net = sum(item.total_net for item in self.items)
-        vat_amount = total_net * (float(self.vat_rate) / 100)
-        total_gross = total_net + vat_amount
+        
+        # Rabatt berechnen
+        discount_amount = total_net * (float(self.discount_percent) / 100)
+        net_after_discount = total_net - discount_amount
+        
+        # MwSt auf den Betrag nach Rabatt
+        vat_amount = net_after_discount * (float(self.vat_rate) / 100)
+        total_gross = net_after_discount + vat_amount
         
         self.total_net = round(total_net, 2)
+        self.discount_amount = round(discount_amount, 2)
         self.vat_amount = round(vat_amount, 2)
         self.total_gross = round(total_gross, 2)
         
         return {
             'total_net': self.total_net,
+            'discount_percent': self.discount_percent,
+            'discount_amount': self.discount_amount,
+            'net_after_discount': round(net_after_discount, 2),
             'vat_amount': self.vat_amount,
             'total_gross': self.total_gross
         }

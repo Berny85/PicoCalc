@@ -2390,6 +2390,7 @@ async def create_invoice(
     invoice_date: str = Form(...),
     due_date: str = Form(""),
     vat_rate: str = Form("19.00"),
+    discount_percent: str = Form("0.00"),
     notes: str = Form(""),
     footer_text: str = Form(""),
     sales_order_id: int = Form(None),
@@ -2420,6 +2421,7 @@ async def create_invoice(
         invoice_date=datetime.strptime(invoice_date, "%Y-%m-%d"),
         due_date=datetime.strptime(due_date, "%Y-%m-%d") if due_date else None,
         vat_rate=parse_decimal(vat_rate),
+        discount_percent=parse_decimal(discount_percent),
         notes=notes if notes else None,
         footer_text=footer_text if footer_text else None,
         status="draft"
@@ -2459,10 +2461,12 @@ async def create_invoice(
             db.add(item)
             total_net += item_total
     
-    # Summen berechnen
+    # Summen berechnen (mit Rabatt)
     invoice.total_net = total_net
-    invoice.vat_amount = total_net * (float(invoice.vat_rate) / 100)
-    invoice.total_gross = invoice.total_net + invoice.vat_amount
+    invoice.discount_amount = total_net * (float(invoice.discount_percent) / 100)
+    net_after_discount = total_net - float(invoice.discount_amount)
+    invoice.vat_amount = net_after_discount * (float(invoice.vat_rate) / 100)
+    invoice.total_gross = net_after_discount + float(invoice.vat_amount)
     
     db.commit()
     db.refresh(invoice)

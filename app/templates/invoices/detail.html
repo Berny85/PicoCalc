@@ -104,6 +104,16 @@
                 <td colspan="5" style="text-align: right;">Nettosumme:</td>
                 <td style="text-align: right; font-weight: bold;">{{ "%.2f"|format(invoice.total_net) }} €</td>
             </tr>
+            {% if invoice.discount_percent > 0 %}
+            <tr style="color: #dc3545;">
+                <td colspan="5" style="text-align: right;">Rabatt ({{ "%.0f"|format(invoice.discount_percent) }}%):</td>
+                <td style="text-align: right;">-{{ "%.2f"|format(invoice.discount_amount) }} €</td>
+            </tr>
+            <tr>
+                <td colspan="5" style="text-align: right;">Netto nach Rabatt:</td>
+                <td style="text-align: right; font-weight: bold;">{{ "%.2f"|format(invoice.total_net - invoice.discount_amount) }} €</td>
+            </tr>
+            {% endif %}
             <tr>
                 <td colspan="5" style="text-align: right;">MwSt ({{ "%.0f"|format(invoice.vat_rate) }}%):</td>
                 <td style="text-align: right;">{{ "%.2f"|format(invoice.vat_amount) }} €</td>
