@@ -2525,9 +2525,9 @@ async def update_invoice_status(
 
 @app.post("/invoices/{invoice_id}/status-htmx", response_class=HTMLResponse)
 async def update_invoice_status_htmx(
+    request: Request,
     invoice_id: int,
     status: str = Form(...),
-    request: Request,
     db: Session = Depends(get_db)
 ):
     """Status der Rechnung aktualisieren (HTMX - gibt nur das <td> zurück)"""
