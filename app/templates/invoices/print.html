@@ -346,7 +346,7 @@
                 <td style="padding: 2px 15px;">Nettosumme:</td>
                 <td style="padding: 2px 0;">{{ "%.2f"|format(invoice.total_net)|replace('.', ',') }} €</td>
             </tr>
-            {% if invoice.discount_percent > 0 %}
+            {% if invoice.discount_percent and invoice.discount_percent > 0 %}
             <tr style="color: #dc3545;">
                 <td style="padding: 2px 15px;">Rabatt ({{ "%.0f"|format(invoice.discount_percent) }}%):</td>
                 <td style="padding: 2px 0;">-{{ "%.2f"|format(invoice.discount_amount)|replace('.', ',') }} €</td>
