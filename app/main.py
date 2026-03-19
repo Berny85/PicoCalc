@@ -2523,6 +2523,34 @@ async def update_invoice_status(
     return RedirectResponse(url=f"/invoices/{invoice.id}", status_code=303)
 
 
+@app.post("/invoices/{invoice_id}/status-htmx", response_class=HTMLResponse)
+async def update_invoice_status_htmx(
+    invoice_id: int,
+    status: str = Form(...),
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Status der Rechnung aktualisieren (HTMX - gibt nur das <td> zurück)"""
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Rechnung nicht gefunden")
+    
+    invoice.status = status
+    
+    if status == "sent":
+        invoice.sent_at = datetime.utcnow()
+    elif status == "paid":
+        invoice.paid_at = datetime.utcnow()
+    
+    db.commit()
+    
+    # Gib nur das <td> Element zurück für HTMX
+    return templates.TemplateResponse("invoices/partials/status_dropdown.html", {
+        "request": request,
+        "invoice": invoice
+    })
+
+
 @app.post("/invoices/{invoice_id}/delete")
 async def delete_invoice(invoice_id: int, db: Session = Depends(get_db)):
     """Rechnung löschen (nur wenn Status 'draft')"""

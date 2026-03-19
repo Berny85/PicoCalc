@@ -1,0 +1,15 @@
+<td>
+    <select name="status" 
+            hx-post="/invoices/{{ invoice.id }}/status-htmx"
+            hx-target="closest td"
+            hx-swap="outerHTML"
+            class="status-dropdown"
+            data-status="{{ invoice.status }}"
+            style="padding: 6px 10px; border-radius: 8px; border: 2px solid; cursor: pointer; font-size: 0.85rem; min-width: 140px;">
+        <option value="draft" {% if invoice.status == 'draft' %}selected{% endif %}>📝 Entwurf</option>
+        <option value="sent" {% if invoice.status == 'sent' %}selected{% endif %}>📧 Versendet</option>
+        <option value="paid" {% if invoice.status == 'paid' %}selected{% endif %}>💰 Bezahlt</option>
+        <option value="overdue" {% if invoice.status == 'overdue' %}selected{% endif %}>⚠️ Überfällig</option>
+        <option value="cancelled" {% if invoice.status == 'cancelled' %}selected{% endif %}>🚫 Storniert</option>
+    </select>
+</td>

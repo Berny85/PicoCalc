@@ -2,7 +2,56 @@
 
 {% block title %}Rechnungen - Picobellu Kalkulator{% endblock %}
 
+<script>
+// Aktualisiere data-status Attribut wenn sich der Wert ändert (für CSS-Farbcodierung)
+document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('status-dropdown')) {
+        e.target.setAttribute('data-status', e.target.value);
+    }
+});
+</script>
+
 {% block content %}
+
+<style>
+/* Status-Dropdown Farben je nach ausgewähltem Status */
+.status-dropdown[data-status="draft"] {
+    background: #f8f9fa;
+    border-color: #6c757d !important;
+    color: #495057;
+}
+.status-dropdown[data-status="sent"] {
+    background: #e7f3ff;
+    border-color: #007bff !important;
+    color: #004085;
+}
+.status-dropdown[data-status="paid"] {
+    background: #d4edda;
+    border-color: #28a745 !important;
+    color: #155724;
+}
+.status-dropdown[data-status="overdue"] {
+    background: #f8d7da;
+    border-color: #dc3545 !important;
+    color: #721c24;
+}
+.status-dropdown[data-status="cancelled"] {
+    background: #e2e3e5;
+    border-color: #6c757d !important;
+    color: #383d41;
+    text-decoration: line-through;
+}
+
+/* Hover-Effekt für bessere UX */
+.status-dropdown:hover {
+    opacity: 0.9;
+}
+
+/* HTMX Swapping Animation */
+.htmx-swapping td {
+    opacity: 0.5;
+}
+</style>
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
         <div>
@@ -69,17 +118,19 @@
                 <td>{{ invoice.invoice_date.strftime('%d.%m.%Y') if invoice.invoice_date else '-' }}</td>
                 <td style="text-align: right; font-weight: bold;">{{ "%.2f"|format(invoice.total_gross) }} €</td>
                 <td>
-                    {% if invoice.status == 'draft' %}
-                    <span style="background: #6c757d; color: white; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem;">📝 Entwurf</span>
-                    {% elif invoice.status == 'sent' %}
-                    <span style="background: #007bff; color: white; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem;">📧 Versendet</span>
-                    {% elif invoice.status == 'paid' %}
-                    <span style="background: #28a745; color: white; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem;">💰 Bezahlt</span>
-                    {% elif invoice.status == 'overdue' %}
-                    <span style="background: #dc3545; color: white; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem;">⚠️ Überfällig</span>
-                    {% elif invoice.status == 'cancelled' %}
-                    <span style="background: #6c757d; color: white; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem; text-decoration: line-through;">🚫 Storniert</span>
-                    {% endif %}
+                    <select name="status" 
+                            hx-post="/invoices/{{ invoice.id }}/status-htmx"
+                            hx-target="closest td"
+                            hx-swap="outerHTML"
+                            class="status-dropdown"
+                            data-status="{{ invoice.status }}"
+                            style="padding: 6px 10px; border-radius: 8px; border: 2px solid; cursor: pointer; font-size: 0.85rem; min-width: 140px;">
+                        <option value="draft" {% if invoice.status == 'draft' %}selected{% endif %}>📝 Entwurf</option>
+                        <option value="sent" {% if invoice.status == 'sent' %}selected{% endif %}>📧 Versendet</option>
+                        <option value="paid" {% if invoice.status == 'paid' %}selected{% endif %}>💰 Bezahlt</option>
+                        <option value="overdue" {% if invoice.status == 'overdue' %}selected{% endif %}>⚠️ Überfällig</option>
+                        <option value="cancelled" {% if invoice.status == 'cancelled' %}selected{% endif %}>🚫 Storniert</option>
+                    </select>
                 </td>
                 <td>
                     <div style="display: flex; gap: 5px; flex-wrap: wrap;">
@@ -117,4 +168,13 @@
         <div><span style="background: #6c757d; color: white; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem; text-decoration: line-through;">🚫 Storniert</span> - Ungültig gemacht</div>
     </div>
 </div>
+
+<script>
+// Aktualisiere data-status Attribut wenn sich der Wert ändert (für CSS-Farbcodierung)
+document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('status-dropdown')) {
+        e.target.setAttribute('data-status', e.target.value);
+    }
+});
+</script>
 {% endblock %}
