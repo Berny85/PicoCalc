@@ -921,6 +921,9 @@ class Invoice(Base):
     notes = Column(Text, nullable=True)  # Interne Notizen
     footer_text = Column(Text, nullable=True)  # Text am Ende der Rechnung
     
+    # Bankdaten (optional - überschreibt globale Einstellung)
+    bank_info = Column(Text, nullable=True)
+    
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -999,3 +1002,20 @@ class InvoiceItem(Base):
     def calculate_total(self):
         """Berechnet den Gesamtbetrag"""
         return float(self.quantity) * float(self.unit_price_net)
+
+
+class Config(Base):
+    """Konfigurations-Tabelle für globale Einstellungen (Key-Value Store)"""
+    __tablename__ = "config"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String(100), nullable=False, unique=True)  # z.B. 'company_bank_info'
+    value = Column(Text, nullable=True)  # Der Wert als Text
+    description = Column(String(255), nullable=True)  # Beschreibung für UI
+    category = Column(String(50), default="general")  # 'general', 'invoice', 'company', etc.
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def __repr__(self):
+        return f"Config({self.key}={self.value[:30] if self.value else 'None'}...)"

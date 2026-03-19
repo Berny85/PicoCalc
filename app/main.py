@@ -2353,6 +2353,8 @@ async def new_invoice_form(
     db: Session = Depends(get_db)
 ):
     """Formular für neue Rechnung"""
+    from models import Config
+    
     sales_order = None
     if sales_order_id:
         sales_order = db.query(SalesOrder).filter(SalesOrder.id == sales_order_id).first()
@@ -2368,6 +2370,12 @@ async def new_invoice_form(
     # Lade aktive Artikel für Dropdown
     articles = db.query(Article).filter(Article.is_active == 1).order_by(Article.name).all()
     
+    # Lade Standard-Bankdaten aus Config
+    default_bank_info = "Revolut Bank UAB - IBAN DE61 1001 0178 4978 2800 27 - BIC REVODEB2"
+    config_bank = db.query(Config).filter(Config.key == "company_bank_info").first()
+    if config_bank and config_bank.value:
+        default_bank_info = config_bank.value
+    
     return templates.TemplateResponse("invoices/form.html", {
         "request": request,
         "invoice": None,
@@ -2375,6 +2383,8 @@ async def new_invoice_form(
         "customer": customer,
         "invoice_number": invoice_number_preview,
         "articles": articles,
+        "bank_info": None,
+        "default_bank_info": default_bank_info,
         "today": datetime.now().strftime("%Y-%m-%d"),
         "title": "Neue Rechnung"
     })
@@ -2391,6 +2401,7 @@ async def create_invoice(
     due_date: str = Form(""),
     vat_rate: str = Form("19.00"),
     discount_percent: str = Form("0.00"),
+    bank_info: str = Form(""),
     notes: str = Form(""),
     footer_text: str = Form(""),
     sales_order_id: int = Form(None),
@@ -2422,6 +2433,7 @@ async def create_invoice(
         due_date=datetime.strptime(due_date, "%Y-%m-%d") if due_date else None,
         vat_rate=parse_decimal(vat_rate),
         discount_percent=parse_decimal(discount_percent),
+        bank_info=bank_info if bank_info else None,
         notes=notes if notes else None,
         footer_text=footer_text if footer_text else None,
         status="draft"
@@ -2489,14 +2501,66 @@ async def view_invoice(invoice_id: int, request: Request, db: Session = Depends(
 
 @app.get("/invoices/{invoice_id}/print", response_class=HTMLResponse)
 async def print_invoice(invoice_id: int, request: Request, db: Session = Depends(get_db)):
-    """Druckansicht der Rechnung"""
+    """Druckansicht der Rechnung mit automatischer Seitenumbruch"""
+    from models import Config
+    
     invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Rechnung nicht gefunden")
     
+    # Bankdaten laden (aus Rechnung oder globaler Config)
+    bank_info = invoice.bank_info
+    if not bank_info:
+        config_bank = db.query(Config).filter(Config.key == "company_bank_info").first()
+        if config_bank:
+            bank_info = config_bank.value
+    
+    # Items sortieren
+    items = sorted(invoice.items, key=lambda x: x.position)
+    
+    # Seitenaufteilung: Konservativ für A4 (Footer muss immer passen!)
+    # Erste Seite hat Header (80px) + Titel (60px) + Ansprache (40px) + Footer (60px) = 240px fix
+    # Folgeseiten haben nur Header (80px) + Seiteninfo (20px) + Footer (60px) = 160px fix
+    # Jede Tabellenzeile braucht ca. 30px
+    ITEMS_PER_PAGE_FIRST = 6    # Konservativ: 6 Positionen auf erster Seite
+    ITEMS_PER_PAGE_FOLLOWING = 10  # 10 Positionen auf Folgeseiten
+    
+    pages = []
+    if not items:
+        # Leere Rechnung - trotzdem eine Seite erstellen
+        pages.append({
+            "page_number": 1,
+            "items": [],
+            "is_last": True
+        })
+    else:
+        remaining_items = items.copy()
+        page_number = 1
+        
+        while remaining_items:
+            # Bestimme wie viele Items auf diese Seite passen
+            if page_number == 1:
+                items_on_page = min(ITEMS_PER_PAGE_FIRST, len(remaining_items))
+            else:
+                items_on_page = min(ITEMS_PER_PAGE_FOLLOWING, len(remaining_items))
+            
+            # Items für diese Seite nehmen
+            page_items = remaining_items[:items_on_page]
+            remaining_items = remaining_items[items_on_page:]
+            
+            pages.append({
+                "page_number": page_number,
+                "page_items": page_items,
+                "is_last": len(remaining_items) == 0  # Letzte Seite?
+            })
+            
+            page_number += 1
+    
     return templates.TemplateResponse("invoices/print.html", {
         "request": request,
         "invoice": invoice,
+        "pages": pages,
+        "bank_info": bank_info,
         "print_mode": True
     })
 
@@ -2569,6 +2633,98 @@ async def delete_invoice(invoice_id: int, db: Session = Depends(get_db)):
     db.commit()
     
     return RedirectResponse(url="/invoices", status_code=303)
+
+
+# =============================================================================
+# KONFIGURATION / EINSTELLUNGEN
+# =============================================================================
+
+@app.get("/config", response_class=HTMLResponse)
+async def config_list(request: Request, db: Session = Depends(get_db)):
+    """Übersicht aller Konfigurationseinstellungen"""
+    from models import Config
+    
+    # Initialisiere Standard-Konfigurationen falls noch keine vorhanden
+    init_default_configs(db)
+    
+    configs = db.query(Config).order_by(Config.category, Config.key).all()
+    
+    return templates.TemplateResponse("config/list.html", {
+        "request": request,
+        "configs": configs
+    })
+
+
+@app.get("/config/{config_key}/edit", response_class=HTMLResponse)
+async def config_edit_form(config_key: str, request: Request, db: Session = Depends(get_db)):
+    """Formular zum Bearbeiten einer Konfiguration"""
+    from models import Config
+    
+    config = db.query(Config).filter(Config.key == config_key).first()
+    if not config:
+        raise HTTPException(status_code=404, detail="Einstellung nicht gefunden")
+    
+    return templates.TemplateResponse("config/form.html", {
+        "request": request,
+        "config": config,
+        "title": f"Einstellung bearbeiten: {config_key}"
+    })
+
+
+@app.post("/config/{config_key}/edit")
+async def config_update(
+    config_key: str,
+    value: str = Form(""),
+    description: str = Form(""),
+    db: Session = Depends(get_db)
+):
+    """Konfiguration aktualisieren"""
+    from models import Config
+    
+    config = db.query(Config).filter(Config.key == config_key).first()
+    if not config:
+        raise HTTPException(status_code=404, detail="Einstellung nicht gefunden")
+    
+    config.value = value if value else None
+    config.description = description if description else None
+    db.commit()
+    
+    return RedirectResponse(url="/config", status_code=303)
+
+
+# Hilfsfunktion: Initialisiere Standard-Konfigurationen
+def init_default_configs(db: Session):
+    """Erstellt Standard-Konfigurationen falls nicht vorhanden"""
+    from models import Config
+    
+    defaults = [
+        {
+            "key": "company_bank_info",
+            "value": "Revolut Bank UAB - IBAN DE61 1001 0178 4978 2800 27 - BIC REVODEB2",
+            "description": "Bankdaten für Rechnungsfußzeile",
+            "category": "invoice"
+        },
+        {
+            "key": "company_phone",
+            "value": "(0152) 37709958",
+            "description": "Telefonnummer für Rechnungsfußzeile",
+            "category": "invoice"
+        },
+        {
+            "key": "company_email",
+            "value": "info@picobellu.de",
+            "description": "E-Mail für Rechnungsfußzeile",
+            "category": "invoice"
+        }
+    ]
+    
+    for default in defaults:
+        existing = db.query(Config).filter(Config.key == default["key"]).first()
+        if not existing:
+            config = Config(**default)
+            db.add(config)
+    
+    db.commit()
 
 
 # =============================================================================

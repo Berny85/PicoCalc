@@ -75,6 +75,12 @@
                 </div>
                 
                 <div class="form-group">
+                    <label for="bank_info">Bankdaten (optional - überschreibt Standard)</label>
+                    <textarea id="bank_info" name="bank_info" rows="2" placeholder="Wird aus Einstellungen übernommen wenn leer">{{ bank_info if bank_info else '' }}</textarea>
+                    <small style="color: var(--color-text-light);">Standard: {{ default_bank_info[:50] }}...</small>
+                </div>
+                
+                <div class="form-group">
                     <label for="discount_percent">Rabatt (%)</label>
                     <select id="discount_percent" name="discount_percent" onchange="calculateTotals()">
                         <option value="0.00" selected>0%</option>

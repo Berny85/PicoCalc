@@ -75,7 +75,7 @@
     <table>
         <thead>
             <tr>
-                <th>Pos</th>
+                <th style="text-align: center;">Pos</th>
                 <th>Art.-Nr.</th>
                 <th>Beschreibung</th>
                 <th style="text-align: right;">Menge</th>
@@ -86,7 +86,7 @@
         <tbody>
             {% for item in invoice.items|sort(attribute='position') %}
             <tr>
-                <td>{{ item.position }}</td>
+                <td style="text-align: center; color: #666;">{{ item.position }}</td>
                 <td>
                     {% if item.article_number %}
                     <code style="background: #f0f0f0; padding: 2px 6px; border-radius: 4px;">{{ item.article_number }}</code>
