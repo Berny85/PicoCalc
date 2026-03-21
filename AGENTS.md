@@ -4,7 +4,7 @@
 
 ## Project Overview
 
-**PicoCalc** ist ein webbasierter Produktpreis-Kalkulator für kleine Fertigungsunternehmen. Er berechnet Produktionskosten für verschiedene Produkttypen wie 3D-Druck, Sticker-Produktion, Die-Cut-Sticker, Papierprodukte und Laser-Gravur.
+**PicoCalc** ist ein webbasierter Produktpreis-Kalkulator und ERP-System für kleine Fertigungsunternehmen. Er berechnet Produktionskosten für verschiedene Produkttypen wie 3D-Druck, Sticker-Produktion, Schreibwaren, Laser-Gravur und Zusammenbau-Produkte. Zusätzlich verfügt das System über Artikel-Verwaltung, Kundenstamm, Verkaufsaufträge und Rechnungsstellung.
 
 - **Repository**: https://github.com/Berny85/PicoCalc.git
 - **Production URL**: http://192.168.50.8:5000
@@ -23,14 +23,15 @@
 | Deployment | Docker + Docker Compose |
 | Infrastructure | Intel NUC mit Unraid OS |
 | CI/CD | GitHub Actions + Docker Hub |
+| Migrationen | Alembic | 1.13.1 |
 
 ## Project Structure
 
 ```
 PicoCalc/
 ├── app/                          # Hauptanwendung
-│   ├── main.py                   # FastAPI App mit allen Routes (~1597 Zeilen)
-│   ├── models.py                 # SQLAlchemy Datenbank-Modelle (~436 Zeilen)
+│   ├── main.py                   # FastAPI App mit allen Routes (~2960 Zeilen)
+│   ├── models.py                 # SQLAlchemy Datenbank-Modelle (~1020 Zeilen)
 │   ├── database.py               # Datenbank-Konfiguration und Session-Management
 │   ├── requirements.txt          # Python-Abhängigkeiten
 │   ├── Dockerfile                # Container-Image Definition
@@ -40,24 +41,29 @@ PicoCalc/
 │       ├── materials/            # Material-Verwaltung UI
 │       ├── machines/             # Maschinen-Verwaltung UI
 │       ├── products/             # Produkt-Formulare und Details
+│       ├── articles/             # Artikel-Verwaltung UI
+│       ├── customers/            # Kunden-Verwaltung UI
+│       ├── sales_orders/         # Verkaufsaufträge UI
+│       ├── invoices/             # Rechnungs-UI mit Druckansicht
+│       ├── config/               # Konfigurations-UI
 │       ├── feedback/             # Feedback-Formular und Liste
 │       ├── ideas/                # Kanban-Style Ideen-Board
 │       ├── tools/                # PNG-zu-SVG Converter & Bibliothek
 │       └── partials/             # HTMX Partial Templates
-├── backup/                       # Backup-Skripte
-│   ├── backup-script.sh          # Automatisiertes PostgreSQL Backup
-│   └── restore-script.sh         # Datenbank-Wiederherstellung
 ├── alembic/                      # Datenbank-Migrationen (Alembic)
 │   ├── versions/                 # Migrations-Skripte
 │   └── env.py                    # Alembic Umgebungs-Konfiguration
 ├── alembic.ini                   # Alembic Hauptkonfiguration
-├── migrate.ps1                   # Windows Migrationsskript
-├── migrate.sh                    # Linux/Mac Migrationsskript
+├── backup/                       # Backup-Skripte
+│   ├── backup-script.sh          # Automatisiertes PostgreSQL Backup
+│   └── restore-script.sh         # Datenbank-Wiederherstellung
 ├── .github/workflows/            # CI/CD Konfiguration
 │   └── deploy.yml                # GitHub Actions Workflow
 ├── docker-compose.yaml           # Entwicklungs-Konfiguration
 ├── docker-compose.prod.yml       # Produktions-Konfiguration
 ├── postgresql.conf               # PostgreSQL WAL Konfiguration
+├── migrate.ps1                   # Windows Migrationsskript
+├── migrate.sh                    # Linux/Mac Migrationsskript
 ├── deploy.sh                     # NUC Deployment Script (Bash)
 ├── deploy-to-nuc.ps1             # Windows Deployment Script (PowerShell)
 ├── backup-to-local.ps1           # Lokales Backup-Download Script
@@ -103,7 +109,7 @@ Repräsentiert Produktionsgeräte (3D-Drucker, Cutter, Tintenstrahl-Drucker):
 - `power_kw` - Stromverbrauch in kW
 - `lifespan_pages` - Für Tintenstrahl-Drucker: Lebensdauer in Seiten
 - `depreciation_per_page` - Für Tintenstrahl-Drucker: Abschreibung pro Seite
-- **Neu**: `cost_per_sheet` - Für Plotter/Drucker: Kosten pro Bogen (für Sticker-Produktion)
+- `cost_per_sheet` - Für Plotter/Drucker: Kosten pro Bogen (für Sticker-Produktion)
 - Methoden: `calculate_cost_per_hour()`, `calculate_cost_per_page()`, `calculate_cost_per_sheet()`, `calculate_cost_per_unit()`
 
 ### MaterialType (`models.py`)
@@ -122,13 +128,69 @@ Repräsentiert Rohmaterialien (Filamente, Sticker-Sheets, Papier):
 ### Product (`models.py`)
 Zentrale Entity mit typ-spezifischen Feldern:
 - **Gemeinsam**: `name`, `product_type`, `category`, `labor_minutes`, `labor_rate_per_hour`, `notes`
-  - ⚠️ **Wichtig**: `labor_minutes` (nicht mehr `labor_hours`) - Arbeitszeit in Minuten
-  - ⚠️ **Wichtig**: `packaging_cost` und `shipping_cost` entfernt - werden jetzt beim Verkauf erfasst
+  - `labor_minutes` - Arbeitszeit in Minuten
 - **Berechnungsmodus**: `calculation_mode` ("per_unit" oder "per_batch"), `units_per_batch`
 - **3D-Druck**: `filament_material_id`, `filament_weight_g`, `print_time_hours`, `machine_id`
 - **Sticker/Papier/Schreibwaren**: `sheet_material_id`, `sheet_count` (immer 1), `units_per_sheet`, `additional_machine_ids`
 - **Laser**: `laser_material_id`, `laser_design_name`, `laser1_*`, `laser2_*`, `laser3_*` (Layer-Konfiguration)
 - Methode: `calculate_costs()` - Gibt Kostenaufschlüsselung und Verkaufspreis-Vorschläge (30%, 50%, 100% Marge) zurück
+
+### ArticleCategory (`models.py`)
+Artikelkategorien mit automatischer Nummernvergabe:
+- `code` - Kurzcode (z.B. 'ART', 'ST')
+- `name`, `description`
+- `prefix` - Präfix für Artikelnummern (z.B. 'ART-')
+- `next_number` - Nächste fortlaufende Nummer
+- Methode: `generate_article_number()`
+
+### Article (`models.py`)
+Artikelstamm für Waren die eingekauft und weiterverkauft werden:
+- `article_number` - Eindeutige Nummer (z.B. 'ART-0001')
+- `category_id` - Verknüpfung zu ArticleCategory
+- `linked_product_id` - Optionale Verknüpfung zu Produkt (für Selbstkosten)
+- `purchase_price`, `selling_price`, `stock_quantity`, `unit`
+- `is_active` - Soft-delete Support
+
+### Customer (`models.py`)
+Kundenstamm:
+- `customer_number` - Eindeutige Kundennummer (z.B. 'K-0001')
+- `company_name`, `first_name`, `last_name`
+- `address_line1`, `address_line2`, `postal_code`, `city`, `country`
+- `email`, `phone`, `vat_id`
+- `is_active` - Soft-delete Support
+
+### SalesOrder (`models.py`)
+Verkaufsaufträge mit mehreren Positionen:
+- `order_number`, `customer_name`
+- `packaging_cost`, `shipping_cost` - Werden hier erfasst
+- `labor_minutes_packaging`, `labor_rate_packaging` - Arbeitszeit für Verpackung
+- `status` - 'pending', 'produced', 'shipped', 'cancelled'
+- Methode: `calculate_total()` - Gesamtsumme aller Positionen + Verpackung/Versand
+
+### SalesOrderItem (`models.py`)
+Einzelpositionen eines Verkaufsauftrags:
+- `sales_order_id` - Verknüpfung zum Auftrag
+- `item_type` - 'product' oder 'article'
+- `product_id` ODER `article_id` - Verknüpfung
+- `quantity` - Anzahl
+- `unit_price` - Verkaufspreis pro Einheit
+- `cost_per_unit` - Selbstkosten (Kopie zum Zeitpunkt des Verkaufs)
+
+### Invoice (`models.py`)
+Rechnungen an Kunden:
+- `invoice_number` - Eindeutig, Format: RE-YYYY-XXXX
+- `customer_id`, `customer_name`, `customer_address`
+- `status` - 'draft', 'sent', 'paid', 'overdue', 'cancelled'
+- `total_net`, `discount_percent`, `discount_amount`, `vat_rate`, `vat_amount`, `total_gross`
+- `bank_info` - Bankdaten für Rechnungsfuß
+- Methode: `calculate_totals()`
+
+### InvoiceItem (`models.py`)
+Einzelpositionen einer Rechnung:
+- `invoice_id`, `position` - Positionsnummer
+- `article_id` - Verknüpfung zum Artikel
+- `article_number`, `description` - Kopien zum Zeitpunkt der Erstellung
+- `quantity`, `unit`, `unit_price_net`, `total_net`
 
 ### Feedback (`models.py`)
 User-Feedback und Bug-Reports:
@@ -157,28 +219,15 @@ Produktbilder:
 
 ### ProductComponent (`models.py`)
 Komponenten-System für komplexe Produkte:
-- `parent_product_id` - Hauptprodukt
-- `component_product_id` - Einzelkomponente
-- `quantity` - Anzahl der Komponente
-- Wird für Produkte aus mehreren Teilen verwendet (z.B. Sets)
+- `product_id` - Hauptprodukt
+- `name`, `quantity`, `unit_cost`, `notes`
+- `linked_product_id` - Optionale Verknüpfung zu existierendem Produkt
+- `sort_order` - Für Reihenfolge
 
-### SalesOrder (`models.py`)
-Verkaufsaufträge mit mehreren Positionen:
-- `order_number`, `customer_name`
-- `packaging_cost`, `shipping_cost` - Werden hier erfasst (nicht mehr beim Produkt)
-- `labor_minutes_packaging`, `labor_rate_packaging` - Arbeitszeit für Verpackung
-- `status` - 'pending', 'produced', 'shipped', 'cancelled'
-- Methode: `calculate_total()` - Gesamtsumme aller Positionen + Verpackung/Versand
-- Beziehung: `items` → Liste von SalesOrderItem
-
-### SalesOrderItem (`models.py`)
-Einzelpositionen eines Verkaufsauftrags:
-- `sales_order_id` - Verknüpfung zum Auftrag
-- `product_id` - Verknüpfung zum Produkt
-- `quantity` - Anzahl
-- `unit_price` - Verkaufspreis pro Einheit
-- `production_cost_per_unit` - Selbstkosten (Kopie zum Zeitpunkt des Verkaufs)
-- Methode: `calculate_total()`, `calculate_profit()`
+### Config (`models.py`)
+Konfigurations-Tabelle (Key-Value Store):
+- `key`, `value`, `description`
+- `category` - 'general', 'invoice', 'company', etc.
 
 ## Product Types & Categories
 
@@ -187,6 +236,7 @@ Einzelpositionen eines Verkaufsauftrags:
 - `sticker` - Sticker-Produkte (Sheet & DieCut)
 - `stationery` - Schreibwaren (Notizblöcke, Karten, Papierwaren)
 - `assembly` - Zusammenbau-Produkte
+- `laser_engraving` - Laser-Gravur Produkte
 
 ### Sticker Categories
 Für Produkttyp `sticker` gibt es zwei Unterkategorien:
@@ -194,8 +244,6 @@ Für Produkttyp `sticker` gibt es zwei Unterkategorien:
 - `DieCut` - Einzeln geschnittene Sticker
 
 ### Categories (User-facing)
-⚠️ **Wichtig**: Kategorie ist in der UI ausgeblendet und wird automatisch auf "Sonstiges" gesetzt.
-
 Historisch: Dekoration, Technik, Ersatzteile, Spielzeug, Werkzeuge, Sticker, Papierprodukte, Sonstiges
 
 ## Dependencies (requirements.txt)
@@ -415,6 +463,25 @@ Aktuell hat das Projekt keine automatisierten Tests. Testing erfolgt manuell:
 - Drag & Drop Funktionalität (AJAX Status-Update)
 - Schnelles Notieren von Verbesserungsideen
 
+### Artikel-Verwaltung
+- Automatische Artikelnummern-Generierung (z.B. ART-0001, ST-0005)
+- Verknüpfung mit Produkten für automatische Selbstkosten-Übernahme
+- Kategorien mit Präfix-System
+- Soft-delete Support (is_active Flag)
+
+### Kunden-Verwaltung
+- Automatische Kundennummern-Generierung (K-0001, K-0002, ...)
+- Vollständige Adressverwaltung
+- USt-IdNr. für B2B
+- Verknüpfung mit Rechnungen
+
+### Rechnungs-System
+- Automatische Rechnungsnummern (RE-YYYY-XXXX)
+- Mehrseitige Druckansicht mit automatischem Seitenumbruch
+- Rabatt in 5%-Schritten (0-100%)
+- MwSt-Berechnung auf Betrag nach Rabatt
+- Konfigurierbare Bankdaten im Fuß
+
 ## Database Migrations (Alembic)
 
 PicoCalc verwendet **Alembic** für Datenbank-Migrationen.
@@ -581,18 +648,18 @@ docker-compose up -d    # Erstellt neu
     - `additional_machine_ids` - Kommaseparierte IDs (z.B. "2,3") für weitere Maschinen
     - Wird für Sticker-Sheets und Schreibwaren verwendet (Drucker + Plotter)
 
-11. **Machine Types**: Unterstützte Maschinentypen:
+12. **Machine Types**: Unterstützte Maschinentypen:
     - `3d_printer` - Zeitbasierte Kostenberechnung (Strom + Abschreibung/Stunde)
     - `cutter_plotter` - Bogenbasierte Kostenberechnung (`cost_per_sheet`)
     - `inkjet_printer` - Seitenbasierte Kostenberechnung (`depreciation_per_page`) oder Bogenbasiert (`cost_per_sheet`)
     - `other` - Zeitbasierte Kostenberechnung
 
-12. **Storage Paths**:
+13. **Storage Paths**:
     - Development: `/app/storage` (Docker Volume)
     - Production: `/mnt/user/appdata/picocalc/storage` (Unraid Pfad)
     - Temporäre Uploads: `/tmp/picocalc_uploads`
 
-13. **Laser Layer Support**: Laser-Gravur-Produkte unterstützen bis zu 3 Layer mit je:
+14. **Laser Layer Support**: Laser-Gravur-Produkte unterstützen bis zu 3 Layer mit je:
     - Type (blau, ir, rot)
     - Power (%)
     - Speed (mm/s)
@@ -600,14 +667,18 @@ docker-compose up -d    # Erstellt neu
     - DPI
     - Lines per cm
 
-14. **Sticker/Stationery Workflow**:
+15. **Sticker/Stationery Workflow**:
     - Produkttyp `sticker` mit Kategorie `StickerSheet` oder `DieCut`
     - `sheet_count` immer = 1 (aus UI entfernt)
     - `units_per_sheet` = Anzahl Sticker/Produkte pro Bogen
     - Mehrere Maschinen möglich (Drucker + Plotter via `additional_machine_ids`)
     - Verpackung/Versand werden im Verkauf erfasst, nicht beim Produkt
 
-15. **Cost Calculation Modes**:
+16. **Cost Calculation Modes**:
     - `per_unit` - Kosten werden pro Einheit berechnet
     - `per_batch` - Kosten pro Batch werden durch `units_per_batch` geteilt
     - Beispiel: Plotter-Kosten €10 pro Bogen für 20 Sticker = €0.50 pro Sticker
+
+17. **Soft Delete Pattern**: Artikel und Kunden verwenden Soft-Delete (is_active = 0) statt hartem Löschen, wenn bereits Referenzen existieren.
+
+18. **Config System**: Globale Einstellungen werden in der `config` Tabelle gespeichert und können über `/config` im UI verwaltet werden.

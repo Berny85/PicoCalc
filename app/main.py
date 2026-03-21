@@ -76,6 +76,9 @@ else:
 
 app = FastAPI(title="Picobellu Kalkulator")
 
+# Static Files
+app.mount("/static", StaticFiles(directory="assets"), name="static")
+
 # Templates
 templates = Jinja2Templates(directory="templates")
 
