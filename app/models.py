@@ -784,6 +784,12 @@ class Article(Base):
     # Status
     is_active = Column(Integer, default=1)  # 1 = aktiv, 0 = inaktiv
     
+    # Zusammenbau-Kosten (für Artikel aus mehreren Produkten)
+    labor_minutes = Column(Numeric(10, 2), default=0)  # Arbeitszeit in Minuten
+    labor_rate_per_hour = Column(Numeric(10, 2), default=20.00)  # Stundensatz
+    packaging_cost = Column(Numeric(10, 2), default=0)  # Verpackungskosten
+    shipping_cost = Column(Numeric(10, 2), default=0)  # Versandkosten
+    
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -791,6 +797,26 @@ class Article(Base):
     # Beziehungen
     category = relationship("ArticleCategory", backref="articles")
     linked_product = relationship("Product", backref="linked_articles")
+    
+    def calculate_labor_cost(self) -> float:
+        """Berechnet die Arbeitskosten aus Zeit und Stundensatz"""
+        return (float(self.labor_minutes) / 60.0) * float(self.labor_rate_per_hour)
+    
+    def calculate_components_cost(self) -> float:
+        """Berechnet die Gesamtkosten aller Komponenten"""
+        total = 0.0
+        for component in self.components:
+            total += component.calculate_total_cost()
+        return total
+    
+    def calculate_total_cost(self) -> float:
+        """Berechnet die Gesamtkosten (Komponenten + Arbeit + Verpackung + Versand)"""
+        return (
+            self.calculate_components_cost() +
+            self.calculate_labor_cost() +
+            float(self.packaging_cost) +
+            float(self.shipping_cost)
+        )
     
     def __repr__(self):
         return f"Article({self.article_number}: {self.name})"
@@ -804,6 +830,40 @@ class Article(Base):
         if float(self.selling_price) == 0:
             return 0.0
         return (self.calculate_profit() / float(self.selling_price)) * 100
+
+
+class ArticleComponent(Base):
+    """Komponenten für Artikel (Zusammenbau aus Produkten und Eigenleistung)"""
+    __tablename__ = "article_components"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    article_id = Column(Integer, ForeignKey("articles.id"), nullable=False)
+    
+    # Komponenten-Details
+    name = Column(String(255), nullable=False)  # z.B. "3D-Druck Hase", "Karabiner"
+    quantity = Column(Numeric(10, 2), default=1)  # Anzahl dieser Komponente
+    unit_cost = Column(Numeric(10, 2), default=0)  # Kosten pro Einheit
+    notes = Column(Text, nullable=True)  # Optionale Notizen
+    
+    # Verknüpfung mit vorhandenem Produkt (optional)
+    linked_product_id = Column(Integer, ForeignKey("products.id"), nullable=True)
+    
+    # Sortierung
+    sort_order = Column(Integer, default=0)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Beziehungen
+    article = relationship("Article", backref="components")
+    linked_product = relationship("Product")
+    
+    def __repr__(self):
+        return f"ArticleComponent({self.name} x{self.quantity})"
+    
+    def calculate_total_cost(self):
+        """Berechnet Gesamtkosten für diese Komponente"""
+        return float(self.unit_cost) * float(self.quantity)
 
 
 # =============================================================================

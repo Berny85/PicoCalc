@@ -188,6 +188,9 @@
             🖨️ Drucken / PDF
         </a>
         {% if invoice.status == 'draft' %}
+        <a href="/invoices/{{ invoice.id }}/edit" class="btn btn-success">
+            ✏️ Bearbeiten
+        </a>
         <form method="POST" action="/invoices/{{ invoice.id }}/delete" style="display: inline;" onsubmit="return confirm('Rechnung wirklich löschen?');">
             <button type="submit" class="btn btn-danger">
                 🗑️ Löschen

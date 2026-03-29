@@ -7,7 +7,7 @@ from sqlalchemy.exc import OperationalError
 from database import engine, get_db, SessionLocal
 from models import (Base, Product, Material, MaterialType, Machine, Feedback, Idea, 
                      ConvertedFile, ProductImage, ProductComponent, SalesOrder, SalesOrderItem, 
-                     Article, ArticleCategory, Invoice, InvoiceItem, Customer, STROM_PREIS_KWH)
+                     Article, ArticleCategory, ArticleComponent, Invoice, InvoiceItem, Customer, STROM_PREIS_KWH)
 from datetime import datetime
 import time
 import os
@@ -18,7 +18,7 @@ from pathlib import Path
 
 def parse_decimal(value: str) -> float:
     """Konvertiert einen String mit Komma oder Punkt als Dezimaltrenner zu float"""
-    if value is None:
+    if value is None or str(value).strip() == '':
         return 0.0
     # Ersetze Komma durch Punkt für die Konvertierung
     return float(str(value).replace(',', '.'))
@@ -2039,7 +2039,7 @@ async def list_articles(
 async def new_article_form(request: Request, product_id: int = None, db: Session = Depends(get_db)):
     """Formular für neuen Artikel - optional mit vorausgefülltem Produkt"""
     categories = db.query(ArticleCategory).filter(ArticleCategory.is_active == 1).order_by(ArticleCategory.name).all()
-    products = db.query(Product).order_by(Product.name).all()
+    all_products = db.query(Product).order_by(Product.name).all()
     
     # Vorschau der nächsten Artikelnummer für jede Kategorie
     category_numbers = {}
@@ -2058,7 +2058,7 @@ async def new_article_form(request: Request, product_id: int = None, db: Session
         "request": request,
         "article": None,
         "categories": categories,
-        "products": products,
+        "all_products": all_products,
         "category_numbers": category_numbers,
         "selected_product": selected_product,
         "product_costs": product_costs,
@@ -2070,19 +2070,26 @@ async def new_article_form(request: Request, product_id: int = None, db: Session
 async def create_article(
     request: Request,
     category_id: int = Form(...),
-    linked_product_id: str = Form(""),
     name: str = Form(...),
     description: str = Form(""),
     purchase_price: str = Form("0"),
     selling_price: str = Form("0"),
     stock_quantity: str = Form("0"),
     unit: str = Form("Stück"),
+    # Zusammenbau-Felder
+    labor_minutes: str = Form("0"),
+    labor_rate_per_hour: str = Form("20"),
+    packaging_cost: str = Form("0"),
+    shipping_cost: str = Form("0"),
+    # Komponenten-Arrays
+    component_name: list[str] = Form([]),
+    component_quantity: list[str] = Form([]),
+    component_unit_cost: list[str] = Form([]),
+    component_linked_product_id: list[str] = Form([]),
+    component_notes: list[str] = Form([]),
     db: Session = Depends(get_db)
 ):
-    """Neuen Artikel erstellen mit automatischer Artikelnummer
-    
-    Optional: Verknüpfung mit einem Produkt für automatische EK-Übernahme
-    """
+    """Neuen Artikel erstellen mit automatischer Artikelnummer und Komponenten"""
     
     # Kategorie laden für Nummerngenerierung
     category = db.query(ArticleCategory).filter(ArticleCategory.id == category_id).first()
@@ -2092,31 +2099,63 @@ async def create_article(
     # Automatische Artikelnummer generieren
     article_number = category.generate_article_number()
     
-    # Produkt-ID verarbeiten (kann leer sein)
-    product_id = int(linked_product_id) if linked_product_id else None
+    # Zusammenbau-Kosten berechnen
+    labor_minutes_val = parse_decimal(labor_minutes)
+    labor_rate_val = parse_decimal(labor_rate_per_hour)
+    labor_cost = (labor_minutes_val / 60) * labor_rate_val
+    packaging_val = parse_decimal(packaging_cost)
+    shipping_val = parse_decimal(shipping_cost)
     
-    # Wenn Produkt verknüpft, EK aus Produktionskosten übernehmen
-    final_purchase_price = parse_decimal(purchase_price)
-    if product_id:
-        product = db.query(Product).filter(Product.id == product_id).first()
-        if product:
-            costs = product.calculate_costs()
-            final_purchase_price = costs['total_cost']
+    # Komponenten-Kosten berechnen
+    components_cost = 0
+    for i in range(len(component_name)):
+        if i < len(component_name) and component_name[i].strip():
+            qty = parse_decimal(component_quantity[i]) if i < len(component_quantity) else 1
+            cost = parse_decimal(component_unit_cost[i]) if i < len(component_unit_cost) else 0
+            components_cost += qty * cost
+    
+    # Gesamtkosten = Komponenten + Arbeit + Verpackung + Versand
+    total_cost = components_cost + labor_cost + packaging_val + shipping_val
     
     # Artikel erstellen
     article = Article(
         article_number=article_number,
         category_id=category_id,
-        linked_product_id=product_id,
         name=name,
         description=description if description else None,
-        purchase_price=final_purchase_price,
+        purchase_price=total_cost,
         selling_price=parse_decimal(selling_price),
         stock_quantity=parse_decimal(stock_quantity),
         unit=unit,
+        labor_minutes=labor_minutes_val,
+        labor_rate_per_hour=labor_rate_val,
+        packaging_cost=packaging_val,
+        shipping_cost=shipping_val,
         is_active=1
     )
     db.add(article)
+    db.flush()  # Damit article.id verfügbar ist
+    
+    # Komponenten speichern
+    for i in range(len(component_name)):
+        if i < len(component_name) and component_name[i].strip():
+            linked_id = None
+            if i < len(component_linked_product_id) and component_linked_product_id[i]:
+                try:
+                    linked_id = int(component_linked_product_id[i])
+                except (ValueError, TypeError):
+                    linked_id = None
+            
+            component = ArticleComponent(
+                article_id=article.id,
+                name=component_name[i].strip(),
+                quantity=parse_decimal(component_quantity[i]) if i < len(component_quantity) else 1,
+                unit_cost=parse_decimal(component_unit_cost[i]) if i < len(component_unit_cost) else 0,
+                linked_product_id=linked_id,
+                notes=component_notes[i] if i < len(component_notes) and component_notes[i] else None,
+                sort_order=i
+            )
+            db.add(component)
     
     # Nummernzähler erhöhen
     category.increment_number()
@@ -2148,11 +2187,13 @@ async def edit_article_form(article_id: int, request: Request, db: Session = Dep
         raise HTTPException(status_code=404, detail="Artikel nicht gefunden")
     
     categories = db.query(ArticleCategory).filter(ArticleCategory.is_active == 1).order_by(ArticleCategory.name).all()
+    all_products = db.query(Product).order_by(Product.name).all()
     
     return templates.TemplateResponse("articles/form.html", {
         "request": request,
         "article": article,
         "categories": categories,
+        "all_products": all_products,
         "category_numbers": {},
         "title": "Artikel bearbeiten"
     })
@@ -2170,21 +2211,78 @@ async def update_article(
     stock_quantity: str = Form("0"),
     unit: str = Form("Stück"),
     is_active: int = Form(1),
+    # Zusammenbau-Felder
+    labor_minutes: str = Form("0"),
+    labor_rate_per_hour: str = Form("20"),
+    packaging_cost: str = Form("0"),
+    shipping_cost: str = Form("0"),
+    # Komponenten-Arrays
+    component_name: list[str] = Form([]),
+    component_quantity: list[str] = Form([]),
+    component_unit_cost: list[str] = Form([]),
+    component_linked_product_id: list[str] = Form([]),
+    component_notes: list[str] = Form([]),
     db: Session = Depends(get_db)
 ):
-    """Artikel aktualisieren"""
+    """Artikel aktualisieren mit Komponenten"""
     article = db.query(Article).filter(Article.id == article_id).first()
     if not article:
         raise HTTPException(status_code=404, detail="Artikel nicht gefunden")
     
+    # Zusammenbau-Kosten berechnen
+    labor_minutes_val = parse_decimal(labor_minutes)
+    labor_rate_val = parse_decimal(labor_rate_per_hour)
+    labor_cost = (labor_minutes_val / 60) * labor_rate_val
+    packaging_val = parse_decimal(packaging_cost)
+    shipping_val = parse_decimal(shipping_cost)
+    
+    # Komponenten-Kosten berechnen
+    components_cost = 0
+    for i in range(len(component_name)):
+        if i < len(component_name) and component_name[i].strip():
+            qty = parse_decimal(component_quantity[i]) if i < len(component_quantity) else 1
+            cost = parse_decimal(component_unit_cost[i]) if i < len(component_unit_cost) else 0
+            components_cost += qty * cost
+    
+    # Gesamtkosten = Komponenten + Arbeit + Verpackung + Versand
+    total_cost = components_cost + labor_cost + packaging_val + shipping_val
+    
     article.category_id = category_id
     article.name = name
     article.description = description if description else None
-    article.purchase_price = parse_decimal(purchase_price)
+    article.purchase_price = total_cost
     article.selling_price = parse_decimal(selling_price)
     article.stock_quantity = parse_decimal(stock_quantity)
     article.unit = unit
     article.is_active = is_active
+    article.labor_minutes = labor_minutes_val
+    article.labor_rate_per_hour = labor_rate_val
+    article.packaging_cost = packaging_val
+    article.shipping_cost = shipping_val
+    
+    # Alte Komponenten löschen
+    db.query(ArticleComponent).filter(ArticleComponent.article_id == article_id).delete()
+    
+    # Neue Komponenten speichern
+    for i in range(len(component_name)):
+        if i < len(component_name) and component_name[i].strip():
+            linked_id = None
+            if i < len(component_linked_product_id) and component_linked_product_id[i]:
+                try:
+                    linked_id = int(component_linked_product_id[i])
+                except (ValueError, TypeError):
+                    linked_id = None
+            
+            component = ArticleComponent(
+                article_id=article.id,
+                name=component_name[i].strip(),
+                quantity=parse_decimal(component_quantity[i]) if i < len(component_quantity) else 1,
+                unit_cost=parse_decimal(component_unit_cost[i]) if i < len(component_unit_cost) else 0,
+                linked_product_id=linked_id,
+                notes=component_notes[i] if i < len(component_notes) and component_notes[i] else None,
+                sort_order=i
+            )
+            db.add(component)
     
     db.commit()
     db.refresh(article)
@@ -2291,6 +2389,22 @@ async def search_products_api(q: str = "", limit: int = 20, db: Session = Depend
         })
     
     return result
+
+
+# API-Endpunkt für einzelnes Produkt (für Zusammenbau-Komponenten)
+@app.get("/api/products/{product_id}/details")
+async def get_product_details(product_id: int, db: Session = Depends(get_db)):
+    """API-Endpunkt um Produktdetails für Komponenten zu laden"""
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Produkt nicht gefunden")
+    
+    costs = product.calculate_costs()
+    return {
+        "id": product.id,
+        "name": product.name,
+        "total_cost": costs['total_cost']
+    }
 
 
 # ========================================# RECHNUNGS-VERWALTUNG
@@ -2616,6 +2730,140 @@ async def update_invoice_status_htmx(
         "request": request,
         "invoice": invoice
     })
+
+
+@app.get("/invoices/{invoice_id}/edit", response_class=HTMLResponse)
+async def edit_invoice_form(invoice_id: int, request: Request, db: Session = Depends(get_db)):
+    """Formular zum Bearbeiten einer Rechnung (nur Entwürfe)"""
+    from models import Config
+    
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Rechnung nicht gefunden")
+    
+    # Nur Entwürfe können bearbeitet werden
+    if invoice.status != "draft":
+        raise HTTPException(status_code=400, detail="Nur Entwürfe können bearbeitet werden")
+    
+    # Kunde laden falls vorhanden
+    customer = None
+    if invoice.customer_id:
+        customer = db.query(Customer).filter(Customer.id == invoice.customer_id).first()
+    
+    # Bankdaten aus Config laden für Vorschau
+    default_bank_info = ""
+    config_bank = db.query(Config).filter(Config.key == "company_bank_info").first()
+    if config_bank:
+        default_bank_info = config_bank.value
+    
+    return templates.TemplateResponse("invoices/form.html", {
+        "request": request,
+        "invoice": invoice,
+        "customer": customer,
+        "today": invoice.invoice_date.strftime("%Y-%m-%d") if invoice.invoice_date else datetime.now().strftime("%Y-%m-%d"),
+        "default_bank_info": default_bank_info,
+        "invoice_number": invoice.invoice_number,
+        "title": f"Rechnung {invoice.invoice_number} bearbeiten"
+    })
+
+
+@app.post("/invoices/{invoice_id}")
+async def update_invoice(
+    invoice_id: int,
+    request: Request,
+    invoice_number: str = Form(...),
+    customer_id: int = Form(None),
+    customer_name: str = Form(""),
+    customer_address: str = Form(""),
+    invoice_date: str = Form(...),
+    due_date: str = Form(""),
+    vat_rate: str = Form("19.00"),
+    discount_percent: str = Form("0.00"),
+    bank_info: str = Form(""),
+    notes: str = Form(""),
+    footer_text: str = Form(""),
+    # Positionen (Arrays)
+    position_desc: list[str] = Form([]),
+    position_article_id: list[str] = Form([]),
+    position_qty: list[str] = Form([]),
+    position_unit: list[str] = Form([]),
+    position_price: list[str] = Form([]),
+    db: Session = Depends(get_db)
+):
+    """Rechnung aktualisieren (nur Entwürfe)"""
+    
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Rechnung nicht gefunden")
+    
+    if invoice.status != "draft":
+        raise HTTPException(status_code=400, detail="Nur Entwürfe können bearbeitet werden")
+    
+    # Wenn Kunde ausgewählt wurde, Daten aus Kundenstamm übernehmen
+    if customer_id:
+        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        if customer:
+            customer_name = customer.display_name
+            customer_address = customer.full_address
+    
+    # Rechnung aktualisieren
+    invoice.invoice_number = invoice_number
+    invoice.customer_id = customer_id
+    invoice.customer_name = customer_name if customer_name else None
+    invoice.customer_address = customer_address if customer_address else None
+    invoice.invoice_date = datetime.strptime(invoice_date, "%Y-%m-%d")
+    invoice.due_date = datetime.strptime(due_date, "%Y-%m-%d") if due_date else None
+    invoice.vat_rate = parse_decimal(vat_rate)
+    invoice.discount_percent = parse_decimal(discount_percent)
+    invoice.bank_info = bank_info if bank_info else None
+    invoice.notes = notes if notes else None
+    invoice.footer_text = footer_text if footer_text else None
+    
+    # Alte Positionen löschen
+    db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice_id).delete()
+    
+    # Neue Positionen hinzufügen
+    total_net = 0
+    for i in range(len(position_desc)):
+        if position_desc[i].strip():  # Nur wenn Beschreibung vorhanden
+            qty = parse_decimal(position_qty[i]) if i < len(position_qty) else 1
+            price = parse_decimal(position_price[i]) if i < len(position_price) else 0
+            item_total = qty * price
+            
+            article_id = int(position_article_id[i]) if i < len(position_article_id) and position_article_id[i] else None
+            
+            item = InvoiceItem(
+                invoice_id=invoice.id,
+                position=i + 1,
+                article_id=article_id,
+                article_number=None,
+                description=position_desc[i],
+                quantity=qty,
+                unit=position_unit[i] if i < len(position_unit) else "Stück",
+                unit_price_net=price,
+                total_net=item_total
+            )
+            
+            # Wenn Artikel verknüpft, Artikelnummer kopieren
+            if article_id:
+                article = db.query(Article).filter(Article.id == article_id).first()
+                if article:
+                    item.article_number = article.article_number
+            
+            db.add(item)
+            total_net += item_total
+    
+    # Summen berechnen (mit Rabatt)
+    invoice.total_net = total_net
+    invoice.discount_amount = total_net * (float(invoice.discount_percent) / 100)
+    net_after_discount = total_net - float(invoice.discount_amount)
+    invoice.vat_amount = net_after_discount * (float(invoice.vat_rate) / 100)
+    invoice.total_gross = net_after_discount + float(invoice.vat_amount)
+    
+    db.commit()
+    db.refresh(invoice)
+    
+    return RedirectResponse(url=f"/invoices/{invoice.id}", status_code=303)
 
 
 @app.post("/invoices/{invoice_id}/delete")
