@@ -4,7 +4,7 @@
 
 ## Project Overview
 
-**PicoCalc** ist ein webbasierter Produktpreis-Kalkulator und ERP-System für kleine Fertigungsunternehmen. Er berechnet Produktionskosten für verschiedene Produkttypen wie 3D-Druck, Sticker-Produktion, Schreibwaren, Laser-Gravur und Zusammenbau-Produkte. Zusätzlich verfügt das System über Artikel-Verwaltung, Kundenstamm, Verkaufsaufträge und Rechnungsstellung.
+**Picobellu Design** (ehemals PicoCalc) ist ein webbasierter Produktpreis-Kalkulator und ERP-System für kleine Fertigungsunternehmen. Er berechnet Produktionskosten für verschiedene Produkttypen wie 3D-Druck, Sticker-Produktion, Schreibwaren, Laser-Gravur und Zusammenbau-Produkte. Zusätzlich verfügt das System über Artikel-Verwaltung, Kundenstamm, Verkaufsaufträge und Rechnungsstellung.
 
 - **Repository**: https://github.com/Berny85/PicoCalc.git
 - **Production URL**: http://192.168.50.8:5000
@@ -78,6 +78,7 @@ PicoCalc/
 ### Development Environment (Windows 11)
 - **Docker Desktop** für Containerisierung
 - **Local URL**: http://localhost:5000
+- **App Name**: Picobellu Design
 - **Database**: PostgreSQL auf Port 5432
 - **pgAdmin**: http://localhost:5050
 - **Hot reload**: Code als Volume gemountet, Auto-Reload aktiviert
@@ -144,12 +145,22 @@ Artikelkategorien mit automatischer Nummernvergabe:
 - Methode: `generate_article_number()`
 
 ### Article (`models.py`)
-Artikelstamm für Waren die eingekauft und weiterverkauft werden:
-- `article_number` - Eindeutige Nummer (z.B. 'ART-0001')
+Artikelstamm für fertige Produkte zum Verkauf (ersetzt Zusammenbau-Produkte):
+- `article_number` - Eindeutige Nummer (z.B. 'ART-0001', automatisch vergeben)
 - `category_id` - Verknüpfung zu ArticleCategory
-- `linked_product_id` - Optionale Verknüpfung zu Produkt (für Selbstkosten)
-- `purchase_price`, `selling_price`, `stock_quantity`, `unit`
+- `name`, `description`, `selling_price`, `stock_quantity`, `unit`
+- `purchase_price` - Wird automatisch aus Komponenten + Kosten berechnet
+- **Zusammenbau-Kosten**: `labor_minutes`, `labor_rate_per_hour`, `packaging_cost`, `shipping_cost`
 - `is_active` - Soft-delete Support
+- Methoden: `calculate_total_cost()`, `calculate_components_cost()`, `calculate_labor_cost()`
+
+### ArticleComponent (`models.py`)
+Komponenten für Artikel (Zusammenbau aus Produkten):
+- `article_id` - Verknüpfung zum Artikel
+- `name`, `quantity`, `unit_cost`, `notes`
+- `linked_product_id` - Optionale Verknüpfung zu existierendem Produkt
+- `sort_order` - Für Reihenfolge
+- Methode: `calculate_total_cost()`
 
 ### Customer (`models.py`)
 Kundenstamm:
@@ -463,9 +474,12 @@ Aktuell hat das Projekt keine automatisierten Tests. Testing erfolgt manuell:
 - Drag & Drop Funktionalität (AJAX Status-Update)
 - Schnelles Notieren von Verbesserungsideen
 
-### Artikel-Verwaltung
+### Artikel-Verwaltung (mit Zusammenbau-Funktion)
+- **Wertschöpfungskette**: Materialien → Produkte → Artikel
 - Automatische Artikelnummern-Generierung (z.B. ART-0001, ST-0005)
-- Verknüpfung mit Produkten für automatische Selbstkosten-Übernahme
+- **Komponenten-System**: Artikel können aus mehreren Produkten bestehen
+- Automatische EK-Berechnung aus Komponenten + Arbeit + Verpackung/Versand
+- Verknüpfung mit Produkten für automatische Kosten-Übernahme
 - Kategorien mit Präfix-System
 - Soft-delete Support (is_active Flag)
 
@@ -477,6 +491,7 @@ Aktuell hat das Projekt keine automatisierten Tests. Testing erfolgt manuell:
 
 ### Rechnungs-System
 - Automatische Rechnungsnummern (RE-YYYY-XXXX)
+- **Bearbeitung möglich** (nur für Entwürfe) - Rechnungen können vor dem Versenden geändert werden
 - Mehrseitige Druckansicht mit automatischem Seitenumbruch
 - Rabatt in 5%-Schritten (0-100%)
 - MwSt-Berechnung auf Betrag nach Rabatt
@@ -682,3 +697,17 @@ docker-compose up -d    # Erstellt neu
 17. **Soft Delete Pattern**: Artikel und Kunden verwenden Soft-Delete (is_active = 0) statt hartem Löschen, wenn bereits Referenzen existieren.
 
 18. **Config System**: Globale Einstellungen werden in der `config` Tabelle gespeichert und können über `/config` im UI verwaltet werden.
+
+19. **Navigation Structure**: Die Header-Navigation ist in Gruppen organisiert:
+    - Dashboard (📊)
+    - Stamm-Daten: Produkte (🛠️), Artikel (📝), Materialien (🧱)
+    - Verkauf: Kunden (👥), Verkäufe (📋), Rechnungen (📄)
+    - Tools: Maschinen (⚙️), SVG-Bibliothek (🎨), Einstellungen (🔧), Ideen (💡), Feedback (📝)
+
+20. **Article Workflow**: Artikel ersetzen das alte "Zusammenbau-Produkt"-System:
+    - Materialien (Filament, Sticker-Bögen) werden zu Produkten verarbeitet
+    - Produkte (3D-Druck, Sticker) können zu Artikeln kombiniert werden
+    - Artikel erhalten automatisch eine Artikelnummer und berechnen EK aus Komponenten
+    - Artikel sind die Verkaufseinheiten für Rechnungen
+
+21. **Invoice Edit Restriction**: Rechnungen können nur im Status "draft" (Entwurf) bearbeitet werden. Nach dem Versenden/Bezahlen sind sie für rechtliche Korrektheit unveränderlich.
