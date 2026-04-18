@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, Depends, Form, HTTPException, UploadFile, File
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -1673,7 +1673,7 @@ async def png_to_svg_convert(
             "svg_size": svg_size,
             "saved_file_id": db_entry.id if db_entry else None
         })
-        
+
     except Exception as e:
         # Cleanup bei Fehler
         if 'input_path' in locals():
@@ -1689,6 +1689,20 @@ async def png_to_svg_convert(
             "svg_content": None,
             "original_filename": None
         })
+
+@app.post("/tools/png-to-svg/download")
+async def download_fresh_svg(
+    request: Request,
+    svg_content: str = Form(...),
+    filename: str = Form(...)
+):
+    """Download einer frisch konvertierten SVG-Datei"""
+    safe_filename = filename.rsplit('.', 1)[0] + ".svg"
+    return Response(
+        content=svg_content,
+        media_type="image/svg+xml",
+        headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'}
+    )
 
 @app.get("/tools/converted-files", response_class=HTMLResponse)
 async def list_converted_files(

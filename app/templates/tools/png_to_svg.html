@@ -372,14 +372,36 @@
 <div class="card" style="margin-top: 20px;">
     <h3>💾 Download</h3>
     <div class="actions">
-        <form method="POST" action="/tools/png-to-svg/download" style="display: inline;">
-            <input type="hidden" name="svg_content" value="{{ svg_content | e }}">
-            <input type="hidden" name="filename" value="{{ original_filename }}">
-            <button type="submit" class="btn btn-primary">⬇️ SVG herunterladen</button>
-        </form>
+        {% if saved_file_id %}
+        <a href="/tools/converted-files/{{ saved_file_id }}/download/svg" class="btn btn-primary">⬇️ SVG herunterladen</a>
+        {% else %}
+        <button type="button" class="btn btn-primary" id="svg-download-btn"
+                data-filename="{{ original_filename | e }}">⬇️ SVG herunterladen</button>
+        {% endif %}
         <a href="/tools/png-to-svg" class="btn btn-secondary">🔄 Weitere Datei konvertieren</a>
     </div>
 </div>
+
+<script>
+    // Client-seitiger Download für nicht-gespeicherte SVGs
+    (function() {
+        var btn = document.getElementById('svg-download-btn');
+        if (!btn) return;
+        var svgContent = document.querySelector('.svg-preview').innerHTML.trim();
+        var filename = btn.getAttribute('data-filename').replace(/\.(png|jpg|jpeg|webp|bmp)$/i, '.svg');
+        btn.addEventListener('click', function() {
+            var blob = new Blob([svgContent], { type: 'image/svg+xml' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+    })();
+</script>
 {% endif %}
 
 <div class="card" style="margin-top: 20px;">
