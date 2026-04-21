@@ -418,9 +418,9 @@ class Product(Base):
             'total_cost': round(total_cost, 2),
             'calculation_mode': self.calculation_mode,
             'units_per_batch': self.units_per_batch if self.calculation_mode == 'per_batch' else None,
-            'selling_price_30': round(total_cost * 1.30, 2),
-            'selling_price_50': round(total_cost * 1.50, 2),
             'selling_price_100': round(total_cost * 2.00, 2),
+            'selling_price_200': round(total_cost * 3.00, 2),
+            'selling_price_300': round(total_cost * 4.00, 2),
         }
         
         # Typ-spezifische Details hinzufügen

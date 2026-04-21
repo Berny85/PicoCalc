@@ -44,7 +44,7 @@
                 <th>Material</th>
                 <th>Maschine</th>
                 <th>Einkaufspreis</th>
-                <th>Verkauf (50%)</th>
+                <th>Verkauf (50% / 100%)</th>
                 <th>Aktionen</th>
             </tr>
         </thead>
@@ -61,7 +61,7 @@
                 <td>{{ product.get_material_summary() }}</td>
                 <td>{{ product.machine.name if product.machine else '-' }}</td>
                 <td>{{ calc.total_cost }} €</td>
-                <td>{{ calc.selling_price_50 }} €</td>
+                <td>{{ calc.selling_price_100 }} €</td>
                 <td>
                     <a href="/products/{{ product.id }}" class="btn btn-primary" style="padding: 6px 12px; font-size: 14px;">Anzeigen</a>
                 </td>

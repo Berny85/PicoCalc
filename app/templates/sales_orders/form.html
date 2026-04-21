@@ -136,9 +136,9 @@
             <div style="margin-top: 15px; padding: 15px; background: rgba(102, 126, 234, 0.1); border-radius: 8px;">
                 <strong style="color: var(--color-primary-dark);">💡 Margen-Vorschläge basierend auf Gesamtkosten:</strong>
                 <div style="display: flex; gap: 30px; margin-top: 10px; flex-wrap: wrap;">
-                    <div>30% Marge: <strong id="suggestion-30" style="font-size: 1.2rem;">-</strong></div>
-                    <div>50% Marge: <strong id="suggestion-50" style="font-size: 1.2rem;">-</strong></div>
-                    <div>100% Marge: <strong id="suggestion-100" style="font-size: 1.2rem;">-</strong></div>
+                    <div>50% Marge / 100% Aufschlag: <strong id="suggestion-100" style="font-size: 1.2rem;">-</strong></div>
+                    <div>66,7% Marge / 200% Aufschlag: <strong id="suggestion-200" style="font-size: 1.2rem;">-</strong></div>
+                    <div>75% Marge / 300% Aufschlag: <strong id="suggestion-300" style="font-size: 1.2rem;">-</strong></div>
                 </div>
             </div>
         </div>
@@ -172,9 +172,9 @@
                         {% set calc = p.calculate_costs() %}
                         <option value="{{ p.id }}" 
                                 data-cost="{{ calc.total_cost }}"
-                                data-margin-30="{{ calc.selling_price_30 }}"
-                                data-margin-50="{{ calc.selling_price_50 }}"
-                                data-margin-100="{{ calc.selling_price_100 }}">
+                                data-margin-100="{{ calc.selling_price_100 }}"
+                                data-margin-200="{{ calc.selling_price_200 }}"
+                                data-margin-300="{{ calc.selling_price_300 }}">
                             {{ p.name }} (Selbstkosten: {{ calc.total_cost }} €)
                         </option>
                         {% endfor %}
@@ -325,9 +325,9 @@ function updateProductInfo(select) {
     const row = select.closest('.product-row');
     const option = select.options[select.selectedIndex];
     const cost = parseFloat(option.getAttribute('data-cost')) || 0;
-    const margin30 = parseFloat(option.getAttribute('data-margin-30')) || 0;
-    const margin50 = parseFloat(option.getAttribute('data-margin-50')) || 0;
     const margin100 = parseFloat(option.getAttribute('data-margin-100')) || 0;
+    const margin200 = parseFloat(option.getAttribute('data-margin-200')) || 0;
+    const margin300 = parseFloat(option.getAttribute('data-margin-300')) || 0;
     const quantity = parseInt(row.querySelector('.quantity-input').value) || 1;
     
     // Kosten speichern
@@ -338,9 +338,9 @@ function updateProductInfo(select) {
     
     // Margen-Tipps für diese Position anzeigen
     row.querySelector('.price-suggestion').innerHTML = 
-        '30%: ' + margin30.toFixed(2) + '€ | ' +
-        '50%: ' + margin50.toFixed(2) + '€ | ' +
-        '100%: ' + margin100.toFixed(2) + '€';
+        '50%/100%: ' + margin100.toFixed(2) + '€ | ' +
+        '66,7%/200%: ' + margin200.toFixed(2) + '€ | ' +
+        '75%/300%: ' + margin300.toFixed(2) + '€';
     
     updateTotals();
 }
@@ -409,19 +409,19 @@ function updateTotals() {
 
 function updateMarginSuggestions(totalCost) {
     if (totalCost <= 0) {
-        document.getElementById('suggestion-30').textContent = '-';
-        document.getElementById('suggestion-50').textContent = '-';
         document.getElementById('suggestion-100').textContent = '-';
+        document.getElementById('suggestion-200').textContent = '-';
+        document.getElementById('suggestion-300').textContent = '-';
         return;
     }
     
-    const price30 = totalCost * 1.30;
-    const price50 = totalCost * 1.50;
     const price100 = totalCost * 2.00;
+    const price200 = totalCost * 3.00;
+    const price300 = totalCost * 4.00;
     
-    document.getElementById('suggestion-30').textContent = price30.toFixed(2) + ' €';
-    document.getElementById('suggestion-50').textContent = price50.toFixed(2) + ' €';
     document.getElementById('suggestion-100').textContent = price100.toFixed(2) + ' €';
+    document.getElementById('suggestion-200').textContent = price200.toFixed(2) + ' €';
+    document.getElementById('suggestion-300').textContent = price300.toFixed(2) + ' €';
 }
 
 function updateMarginDisplay() {

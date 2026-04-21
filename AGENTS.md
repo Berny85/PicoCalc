@@ -134,7 +134,7 @@ Zentrale Entity mit typ-spezifischen Feldern:
 - **3D-Druck**: `filament_material_id`, `filament_weight_g`, `print_time_hours`, `machine_id`
 - **Sticker/Papier/Schreibwaren**: `sheet_material_id`, `sheet_count` (immer 1), `units_per_sheet`, `additional_machine_ids`
 - **Laser**: `laser_material_id`, `laser_design_name`, `laser1_*`, `laser2_*`, `laser3_*` (Layer-Konfiguration)
-- Methode: `calculate_costs()` - Gibt Kostenaufschlüsselung und Verkaufspreis-Vorschläge (30%, 50%, 100% Marge) zurück
+- Methode: `calculate_costs()` - Gibt Kostenaufschlüsselung und Verkaufspreis-Vorschläge (100%, 200%, 300% Aufschlag) zurück
 
 ### ArticleCategory (`models.py`)
 Artikelkategorien mit automatischer Nummernvergabe:
@@ -636,7 +636,7 @@ docker-compose up -d    # Erstellt neu
    - `Machine.calculate_cost_per_hour()` - Inkludiert Abschreibung + Strom
    - `Machine.calculate_cost_per_page()` - Für Tintenstrahl-Drucker
    - `Product.calculate_costs()` - Aggregiert alle Kostenkomponenten
-   - Verkaufspreise werden mit 30%, 50%, 100% Margen berechnet
+   - Verkaufspreise werden mit 100%, 200%, 300% Aufschlag berechnet
 
 4. **Static Electricity Price**: `STROM_PREIS_KWH = 0.22` (€/kWh) ist hardcoded in models.py
 
