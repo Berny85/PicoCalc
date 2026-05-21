@@ -9,19 +9,44 @@
         <a href="/materials/new" class="btn btn-primary">+ Neues Material</a>
     </div>
     
-    <form method="GET" action="/materials" class="search-box">
-        <select name="material_type" onchange="this.form.submit()">
-            <option value="">Alle Materialtypen</option>
-            {% for mt in material_types %}
-            <option value="{{ mt.key }}" {% if material_type == mt.key %}selected{% endif %}>
-                {{ mt.name }}
-            </option>
-            {% endfor %}
-        </select>
-        {% if material_type %}
-        <a href="/materials" class="btn btn-secondary">Zurücksetzen</a>
-        {% endif %}
-        <a href="/material-types" class="btn btn-success" style="margin-left: 10px;">Materialtypen verwalten</a>
+    <!-- Suchleiste und Sortierung -->
+    <form method="GET" action="/materials" style="margin-bottom: 20px;">
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: end;">
+            <div style="flex: 1; min-width: 200px;">
+                <label style="font-size: 0.85rem; color: var(--color-text-light);">Suche</label>
+                <input type="text" name="search" value="{{ search }}" placeholder="Name, Marke, Farbe..." style="width: 100%;">
+            </div>
+            <div>
+                <label style="font-size: 0.85rem; color: var(--color-text-light);">Typ</label>
+                <select name="material_type" onchange="this.form.submit()">
+                    <option value="">Alle Typen</option>
+                    {% for mt in material_types %}
+                    <option value="{{ mt.key }}" {% if material_type == mt.key %}selected{% endif %}>{{ mt.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label style="font-size: 0.85rem; color: var(--color-text-light);">Sortierung</label>
+                <select name="sort_by">
+                    <option value="name" {% if sort_by == 'name' %}selected{% endif %}>Name</option>
+                    <option value="type" {% if sort_by == 'type' %}selected{% endif %}>Typ</option>
+                    <option value="price" {% if sort_by == 'price' %}selected{% endif %}>Preis</option>
+                </select>
+            </div>
+            <div>
+                <label style="font-size: 0.85rem; color: var(--color-text-light);">Reihenfolge</label>
+                <select name="sort_order">
+                    <option value="asc" {% if sort_order == 'asc' %}selected{% endif %}>Aufsteigend</option>
+                    <option value="desc" {% if sort_order == 'desc' %}selected{% endif %}>Absteigend</option>
+                </select>
+            </div>
+            <div>
+                <button type="submit" class="btn btn-primary">Anwenden</button>
+                {% if search or material_type or sort_by != 'name' or sort_order != 'asc' %}
+                <a href="/materials" class="btn btn-secondary">Zurücksetzen</a>
+                {% endif %}
+            </div>
+        </div>
     </form>
     
     {% if materials %}
@@ -72,15 +97,18 @@
     </div>
     {% else %}
     <p style="text-align: center; padding: 40px; color: var(--color-text-light);">
+        {% if search or material_type %}
+        Keine Materialien gefunden. <a href="/materials">Filter zurücksetzen</a>
+        {% else %}
         Noch keine Materialien vorhanden. <br>
         <a href="/materials/new">Erstes Material anlegen</a>
+        {% endif %}
     </p>
     {% endif %}
     
     <div style="margin-top: 20px;">
         <a href="/" class="btn btn-secondary">← Zurück zum Dashboard</a>
+        <a href="/material-types" class="btn btn-success">Materialtypen verwalten</a>
     </div>
 </div>
 {% endblock %}
-
-

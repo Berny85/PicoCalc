@@ -41,152 +41,32 @@
     {% endif %}
 </div>
 
-<!-- Produktbilder Section -->
-<div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-        <h2>🖼️ Produktbilder</h2>
-        <div style="display: flex; gap: 10px;">
-            <button onclick="toggleImageUpload()" class="btn btn-primary">📷 Bild hochladen</button>
-            <button onclick="toggleSvgLibrary()" class="btn btn-secondary">🎨 Aus SVG-Bibliothek</button>
-        </div>
-    </div>
-    
-    <!-- Upload Formular (anfangs versteckt) -->
-    <div id="image-upload-form" style="display: none; margin-top: 20px; padding: 20px; background: var(--color-bg-hover); border-radius: 8px;">
-        <h3>Neues Produktbild hochladen</h3>
-        <form method="POST" action="/products/{{ product.id }}/images/upload" enctype="multipart/form-data">
-            <div class="form-group">
-                <label for="image">Bild auswählen (PNG, JPG, WEBP)</label>
-                <input type="file" name="image" id="image" accept=".png,.jpg,.jpeg,.webp" required 
-                       style="padding: 10px; border: 2px dashed var(--color-border); border-radius: 4px; width: 100%;">
-            </div>
-            <div class="form-group">
-                <label for="img_description">Beschreibung (optional)</label>
-                <input type="text" name="description" id="img_description" placeholder="z.B. Produktfoto von vorne">
-            </div>
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" name="is_primary" value="1" style="width: auto;"> Als Hauptbild festlegen
-                </label>
-            </div>
-            <div class="actions">
-                <button type="submit" class="btn btn-primary">📤 Hochladen</button>
-                <button type="button" onclick="toggleImageUpload()" class="btn btn-secondary">Abbrechen</button>
-            </div>
-        </form>
-    </div>
-    
-    <!-- SVG Bibliothek Auswahl (anfangs versteckt) -->
-    <div id="svg-library-form" style="display: none; margin-top: 20px; padding: 20px; background: var(--color-bg-hover); border-radius: 8px;">
-        <h3>SVG aus Bibliothek verknüpfen</h3>
-        <p style="color: var(--color-text-light); margin-bottom: 15px;">
-            Wähle ein SVG aus deiner Bibliothek, um es mit diesem Produkt zu verknüpfen.
-        </p>
-        <a href="/tools/converted-files?select_for_product={{ product.id }}" class="btn btn-primary">
-            📁 Zur SVG-Bibliothek
-        </a>
-        <button type="button" onclick="toggleSvgLibrary()" class="btn btn-secondary" style="margin-left: 10px;">Abbrechen</button>
-    </div>
-    
-    <!-- Bilder Galerie -->
-    {% if images %}
-    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; margin-top: 20px;">
-        {% for image in images %}
-        <div style="position: relative; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-            <img src="/product-images/{{ image.id }}" 
-                 alt="{{ image.description or image.original_filename }}"
-                 style="width: 100%; height: 150px; object-fit: cover; display: block;">
-            
-            {% if image.is_primary %}
-            <span style="position: absolute; top: 5px; left: 5px; background: var(--color-primary); color: white; 
-                         padding: 2px 8px; border-radius: 12px; font-size: 0.75rem;">⭐ Hauptbild</span>
-            {% endif %}
-            
-            <div style="padding: 8px; background: white; font-size: 0.8rem;">
-                <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                    {{ image.original_filename }}
-                </div>
-                {% if image.description %}
-                <small style="color: var(--color-text-light);">{{ image.description }}</small>
-                {% endif %}
-                <div style="display: flex; gap: 5px; margin-top: 5px;">
-                    {% if not image.is_primary %}
-                    <form method="POST" action="/product-images/{{ image.id }}/set-primary" style="flex: 1;">
-                        <button type="submit" class="btn btn-primary" style="padding: 4px 8px; font-size: 0.75rem; width: 100%;">⭐</button>
-                    </form>
-                    {% endif %}
-                    <form method="POST" action="/product-images/{{ image.id }}/delete" style="flex: 1;"
-                          onsubmit="return confirm('Bild wirklich löschen?');">
-                        <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 0.75rem; width: 100%;">🗑️</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <p style="text-align: center; color: var(--color-text-light); padding: 40px;">
-        Noch keine Bilder vorhanden.<br>
-        Lade ein Produktfoto hoch oder verknüpfe ein SVG aus der Bibliothek.
-    </p>
-    {% endif %}
-</div>
-
-<script>
-    function toggleImageUpload() {
-        const form = document.getElementById('image-upload-form');
-        form.style.display = form.style.display === 'none' ? 'block' : 'none';
-        document.getElementById('svg-library-form').style.display = 'none';
-    }
-    
-    function toggleSvgLibrary() {
-        const form = document.getElementById('svg-library-form');
-        form.style.display = form.style.display === 'none' ? 'block' : 'none';
-        document.getElementById('image-upload-form').style.display = 'none';
-    }
-</script>
-
 <!-- Kalkulation -->
 <div class="card">
     <h2>📊 Kalkulation</h2>
     <div class="calculation-box">
-        <h3>Einkaufspreis (Selbstkosten)</h3>
-        <div class="price-item" style="margin-bottom: 20px;">
-            <div class="label">Gesamtkosten</div>
-            <div class="value" style="font-size: 2rem;">{{ calc.total_cost }} €</div>
+        <div class="price-grid">
+            <div class="price-item">
+                <div class="label">Einkaufspreis (EK)</div>
+                <div class="value">{{ calc.purchase_price }} €</div>
+                <div style="font-size: 0.8rem; opacity: 0.8; margin-top: 5px;">Selbstkosten</div>
+            </div>
+            <div class="price-item" style="background: rgba(255,255,255,0.3);">
+                <div class="label">Verkaufspreis (VK)</div>
+                <div class="value" style="font-size: 2rem;">{{ calc.selling_price }} €</div>
+                <div style="font-size: 0.8rem; opacity: 0.8; margin-top: 5px;">100% Aufschlag (2× EK)</div>
+            </div>
         </div>
         
         <div style="margin: 20px 0; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 4px;">
             <strong>Kostenaufschlüsselung:</strong><br>
             Material: {{ calc.material_cost }} € | 
             Maschine: {{ calc.machine_cost }} € | 
-            Arbeit: {{ calc.labor_cost }} € | 
+            Arbeit: {{ calc.labor_cost }} € |
+            {% if calc.components_count > 0 %}
+            Komponenten: {{ calc.components_cost }} € |
+            {% endif %}
             Verpackung/Versand: {{ calc.packaging_shipping }} €
-        </div>
-        
-        <h3 style="margin-top: 30px;">Verkaufspreise</h3>
-        <div class="price-grid">
-            <div class="price-item">
-                <div class="label">50% Marge / 100% Aufschlag</div>
-                <div class="value">{{ calc.selling_price_100 }} €</div>
-            </div>
-            <div class="price-item">
-                <div class="label">66,7% Marge / 200% Aufschlag</div>
-                <div class="value">{{ calc.selling_price_200 }} €</div>
-            </div>
-            <div class="price-item">
-                <div class="label">75% Marge / 300% Aufschlag</div>
-                <div class="value">{{ calc.selling_price_300 }} €</div>
-            </div>
-        </div>
-        
-        <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid rgba(255,255,255,0.3);">
-            <a href="/articles/new?product_id={{ product.id }}" class="btn" style="background: white; color: var(--color-primary-dark); font-weight: bold;">
-                📝 Als Artikel anlegen
-            </a>
-            <small style="display: block; margin-top: 10px; opacity: 0.9;">
-                Produktionskosten werden automatisch als Einkaufspreis übernommen
-            </small>
         </div>
     </div>
 </div>
@@ -216,7 +96,7 @@
             </tr>
         </table>
         </div>
-        {% elif product.product_type in ['sticker_sheet', 'stationery'] %}
+        {% elif product.product_type == 'sticker' %}
         <div class="table-responsive">
         <table>
             <tr>
@@ -256,75 +136,6 @@
             </tr>
         </table>
         </div>
-        {% elif product.product_type == 'laser_engraving' %}
-        <div class="table-responsive">
-        <table>
-            <tr>
-                <td>Material:</td>
-                <td><strong>{{ product.laser_material.name if product.laser_material else '-' }}</strong></td>
-            </tr>
-            <tr>
-                <td>Design:</td>
-                <td><strong>{{ product.laser_design_name or '-' }}</strong></td>
-            </tr>
-            <tr>
-                <td>Preis/Material:</td>
-                <td><strong>{{ product.laser_material.price_per_unit if product.laser_material else '0' }} €</strong></td>
-            </tr>
-            <tr style="border-top: 2px solid var(--color-primary-dark);">
-                <td>Materialkosten:</td>
-                <td><strong>{{ calc.material_cost }} €</strong></td>
-            </tr>
-        </table>
-        
-        <h3 style="margin-top: 30px;">Laser-Layer</h3>
-        <table>
-            <tr>
-                <td><strong>Layer 1:</strong></td>
-                <td>{{ calc.layer1.type }} | {{ calc.layer1.power }}% | {{ calc.layer1.speed }} mm/s | {{ calc.layer1.passes }}x</td>
-            </tr>
-            {% if calc.layer2 %}
-            <tr>
-                <td><strong>Layer 2:</strong></td>
-                <td>{{ calc.layer2.type }} | {{ calc.layer2.power }}% | {{ calc.layer2.speed }} mm/s | {{ calc.layer2.passes }}x</td>
-            </tr>
-            {% endif %}
-            {% if calc.layer3 %}
-            <tr>
-                <td><strong>Layer 3:</strong></td>
-                <td>{{ calc.layer3.type }} | {{ calc.layer3.power }}% | {{ calc.layer3.speed }} mm/s | {{ calc.layer3.passes }}x</td>
-            </tr>
-            {% endif %}
-        </table>
-        </div>
-        {% elif product.product_type == 'assembly' %}
-        <div class="table-responsive">
-        <h3>Komponenten</h3>
-        {% if calc.components %}
-        <table>
-            {% for comp in calc.components %}
-            <tr>
-                <td><strong>{{ comp.name }}</strong></td>
-                <td>{{ comp.quantity }} × {{ "%.2f"|format(comp.unit_cost) }} €</td>
-                <td style="text-align: right;"><strong>{{ "%.2f"|format(comp.total) }} €</strong></td>
-            </tr>
-            {% if comp.notes %}
-            <tr>
-                <td colspan="3" style="color: var(--color-text-light); font-size: 0.9em; padding-top: 0;">
-                    {{ comp.notes }}
-                </td>
-            </tr>
-            {% endif %}
-            {% endfor %}
-            <tr style="border-top: 2px solid var(--color-primary-dark);">
-                <td colspan="2"><strong>Gesamtkosten Komponenten:</strong></td>
-                <td style="text-align: right;"><strong>{{ calc.material_cost }} €</strong></td>
-            </tr>
-        </table>
-        {% else %}
-        <p style="color: var(--color-text-light);">Keine Komponenten definiert.</p>
-        {% endif %}
-        </div>
         {% endif %}
         
         <h3 style="margin-top: 30px;">Weitere Kosten</h3>
@@ -347,13 +158,14 @@
         <div class="table-responsive">
         <table>
             {% if product.product_type == '3d_print' %}
-            <tr style="border-bottom: 2px solid var(--color-primary-dark);">
+            <tr>
                 <td>Druckzeit:</td>
                 <td><strong>{{ product.print_time_hours }} h</strong></td>
             </tr>
-            {% elif product.product_type in ['sticker_sheet', 'stationery'] %}
-            <tr style="border-bottom: 2px solid var(--color-primary-dark);">
-                <td>Genutzte Maschinen:</td>
+            {% endif %}
+            {% if product.product_type == 'sticker' %}
+            <tr>
+                <td>Genutzte Maschine:</td>
                 <td><strong>{{ product.machine.name if product.machine else '-' }}</strong></td>
             </tr>
             {% if product.machine and product.machine.cost_per_sheet %}
@@ -369,7 +181,6 @@
             {% endif %}
             {% endif %}
             {% endif %}
-            {% if product.product_type != 'assembly' %}
             <tr>
                 <td>Genutzte Maschine:</td>
                 <td><strong>{{ product.machine.name if product.machine else '-' }}</strong></td>
@@ -382,7 +193,6 @@
                 <td>Maschinenkosten:</td>
                 <td><strong>{{ calc.machine_cost }} €</strong></td>
             </tr>
-            {% endif %}
             <tr style="border-top: 2px solid var(--color-primary-dark);">
                 <td>Arbeitszeit:</td>
                 <td><strong>{{ product.labor_minutes }} min</strong> ({{ "%.2f"|format(calc.labor_hours) }} h)</td>
@@ -398,6 +208,50 @@
         </table>
         </div>
     </div>
+</div>
+
+<!-- Komponenten (für alle Produkttypen) -->
+<div class="card">
+    <h2>🧩 Komponenten</h2>
+    {% if calc.components_count > 0 %}
+    <div class="table-responsive">
+    <table>
+        <thead>
+            <tr>
+                <th>Komponente</th>
+                <th>Menge</th>
+                <th>EK/Stück</th>
+                <th>Gesamt</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for comp in calc.components %}
+            <tr>
+                <td><strong>{{ comp.name }}</strong></td>
+                <td>{{ comp.quantity }}</td>
+                <td>{{ "%.2f"|format(comp.unit_cost) }} €</td>
+                <td><strong>{{ "%.2f"|format(comp.total) }} €</strong></td>
+            </tr>
+            {% if comp.notes %}
+            <tr>
+                <td colspan="4" style="color: var(--color-text-light); font-size: 0.9em; padding-top: 0;">
+                    {{ comp.notes }}
+                </td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr style="border-top: 2px solid var(--color-primary-dark);">
+                <td colspan="3"><strong>Gesamtkosten Komponenten:</strong></td>
+                <td><strong>{{ calc.components_cost }} €</strong></td>
+            </tr>
+        </tfoot>
+    </table>
+    </div>
+    {% else %}
+    <p style="color: var(--color-text-light);">Keine Komponenten definiert.</p>
+    {% endif %}
 </div>
 
 <div class="card">
@@ -420,5 +274,3 @@
     <a href="/products" class="btn btn-secondary">← Zurück zur Liste</a>
 </div>
 {% endblock %}
-
-

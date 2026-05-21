@@ -10,8 +10,41 @@
     </div>
     
     <p style="color: var(--color-text-light); margin: 15px 0;">
-        Hier kannst du die verfügbaren Materialtypen verwalten. Diese werden in Dropdown-Menüs beim Erstellen von Materialien angezeigt.
+        Hier kannst du die verfügbaren Materialtypen verwalten.
     </p>
+</div>
+
+<!-- Suchleiste und Sortierung -->
+<div class="card">
+    <form method="GET" action="/material-types" style="margin-bottom: 0;">
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: end;">
+            <div style="flex: 1; min-width: 200px;">
+                <label style="font-size: 0.85rem; color: var(--color-text-light);">Suche</label>
+                <input type="text" name="search" value="{{ search }}" placeholder="Name oder Schlüssel..." style="width: 100%;">
+            </div>
+            <div>
+                <label style="font-size: 0.85rem; color: var(--color-text-light);">Sortierung</label>
+                <select name="sort_by">
+                    <option value="name" {% if sort_by == 'name' %}selected{% endif %}>Name</option>
+                    <option value="key" {% if sort_by == 'key' %}selected{% endif %}>Schlüssel</option>
+                    <option value="sort_order" {% if sort_by == 'sort_order' %}selected{% endif %}>Sortierung</option>
+                </select>
+            </div>
+            <div>
+                <label style="font-size: 0.85rem; color: var(--color-text-light);">Reihenfolge</label>
+                <select name="sort_order">
+                    <option value="asc" {% if sort_order == 'asc' %}selected{% endif %}>Aufsteigend</option>
+                    <option value="desc" {% if sort_order == 'desc' %}selected{% endif %}>Absteigend</option>
+                </select>
+            </div>
+            <div>
+                <button type="submit" class="btn btn-primary">Anwenden</button>
+                {% if search or sort_by != 'name' or sort_order != 'asc' %}
+                <a href="/material-types" class="btn btn-secondary">Zurücksetzen</a>
+                {% endif %}
+            </div>
+        </div>
+    </form>
 </div>
 
 <div class="card">
@@ -55,7 +88,13 @@
         </tbody>
     </table>
     {% else %}
-    <p>Keine Materialtypen vorhanden.</p>
+    <p style="text-align: center; padding: 40px; color: var(--color-text-light);">
+        {% if search %}
+        Keine Materialtypen gefunden. <a href="/material-types">Filter zurücksetzen</a>
+        {% else %}
+        Keine Materialtypen vorhanden.
+        {% endif %}
+    </p>
     {% endif %}
 </div>
 
@@ -85,5 +124,3 @@ code {
 }
 </style>
 {% endblock %}
-
-

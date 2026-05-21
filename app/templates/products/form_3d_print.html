@@ -15,7 +15,6 @@
                            value="{{ product.name if product else '' }}">
                 </div>
                 
-                <!-- Kategorie ausgeblendet - wird automatisch auf "Sonstiges" gesetzt -->
                 <input type="hidden" name="category" value="Sonstiges">
             </div>
             
@@ -26,6 +25,7 @@
                         <option value="">-- Bitte wählen --</option>
                         {% for f in filaments %}
                         <option value="{{ f.id }}" 
+                                data-price="{{ f.price_per_unit }}"
                                 {% if product and product.filament_material_id == f.id %}selected{% endif %}>
                             {{ f.name }} {% if f.brand %}({{ f.brand }}){% endif %} - {{ f.price_per_unit }}€/{{ f.unit }}
                         </option>
@@ -62,7 +62,6 @@
                                 {% if not product and loop.first %}selected{% endif %}>
                             {{ m.name }} ({{ "%.3f"|format(m.calculate_cost_per_hour()) }} €/h)
                             {% if m.machine_type == '3d_printer' %}- Drucker{% endif %}
-                            {% if m.machine_type == 'cutter_plotter' %}- Plotter{% endif %}
                         </option>
                         {% endfor %}
                     </select>
@@ -133,9 +132,83 @@
             </div>
         </div>
         
+        <!-- KOMPONENTEN -->
+        <h3 style="margin-top: 30px; color: var(--color-primary-dark);">🧩 Komponenten</h3>
+        <p style="color: var(--color-text-light); margin-bottom: 15px;">
+            Zusätzliche Teile wie Metall-Ringe, Anhänger, etc.
+        </p>
+        
+        <div id="components-container">
+            {% if product and product.components %}
+                {% for comp in product.components %}
+                <div class="component-row" style="display: grid; grid-template-columns: 2fr 1fr 1fr 2fr auto; gap: 10px; margin-bottom: 10px; align-items: end;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Name</label>
+                        <input type="text" name="component_name" value="{{ comp.name }}" placeholder="z.B. Metall-Ring" class="form-control">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Menge</label>
+                        <input type="number" name="component_quantity" value="{{ comp.quantity }}" step="0.01" min="0" placeholder="1" oninput="calculateTotalCost()">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>EK/Stück (€)</label>
+                        <input type="number" name="component_unit_cost" value="{{ comp.unit_cost }}" step="0.01" min="0" placeholder="0.00" oninput="calculateTotalCost()">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Notizen</label>
+                        <input type="text" name="component_notes" value="{{ comp.notes or '' }}" placeholder="Optional">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Verknüpfung</label>
+                        <select name="component_linked_product_id" style="width: 100%;">
+                            <option value="">-- Kein Produkt --</option>
+                            {% for p in all_products %}
+                            <option value="{{ p.id }}" {% if comp.linked_product_id == p.id %}selected{% endif %}>
+                                {{ p.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="button" class="btn btn-danger" onclick="removeComponentRow(this); calculateTotalCost();" style="margin-bottom: 0; height: 38px;">×</button>
+                </div>
+                {% endfor %}
+            {% endif %}
+        </div>
+        
+        <button type="button" class="btn btn-secondary" onclick="addComponentRow()" style="margin-top: 10px;">
+            + Komponente hinzufügen
+        </button>
+        
         <div class="form-group" style="margin-top: 20px;">
             <label for="notes">Notizen</label>
             <textarea id="notes" name="notes">{{ product.notes if product else '' }}</textarea>
+        </div>
+        
+        <!-- Live-Kostenberechnung -->
+        <div class="card" style="margin-top: 30px;">
+            <h2>📊 Live-Kalkulation</h2>
+            <div class="calculation-box">
+                <div class="price-grid">
+                    <div class="price-item">
+                        <div class="label">Einkaufspreis (EK)</div>
+                        <div class="value" id="live-purchase-price">0.00 €</div>
+                        <div style="font-size: 0.8rem; opacity: 0.8; margin-top: 5px;">Selbstkosten</div>
+                    </div>
+                    <div class="price-item" style="background: rgba(255,255,255,0.3);">
+                        <div class="label">Verkaufspreis (VK)</div>
+                        <div class="value" style="font-size: 2rem;" id="live-selling-price">0.00 €</div>
+                        <div style="font-size: 0.8rem; opacity: 0.8; margin-top: 5px;">100% Aufschlag (2× EK)</div>
+                    </div>
+                </div>
+                <div style="margin: 20px 0; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 4px;">
+                    <strong>Kostenaufschlüsselung:</strong><br>
+                    Material: <span id="live-material-cost">0.00</span> € |
+                    Maschine: <span id="live-machine-cost">0.00</span> € |
+                    Arbeit: <span id="live-labor-cost">0.00</span> € |
+                    Komponenten: <span id="live-components-cost">0.00</span> € |
+                    Verpackung/Versand: <span id="live-packaging-shipping">0.00</span> €
+                </div>
+            </div>
         </div>
         
         <div class="actions">
@@ -149,18 +222,59 @@
 </div>
 
 <script>
-const filamentSelect = document.getElementById('filament_material_id');
+const allProductsOptions = `
+    <option value="">-- Kein Produkt --</option>
+    {% for p in all_products %}
+    <option value="{{ p.id }}">{{ p.name }}</option>
+    {% endfor %}
+`;
+
+function addComponentRow() {
+    const container = document.getElementById('components-container');
+    const row = document.createElement('div');
+    row.className = 'component-row';
+    row.style.cssText = 'display: grid; grid-template-columns: 2fr 1fr 1fr 2fr auto; gap: 10px; margin-bottom: 10px; align-items: end;';
+    row.innerHTML = `
+        <div class="form-group" style="margin-bottom: 0;">
+            <label>Name</label>
+            <input type="text" name="component_name" placeholder="z.B. Metall-Ring" class="form-control">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+            <label>Menge</label>
+            <input type="number" name="component_quantity" value="1" step="0.01" min="0" placeholder="1" oninput="calculateTotalCost()">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+            <label>EK/Stück (€)</label>
+            <input type="number" name="component_unit_cost" value="0" step="0.01" min="0" placeholder="0.00" oninput="calculateTotalCost()">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+            <label>Notizen</label>
+            <input type="text" name="component_notes" placeholder="Optional">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+            <label>Verknüpfung</label>
+            <select name="component_linked_product_id" style="width: 100%;">
+                ${allProductsOptions}
+            </select>
+        </div>
+        <button type="button" class="btn btn-danger" onclick="removeComponentRow(this); calculateTotalCost();" style="margin-bottom: 0; height: 38px;">×</button>
+    `;
+    container.appendChild(row);
+    calculateTotalCost();
+}
+
+function removeComponentRow(button) {
+    button.closest('.component-row').remove();
+}
+
 const machineSelect = document.getElementById('machine_id');
 const costDisplay = document.getElementById('machine-cost-display');
-const printTimeInput = document.getElementById('print_time_hours');
 
 function updateMachineCost() {
     if (!machineSelect) return;
-    
     const selectedOption = machineSelect.options[machineSelect.selectedIndex];
     const selectedMachineId = machineSelect.value;
     
-    // Lade Maschine mit ID
     {% if not product %}if (selectedMachineId) {
         const options = machineSelect.options;
         for (let i = 0; i < options.length; i++) {
@@ -171,13 +285,67 @@ function updateMachineCost() {
             }
         }
     }{% endif %}
+    calculateTotalCost();
 }
 
-machineSelect.addEventListener('change', updateMachineCost);
+function calculateTotalCost() {
+    // Material
+    const filamentSelect = document.getElementById('filament_material_id');
+    const filamentPrice = parseFloat(filamentSelect.selectedOptions[0]?.dataset.price || 0);
+    const filamentWeight = parseFloat(document.getElementById('filament_weight_g').value.replace(',', '.')) || 0;
+    const materialCost = (filamentPrice * filamentWeight) / 1000;
+    
+    // Maschine
+    const machineCostPerHour = parseFloat(machineSelect.selectedOptions[0]?.dataset.cost || 0);
+    const printTime = parseFloat(document.getElementById('print_time_hours').value.replace(',', '.')) || 0;
+    const machineCost = machineCostPerHour * printTime;
+    
+    // Arbeit
+    const laborMinutes = parseFloat(document.getElementById('labor_minutes').value.replace(',', '.')) || 0;
+    const laborRate = parseFloat(document.getElementById('labor_rate_per_hour').value) || 0;
+    const laborCost = (laborMinutes / 60) * laborRate;
+    
+    // Verpackung / Versand
+    const packagingCost = parseFloat(document.getElementById('packaging_cost').value) || 0;
+    const shippingCost = parseFloat(document.getElementById('shipping_cost').value) || 0;
+    const packagingShipping = packagingCost + shippingCost;
+    
+    // Komponenten
+    let componentsCost = 0;
+    document.querySelectorAll('.component-row').forEach(row => {
+        const qty = parseFloat(row.querySelector('[name="component_quantity"]')?.value) || 0;
+        const unitCost = parseFloat(row.querySelector('[name="component_unit_cost"]')?.value) || 0;
+        componentsCost += qty * unitCost;
+    });
+    
+    const purchasePrice = materialCost + machineCost + laborCost + componentsCost + packagingShipping;
+    const sellingPrice = purchasePrice * 2;
+    
+    document.getElementById('live-material-cost').textContent = materialCost.toFixed(3);
+    document.getElementById('live-machine-cost').textContent = machineCost.toFixed(3);
+    document.getElementById('live-labor-cost').textContent = laborCost.toFixed(3);
+    document.getElementById('live-components-cost').textContent = componentsCost.toFixed(3);
+    document.getElementById('live-packaging-shipping').textContent = packagingShipping.toFixed(3);
+    document.getElementById('live-purchase-price').textContent = purchasePrice.toFixed(3) + ' €';
+    document.getElementById('live-selling-price').textContent = sellingPrice.toFixed(3) + ' €';
+}
 
-// Initial update on page load
-updateMachineCost();
+if (machineSelect) {
+    machineSelect.addEventListener('change', updateMachineCost);
+    updateMachineCost();
+}
+
+// Event-Listener für Live-Berechnung
+document.getElementById('filament_material_id').addEventListener('change', calculateTotalCost);
+document.getElementById('filament_weight_g').addEventListener('input', calculateTotalCost);
+document.getElementById('print_time_hours').addEventListener('input', calculateTotalCost);
+document.getElementById('labor_minutes').addEventListener('input', calculateTotalCost);
+document.getElementById('labor_rate_per_hour').addEventListener('input', calculateTotalCost);
+document.getElementById('packaging_cost').addEventListener('input', calculateTotalCost);
+document.getElementById('shipping_cost').addEventListener('input', calculateTotalCost);
+
+document.addEventListener('DOMContentLoaded', function() {
+    calculateTotalCost();
+});
 </script>
 {% endblock %}
-
-

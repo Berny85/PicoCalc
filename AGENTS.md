@@ -4,7 +4,7 @@
 
 ## Project Overview
 
-**Picobellu Design** (ehemals PicoCalc) ist ein webbasierter Produktpreis-Kalkulator und ERP-System für kleine Fertigungsunternehmen. Er berechnet Produktionskosten für verschiedene Produkttypen wie 3D-Druck, Sticker-Produktion, Schreibwaren, Laser-Gravur und Zusammenbau-Produkte. Zusätzlich verfügt das System über Artikel-Verwaltung, Kundenstamm, Verkaufsaufträge und Rechnungsstellung.
+**Picobellu Design** (ehemals PicoCalc) ist ein webbasierter Produktpreis-Kalkulator für kleine Fertigungsunternehmen. Er berechnet Produktionskosten für 3D-Druck und Sticker-Produkte. Produkte können aus Materialien, Arbeitszeit, Maschinenkosten und zusätzlichen Komponenten (z.B. Metall-Teile) bestehen. Der Kalkulator zeigt Einkaufspreis (EK) und Verkaufspreis (VK = 2× EK) an.
 
 - **Repository**: https://github.com/Berny85/PicoCalc.git
 - **Production URL**: http://192.168.50.8:5000
@@ -24,14 +24,16 @@
 | Infrastructure | Intel NUC mit Unraid OS |
 | CI/CD | GitHub Actions + Docker Hub |
 | Migrationen | Alembic | 1.13.1 |
+| SVG Konvertierung | vtracer | 0.6.11 |
+| Bildverarbeitung | Pillow | 10.2.0 |
 
 ## Project Structure
 
 ```
 PicoCalc/
 ├── app/                          # Hauptanwendung
-│   ├── main.py                   # FastAPI App mit allen Routes (~2960 Zeilen)
-│   ├── models.py                 # SQLAlchemy Datenbank-Modelle (~1020 Zeilen)
+│   ├── main.py                   # FastAPI App mit allen Routes (~1300 Zeilen)
+│   ├── models.py                 # SQLAlchemy Datenbank-Modelle
 │   ├── database.py               # Datenbank-Konfiguration und Session-Management
 │   ├── requirements.txt          # Python-Abhängigkeiten
 │   ├── Dockerfile                # Container-Image Definition
@@ -41,15 +43,8 @@ PicoCalc/
 │       ├── materials/            # Material-Verwaltung UI
 │       ├── machines/             # Maschinen-Verwaltung UI
 │       ├── products/             # Produkt-Formulare und Details
-│       ├── articles/             # Artikel-Verwaltung UI
-│       ├── customers/            # Kunden-Verwaltung UI
-│       ├── sales_orders/         # Verkaufsaufträge UI
-│       ├── invoices/             # Rechnungs-UI mit Druckansicht
-│       ├── config/               # Konfigurations-UI
-│       ├── feedback/             # Feedback-Formular und Liste
-│       ├── ideas/                # Kanban-Style Ideen-Board
-│       ├── tools/                # PNG-zu-SVG Converter & Bibliothek
-│       └── partials/             # HTMX Partial Templates
+│       ├── feedback_ideas/       # Feedback & Ideen Verwaltung
+│       └── tools/                # SVG Converter + Bibliothek
 ├── alembic/                      # Datenbank-Migrationen (Alembic)
 │   ├── versions/                 # Migrations-Skripte
 │   └── env.py                    # Alembic Umgebungs-Konfiguration
@@ -57,6 +52,8 @@ PicoCalc/
 ├── backup/                       # Backup-Skripte
 │   ├── backup-script.sh          # Automatisiertes PostgreSQL Backup
 │   └── restore-script.sh         # Datenbank-Wiederherstellung
+├── old_project/                  # ⚠️ Backup des alten Projekts (vor Aufräumen)
+│   └── app/                      # Alter Code mit entfernten Features
 ├── .github/workflows/            # CI/CD Konfiguration
 │   └── deploy.yml                # GitHub Actions Workflow
 ├── docker-compose.yaml           # Entwicklungs-Konfiguration
@@ -130,124 +127,53 @@ Repräsentiert Rohmaterialien (Filamente, Sticker-Sheets, Papier):
 Zentrale Entity mit typ-spezifischen Feldern:
 - **Gemeinsam**: `name`, `product_type`, `category`, `labor_minutes`, `labor_rate_per_hour`, `notes`
   - `labor_minutes` - Arbeitszeit in Minuten
-- **Berechnungsmodus**: `calculation_mode` ("per_unit" oder "per_batch"), `units_per_batch`
+- **Sticker**: `sheet_material_id`, `sheet_count`, `units_per_sheet`, `additional_machine_ids`
+  - `sheet_count` ist sichtbar und editierbar (Default: 1)
+  - Sticker-Sheet → Default 3 units/sheet, DieCut → Default 9 units/sheet
+  - Alle "per sheet" Kosten (Material, Maschine, Arbeit) werden durch `units_per_sheet` geteilt
 - **3D-Druck**: `filament_material_id`, `filament_weight_g`, `print_time_hours`, `machine_id`
-- **Sticker/Papier/Schreibwaren**: `sheet_material_id`, `sheet_count` (immer 1), `units_per_sheet`, `additional_machine_ids`
-- **Laser**: `laser_material_id`, `laser_design_name`, `laser1_*`, `laser2_*`, `laser3_*` (Layer-Konfiguration)
-- Methode: `calculate_costs()` - Gibt Kostenaufschlüsselung und Verkaufspreis-Vorschläge (100%, 200%, 300% Aufschlag) zurück
+- **Laser** (veraltet, bleibt in DB): `laser_material_id`, `laser_design_name`, `laser1_*`, etc.
+- **Verpackung/Versand**: `packaging_cost`, `shipping_cost`
+- Methode: `calculate_costs()` - Gibt Kostenaufschlüsselung zurück inkl. `purchase_price` (EK) und `selling_price` (VK = 2× EK)
 
-### ArticleCategory (`models.py`)
-Artikelkategorien mit automatischer Nummernvergabe:
-- `code` - Kurzcode (z.B. 'ART', 'ST')
-- `name`, `description`
-- `prefix` - Präfix für Artikelnummern (z.B. 'ART-')
-- `next_number` - Nächste fortlaufende Nummer
-- Methode: `generate_article_number()`
-
-### Article (`models.py`)
-Artikelstamm für fertige Produkte zum Verkauf (ersetzt Zusammenbau-Produkte):
-- `article_number` - Eindeutige Nummer (z.B. 'ART-0001', automatisch vergeben)
-- `category_id` - Verknüpfung zu ArticleCategory
-- `name`, `description`, `selling_price`, `stock_quantity`, `unit`
-- `purchase_price` - Wird automatisch aus Komponenten + Kosten berechnet
-- **Zusammenbau-Kosten**: `labor_minutes`, `labor_rate_per_hour`, `packaging_cost`, `shipping_cost`
-- `is_active` - Soft-delete Support
-- Methoden: `calculate_total_cost()`, `calculate_components_cost()`, `calculate_labor_cost()`
-
-### ArticleComponent (`models.py`)
-Komponenten für Artikel (Zusammenbau aus Produkten):
-- `article_id` - Verknüpfung zum Artikel
-- `name`, `quantity`, `unit_cost`, `notes`
-- `linked_product_id` - Optionale Verknüpfung zu existierendem Produkt
-- `sort_order` - Für Reihenfolge
-- Methode: `calculate_total_cost()`
-
-### Customer (`models.py`)
-Kundenstamm:
-- `customer_number` - Eindeutige Kundennummer (z.B. 'K-0001')
-- `company_name`, `first_name`, `last_name`
-- `address_line1`, `address_line2`, `postal_code`, `city`, `country`
-- `email`, `phone`, `vat_id`
-- `is_active` - Soft-delete Support
-
-### SalesOrder (`models.py`)
-Verkaufsaufträge mit mehreren Positionen:
-- `order_number`, `customer_name`
-- `packaging_cost`, `shipping_cost` - Werden hier erfasst
-- `labor_minutes_packaging`, `labor_rate_packaging` - Arbeitszeit für Verpackung
-- `status` - 'pending', 'produced', 'shipped', 'cancelled'
-- Methode: `calculate_total()` - Gesamtsumme aller Positionen + Verpackung/Versand
-
-### SalesOrderItem (`models.py`)
-Einzelpositionen eines Verkaufsauftrags:
-- `sales_order_id` - Verknüpfung zum Auftrag
-- `item_type` - 'product' oder 'article'
-- `product_id` ODER `article_id` - Verknüpfung
-- `quantity` - Anzahl
-- `unit_price` - Verkaufspreis pro Einheit
-- `cost_per_unit` - Selbstkosten (Kopie zum Zeitpunkt des Verkaufs)
-
-### Invoice (`models.py`)
-Rechnungen an Kunden:
-- `invoice_number` - Eindeutig, Format: RE-YYYY-XXXX
-- `customer_id`, `customer_name`, `customer_address`
-- `status` - 'draft', 'sent', 'paid', 'overdue', 'cancelled'
-- `total_net`, `discount_percent`, `discount_amount`, `vat_rate`, `vat_amount`, `total_gross`
-- `bank_info` - Bankdaten für Rechnungsfuß
-- Methode: `calculate_totals()`
-
-### InvoiceItem (`models.py`)
-Einzelpositionen einer Rechnung:
-- `invoice_id`, `position` - Positionsnummer
-- `article_id` - Verknüpfung zum Artikel
-- `article_number`, `description` - Kopien zum Zeitpunkt der Erstellung
-- `quantity`, `unit`, `unit_price_net`, `total_net`
-
-### Feedback (`models.py`)
-User-Feedback und Bug-Reports:
-- `page_url`, `page_title` - Kontext wo Feedback gegeben wurde
-- `category` - 'bug', 'feature', 'improvement', 'other'
-- `message`, `status` - 'new', 'in_progress', 'done', 'rejected'
-
-### Idea (`models.py`)
-Kanban-Style Ideen-Board:
-- `subject`, `content`
-- `status` - 'todo', 'in_progress', 'done'
+### FeedbackIdea (`models.py`)
+Vereinfachtes Feedback/Ideen-System:
+- `description` (Text, required) - Einzige Eingabe
+- `status` ('open' | 'done') - Toggle via Button
+- `created_at`, `updated_at` - Zeitstempel
 
 ### ConvertedFile (`models.py`)
 Gespeicherte PNG-zu-SVG Konvertierungen:
 - `original_filename`, `stored_filename` (UUID)
-- `file_path_png`, `file_path_svg`
-- `conversion_mode` (spline/pixel), `color_mode` (color/binary)
-- `description`, `tags`
-
-### ProductImage (`models.py`)
-Produktbilder:
-- `product_id` - Verknüpfung zu Product
-- `file_path`, `mime_type`
-- `is_primary` - 1 = Hauptbild, 0 = Zusatzbild
-- `converted_file_id` - Optionale Verknüpfung zu SVG-Bibliothek
+- `file_path_png`, `file_path_svg` - Relative Pfade im Storage
+- `original_size_bytes`, `svg_size_bytes`
+- `conversion_mode` ('spline' | 'pixel'), `color_mode` ('color' | 'binary')
+- `description`, `tags` - Optional für Suche
+- `created_at`
+- Methode: `get_size_reduction_percent()`
 
 ### ProductComponent (`models.py`)
-Komponenten-System für komplexe Produkte:
+Komponenten für Produkte (z.B. Metall-Ring, Anhänger):
 - `product_id` - Hauptprodukt
 - `name`, `quantity`, `unit_cost`, `notes`
-- `linked_product_id` - Optionale Verknüpfung zu existierendem Produkt
+- `linked_product_id` - Optionale Verknüpfung zu existierendem Produkt (EK wird automatisch übernommen)
 - `sort_order` - Für Reihenfolge
+- Methode: `calculate_total_cost()`
 
-### Config (`models.py`)
-Konfigurations-Tabelle (Key-Value Store):
-- `key`, `value`, `description`
-- `category` - 'general', 'invoice', 'company', etc.
+> **Hinweis**: Folgende Tabellen existieren noch in der Datenbank, wurden aber aus dem Code entfernt:
+> `articles`, `article_categories`, `article_components`, `customers`, `sales_orders`, 
+> `sales_order_items`, `invoices`, `invoice_items`, `feedback`, `ideas`, `product_images`, `config`.
+> Sie werden bei Alembic autogenerate ignoriert.
+>
+> **Wiederhergestellte Tabelle**: `converted_files` (via `old_project/` Backup)
 
 ## Product Types & Categories
 
 ### Product Types (intern)
 - `3d_print` - 3D-gedruckte Objekte
 - `sticker` - Sticker-Produkte (Sheet & DieCut)
-- `stationery` - Schreibwaren (Notizblöcke, Karten, Papierwaren)
-- `assembly` - Zusammenbau-Produkte
-- `laser_engraving` - Laser-Gravur Produkte
+
+> **Veraltete Typen** (bleiben in DB für bestehende Produkte): `stationery`, `assembly`, `laser_engraving`
 
 ### Sticker Categories
 Für Produkttyp `sticker` gibt es zwei Unterkategorien:
@@ -455,47 +381,18 @@ Aktuell hat das Projekt keine automatisierten Tests. Testing erfolgt manuell:
 
 ## Special Features
 
-### PNG to SVG Converter
-- Tool unter `/tools/png-to-svg`
-- Nutzt vtracer Bibliothek für Vektorisierung
-- Konvertierte Dateien können in SVG-Bibliothek gespeichert werden
-- Bibliothek verfügbar unter `/tools/converted-files`
-- Unterstützte Formate: PNG, JPG, WEBP, BMP
+### Produkt-Komponenten
+- Jedes Produkt (3D-Druck & Sticker) kann zusätzliche Komponenten haben
+- Komponenten haben Name, Menge, EK/Stück und optionale Notizen
+- Verknüpfung mit bestehendem Produkt möglich (EK wird automatisch übernommen)
+- Komponenten-Kosten fließen in die Gesamtkalkulation ein
+- Beispiel: Schlüsselanhänger = 3D-Druck Teil + Metall-Ring + Metall-Anhänger
 
-### Product Images
-- Bilder können zu Produkten hochgeladen werden
-- Unterstützt PNG, JPG, WEBP
-- SVGs aus der Bibliothek können mit Produkten verknüpft werden
-- Hauptbild-Funktionalität für primäre Produktfotos
-- Bilder werden in `FILE_STORAGE_PATH/products/YYYY/MM/` organisiert
-
-### Kanban-Style Ideas Board
-- Ideen können in Status "todo", "in_progress", "done" verschoben werden
-- Drag & Drop Funktionalität (AJAX Status-Update)
-- Schnelles Notieren von Verbesserungsideen
-
-### Artikel-Verwaltung (mit Zusammenbau-Funktion)
-- **Wertschöpfungskette**: Materialien → Produkte → Artikel
-- Automatische Artikelnummern-Generierung (z.B. ART-0001, ST-0005)
-- **Komponenten-System**: Artikel können aus mehreren Produkten bestehen
-- Automatische EK-Berechnung aus Komponenten + Arbeit + Verpackung/Versand
-- Verknüpfung mit Produkten für automatische Kosten-Übernahme
-- Kategorien mit Präfix-System
-- Soft-delete Support (is_active Flag)
-
-### Kunden-Verwaltung
-- Automatische Kundennummern-Generierung (K-0001, K-0002, ...)
-- Vollständige Adressverwaltung
-- USt-IdNr. für B2B
-- Verknüpfung mit Rechnungen
-
-### Rechnungs-System
-- Automatische Rechnungsnummern (RE-YYYY-XXXX)
-- **Bearbeitung möglich** (nur für Entwürfe) - Rechnungen können vor dem Versenden geändert werden
-- Mehrseitige Druckansicht mit automatischem Seitenumbruch
-- Rabatt in 5%-Schritten (0-100%)
-- MwSt-Berechnung auf Betrag nach Rabatt
-- Konfigurierbare Bankdaten im Fuß
+### Preiskalkulation
+- **Einkaufspreis (EK)**: Summe aus Material + Maschine + Arbeit + Komponenten + Verpackung/Versand
+- **Verkaufspreis (VK)**: Automatisch 2× EK (100% Aufschlag)
+- Live-Kostenberechnung im Sticker-Formular
+- Detailansicht zeigt EK/VK prominent an
 
 ## Database Migrations (Alembic)
 
@@ -635,8 +532,8 @@ docker-compose up -d    # Erstellt neu
 3. **Cost Calculation Logic**: Die zentrale Business-Logik ist in `models.py`:
    - `Machine.calculate_cost_per_hour()` - Inkludiert Abschreibung + Strom
    - `Machine.calculate_cost_per_page()` - Für Tintenstrahl-Drucker
-   - `Product.calculate_costs()` - Aggregiert alle Kostenkomponenten
-   - Verkaufspreise werden mit 100%, 200%, 300% Aufschlag berechnet
+   - `Product.calculate_costs()` - Aggregiert Material + Maschine + Arbeit + Komponenten + Verpackung/Versand
+   - Verkaufspreis (VK) = 2 × Einkaufspreis (EK) / Selbstkosten
 
 4. **Static Electricity Price**: `STROM_PREIS_KWH = 0.22` (€/kWh) ist hardcoded in models.py
 
@@ -652,7 +549,7 @@ docker-compose up -d    # Erstellt neu
    - FastAPI 0.109.0
    - SQLAlchemy 2.0.25
    - PostgreSQL driver: psycopg2-binary 2.9.9
-   - vtracer 0.6.11 (für PNG-zu-SVG Konvertierung)
+   - Alembic 1.13.1 (für Datenbank-Migrationen)
 
 9. **Decimal Parsing**: Die Funktion `parse_decimal()` in `main.py` konvertiert Strings mit Komma oder Punkt als Dezimaltrenner zu float. Wird für alle numerischen Formularfelder verwendet.
 
@@ -672,42 +569,49 @@ docker-compose up -d    # Erstellt neu
 13. **Storage Paths**:
     - Development: `/app/storage` (Docker Volume)
     - Production: `/mnt/user/appdata/picocalc/storage` (Unraid Pfad)
-    - Temporäre Uploads: `/tmp/picocalc_uploads`
 
-14. **Laser Layer Support**: Laser-Gravur-Produkte unterstützen bis zu 3 Layer mit je:
-    - Type (blau, ir, rot)
-    - Power (%)
-    - Speed (mm/s)
-    - Passes (Anzahl Durchläufe)
-    - DPI
-    - Lines per cm
-
-15. **Sticker/Stationery Workflow**:
+14. **Sticker Workflow**:
     - Produkttyp `sticker` mit Kategorie `StickerSheet` oder `DieCut`
-    - `sheet_count` immer = 1 (aus UI entfernt)
+    - `sheet_count` ist sichtbar und editierbar (Default: 1)
     - `units_per_sheet` = Anzahl Sticker/Produkte pro Bogen
+    - Dynamische Defaults: Sticker-Sheet → 3 units/sheet, DieCut → 9 units/sheet
+    - Alle "per sheet" Kosten (Material, Maschine, Arbeit) werden durch `units_per_sheet` geteilt
     - Mehrere Maschinen möglich (Drucker + Plotter via `additional_machine_ids`)
-    - Verpackung/Versand werden im Verkauf erfasst, nicht beim Produkt
+    - Verpackung/Versand werden beim Produkt erfasst
 
-16. **Cost Calculation Modes**:
-    - `per_unit` - Kosten werden pro Einheit berechnet
-    - `per_batch` - Kosten pro Batch werden durch `units_per_batch` geteilt
-    - Beispiel: Plotter-Kosten €10 pro Bogen für 20 Sticker = €0.50 pro Sticker
+15. **Listen-Sortierung und Suche**:
+    - Alle Listen haben einheitliche Suche und Sortierung
+    - Default-Sortierung ist alphabetisch nach Name (außer Feedback → Datum)
+    - Sortierfelder pro Liste: Name, Typ, Preis, Datum etc.
+    - Suche filtert in relevanten Feldern (Name, Beschreibung, Marke etc.)
 
-17. **Soft Delete Pattern**: Artikel und Kunden verwenden Soft-Delete (is_active = 0) statt hartem Löschen, wenn bereits Referenzen existieren.
+16. **SVG Converter**:
+    - `GET /tools/png-to-svg` - Upload-Formular mit Konvertierungs-Optionen
+    - Unterstützt PNG, JPG, WEBP, BMP → SVG via `vtracer`
+    - Optionen: Kurven-Modus (spline/pixel), Farbmodus (color/binary), Rauschfilter, Farbgenauigkeit
+    - Bibliothek: `GET /tools/converted-files` - Gespeicherte Konvertierungen mit Vorschau/Download
+    - Wiederhergestellt aus `old_project/` Backup
 
-18. **Config System**: Globale Einstellungen werden in der `config` Tabelle gespeichert und können über `/config` im UI verwaltet werden.
+17. **Feedback & Ideen**:
+    - `GET /feedback-ideas` - Liste mit Tabs (Offen / Erledigt / Alle)
+    - Nur `description` als Eingabe (kein Typ/Titel mehr)
+    - Status-Toggle, Bearbeiten, Löschen
 
-19. **Navigation Structure**: Die Header-Navigation ist in Gruppen organisiert:
+18. **Navigation Structure**: Die Header-Navigation ist reduziert auf:
     - Dashboard (📊)
-    - Stamm-Daten: Produkte (🛠️), Artikel (📝), Materialien (🧱)
-    - Verkauf: Kunden (👥), Verkäufe (📋), Rechnungen (📄)
-    - Tools: Maschinen (⚙️), SVG-Bibliothek (🎨), Einstellungen (🔧), Ideen (💡), Feedback (📝)
+    - Produkte (🛠️)
+    - Materialien (🧻)
+    - Maschinen (⚙️)
+    - SVG Converter (🎨)
+    - Feedback (💬)
 
-20. **Article Workflow**: Artikel ersetzen das alte "Zusammenbau-Produkt"-System:
-    - Materialien (Filament, Sticker-Bögen) werden zu Produkten verarbeitet
-    - Produkte (3D-Druck, Sticker) können zu Artikeln kombiniert werden
-    - Artikel erhalten automatisch eine Artikelnummer und berechnen EK aus Komponenten
-    - Artikel sind die Verkaufseinheiten für Rechnungen
+19. **Komponenten-Workflow**: Produkte können aus mehreren Komponenten bestehen:
+    - Materialien (Filament, Sticker-Bögen) → Produkt (3D-Druck/Sticker)
+    - Komponenten (z.B. Metall-Teile) mit EK/Stück
+    - Arbeitszeit + Verpackung/Versand
+    - EK = Summe aller Kosten, VK = 2 × EK
 
-21. **Invoice Edit Restriction**: Rechnungen können nur im Status "draft" (Entwurf) bearbeitet werden. Nach dem Versenden/Bezahlen sind sie für rechtliche Korrektheit unveränderlich.
+20. **Backup-Verzeichnis**:
+    - `old_project/` enthält den alten Projektstand vor dem Aufräumen
+    - Wird für Wiederherstellung entfernter Features verwendet (z.B. SVG Converter)
+    - Sollte nicht gelöscht werden solange Features daraus noch benötigt werden könnten

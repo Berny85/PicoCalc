@@ -13,6 +13,19 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 # Importiere alle Models für autogenerate
 from models import Base
 
+# Tabellen die in der DB bleiben aber nicht mehr im Model definiert sind
+# (wichtig damit autogenerate keine Drop-Befehle generiert)
+IGNORED_TABLES = {
+    'feedback', 'ideas', 'converted_files', 'product_images',
+    'sales_orders', 'sales_order_items', 'articles', 'article_categories',
+    'article_components', 'customers', 'invoices', 'invoice_items', 'config'
+}
+
+def include_object(object, name, type_, reflected, compare_to):
+    if type_ == "table" and name in IGNORED_TABLES:
+        return False
+    return True
+
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
@@ -51,6 +64,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=include_object,
     )
 
     with context.begin_transaction():
@@ -70,7 +84,8 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection, target_metadata=target_metadata,
+            include_object=include_object,
         )
 
         with context.begin_transaction():

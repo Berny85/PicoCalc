@@ -6,6 +6,16 @@
 <div class="card">
     <h2>{{ title }}</h2>
     
+    <!-- Info-Box: Sticker-Berechnung erklärt -->
+    <div style="margin-bottom: 20px; padding: 15px; background: var(--color-bg-hover); border-radius: 8px; border-left: 4px solid var(--color-primary);">
+        <strong>💡 So funktioniert die Sticker-Kalkulation:</strong><br>
+        <span style="font-size: 0.9rem; color: var(--color-text-light);">
+            Ein <strong>Materialbogen</strong> wird mit Maschine(n) bearbeitet. Daraus entstehen mehrere <strong>Produkteinheiten</strong>.
+            Material-, Maschinen- und Arbeitskosten werden automatisch auf die einzelne Einheit heruntergerechnet.
+            Komponenten und Verpackung werden pro Einheit gezählt.
+        </span>
+    </div>
+    
     <form method="POST" action="{% if product %}/products/{{ product.id }}/update{% else %}/products/sticker{% endif %}">
         <div class="grid">
             <div>
@@ -54,8 +64,16 @@
             </div>
             
             <div>
-                <!-- sheet_count immer 1 -->
-                <input type="hidden" name="sheet_count" value="1">
+                <div class="form-group">
+                    <label for="sheet_count">Anzahl Materialbögen *</label>
+                    <input type="number" id="sheet_count" name="sheet_count" 
+                           step="1" min="1" required
+                           value="{{ product.sheet_count if product else '1' }}"
+                           placeholder="z.B. 1" oninput="calculateTotalCost()">
+                    <small style="color: var(--color-text-light);">
+                        Wie viele Materialbögen werden pro Durchlauf verarbeitet? (Normalerweise 1)
+                    </small>
+                </div>
             </div>
         </div>
         
@@ -63,44 +81,35 @@
         <div class="grid">
             <div>
                 <div class="form-group">
-                    <label for="units_per_sheet">Produkteinheiten *</label>
+                    <label for="units_per_sheet">Produkteinheiten pro Materialbogen *</label>
                     <input type="number" id="units_per_sheet" name="units_per_sheet" 
                            step="1" min="1" required
                            value="{{ product.units_per_sheet if product else '6' }}"
                            placeholder="z.B. 6" onchange="calculateTotalCost()">
-                    <small style="color: var(--color-text-light);">
-                        Wie viele Einheiten (Sticker/Bögen) pro Materialbogen?
+                    <small style="color: var(--color-text-light);" id="units-per-sheet-help">
+                        Wie viele fertige Produkte entstehen aus einem Materialbogen?<br>
+                        Beispiel: 3 Sticker-Sheets oder 9 DieCut-Sticker pro Bogen.
                     </small>
                 </div>
             </div>
             
             <div>
                 <div class="form-group">
-                    <label for="calculation_mode">Berechnungsmodus *</label>
-                    <select id="calculation_mode" name="calculation_mode" required onchange="toggleBatchFields()">
-                        <option value="per_unit" {% if product and product.calculation_mode == 'per_unit' %}selected{% endif %}>Kosten pro Einheit</option>
-                        <option value="per_batch" {% if product and product.calculation_mode == 'per_batch' %}selected{% endif %}>Kosten pro Batch</option>
-                    </select>
-                    <small style="color: var(--color-text-light);">
-                        Pro Einheit = Materialkosten ÷ Anzahl<br>
-                        Pro Batch = Materialkosten werden auf Batch-Größe verteilt
-                    </small>
+                    <label>Preisberechnung</label>
+                    <div style="padding: 10px; background: var(--color-bg-hover); border-radius: 4px; font-size: 0.9rem;">
+                        Material-, Maschinen- und Arbeitskosten pro Materialbogen werden automatisch durch die <strong>Produkteinheiten pro Bogen</strong> geteilt.<br>
+                        Komponenten und Verpackung/Versand werden pro Einheit gezählt.
+                    </div>
                 </div>
                 
-                <div class="form-group" id="batch-size-group" style="display: none;">
-                    <label for="units_per_batch">Batch-Größe (Einheiten pro Batch) *</label>
-                    <input type="number" id="units_per_batch" name="units_per_batch" 
-                           step="1" min="1"
-                           value="{{ product.units_per_batch if product else '6' }}"
-                           placeholder="z.B. 6" onchange="calculateTotalCost()">
-                </div>
+                <input type="hidden" id="calculation_mode" name="calculation_mode" value="{{ product.calculation_mode if product else 'per_unit' }}">
+                <input type="hidden" id="units_per_batch" name="units_per_batch" value="{{ product.units_per_batch if product else '1' }}">
             </div>
         </div>
         
         <h3 style="margin-top: 30px; color: var(--color-primary-dark);">Maschinen</h3>
         <div id="machines-container">
             {% if product and product.machine_id %}
-                <!-- Bestehende Maschinen laden -->
                 {% set all_machine_ids = [product.machine_id] %}
                 {% if product.additional_machine_ids %}
                     {% set additional = product.additional_machine_ids.split(',') | map('int') | list %}
@@ -128,7 +137,6 @@
                 </div>
                 {% endfor %}
             {% else %}
-                <!-- Standard: Eine leere Maschinen-Zeile -->
                 <div class="machine-row" style="display: flex; gap: 10px; margin-bottom: 10px; align-items: flex-end;">
                     <div class="form-group" style="flex: 1; margin-bottom: 0;">
                         <label>Maschine 1</label>
@@ -154,16 +162,16 @@
         <div class="grid">
             <div>
                 <div class="form-group">
-                    <label for="labor_minutes">Arbeitszeit (Minuten) *</label>
+                    <label for="labor_minutes">Arbeitszeit pro Materialbogen (Minuten) *</label>
                     <input type="text" id="labor_minutes" name="labor_minutes" 
                            pattern="[0-9]*[.,]?[0-9]*" inputmode="decimal" required
                            value="{% if product %}{{ product.labor_minutes }}{% else %}0{% endif %}"
-                           onchange="calculateTotalCost()">
-                    <small style="color: var(--color-text-light);">Produktionszeit in Minuten pro Batch</small>
+                           oninput="calculateTotalCost()">
+                    <small style="color: var(--color-text-light);">
+                        Gesamte Arbeitszeit für die Bearbeitung eines Materialbogens. Wird automatisch auf die einzelnen Produkteinheiten verteilt.
+                    </small>
                 </div>
-            </div>
-            
-            <div>
+                
                 <div class="form-group">
                     <label for="labor_rate_per_hour">Stundensatz (€/h) *</label>
                     <input type="number" id="labor_rate_per_hour" name="labor_rate_per_hour" 
@@ -172,7 +180,72 @@
                            onchange="calculateTotalCost()">
                 </div>
             </div>
+            
+            <div>
+                <div class="form-group">
+                    <label for="packaging_cost">Verpackungskosten (€)</label>
+                    <input type="number" id="packaging_cost" name="packaging_cost" 
+                           step="0.01" min="0"
+                           value="{{ product.packaging_cost if product else '0' }}"
+                           oninput="calculateTotalCost()">
+                </div>
+                
+                <div class="form-group">
+                    <label for="shipping_cost">Versandkosten (€)</label>
+                    <input type="number" id="shipping_cost" name="shipping_cost" 
+                           step="0.01" min="0"
+                           value="{{ product.shipping_cost if product else '0' }}"
+                           oninput="calculateTotalCost()">
+                </div>
+            </div>
         </div>
+        
+        <!-- KOMPONENTEN -->
+        <h3 style="margin-top: 30px; color: var(--color-primary-dark);">🧩 Komponenten</h3>
+        <p style="color: var(--color-text-light); margin-bottom: 15px;">
+            Zusätzliche Teile wie Metall-Ringe, Anhänger, etc.
+        </p>
+        
+        <div id="components-container">
+            {% if product and product.components %}
+                {% for comp in product.components %}
+                <div class="component-row" style="display: grid; grid-template-columns: 2fr 1fr 1fr 2fr auto; gap: 10px; margin-bottom: 10px; align-items: end;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Name</label>
+                        <input type="text" name="component_name" value="{{ comp.name }}" placeholder="z.B. Metall-Ring">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Menge</label>
+                        <input type="number" name="component_quantity" value="{{ comp.quantity }}" step="0.01" min="0" placeholder="1" oninput="calculateTotalCost()">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>EK/Stück (€)</label>
+                        <input type="number" name="component_unit_cost" value="{{ comp.unit_cost }}" step="0.01" min="0" placeholder="0.00" oninput="calculateTotalCost()">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Notizen</label>
+                        <input type="text" name="component_notes" value="{{ comp.notes or '' }}" placeholder="Optional">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Verknüpfung</label>
+                        <select name="component_linked_product_id" style="width: 100%;">
+                            <option value="">-- Kein Produkt --</option>
+                            {% for p in all_products %}
+                            <option value="{{ p.id }}" {% if comp.linked_product_id == p.id %}selected{% endif %}>
+                                {{ p.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="button" class="btn btn-danger" onclick="removeComponentRow(this); calculateTotalCost();" style="margin-bottom: 0; height: 38px;">×</button>
+                </div>
+                {% endfor %}
+            {% endif %}
+        </div>
+        
+        <button type="button" class="btn btn-secondary" onclick="addComponentRow()" style="margin-top: 10px;">
+            + Komponente hinzufügen
+        </button>
         
         <div class="form-group" style="margin-top: 20px;">
             <label for="notes">Notizen</label>
@@ -180,24 +253,28 @@
         </div>
         
         <!-- Live-Kostenberechnung -->
-        <div style="margin-top: 30px; padding: 20px; background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-secondary-light) 100%); border-radius: 8px;">
-            <h3 style="margin: 0 0 15px 0; color: var(--color-primary-dark);">Kostenberechnung (Live)</h3>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
-                <div>
-                    <strong>Materialkosten:</strong>
-                    <div id="material-cost-display" style="font-size: 1.2em; color: var(--color-primary);">0.00 €</div>
+        <div class="card" style="margin-top: 30px;">
+            <h2>📊 Live-Kalkulation</h2>
+            <div class="calculation-box">
+                <div class="price-grid">
+                    <div class="price-item">
+                        <div class="label">Einkaufspreis (EK)</div>
+                        <div class="value" id="live-purchase-price">0.00 €</div>
+                        <div style="font-size: 0.8rem; opacity: 0.8; margin-top: 5px;">Selbstkosten</div>
+                    </div>
+                    <div class="price-item" style="background: rgba(255,255,255,0.3);">
+                        <div class="label">Verkaufspreis (VK)</div>
+                        <div class="value" style="font-size: 2rem;" id="live-selling-price">0.00 €</div>
+                        <div style="font-size: 0.8rem; opacity: 0.8; margin-top: 5px;">100% Aufschlag (2× EK)</div>
+                    </div>
                 </div>
-                <div>
-                    <strong>Maschinenkosten:</strong>
-                    <div id="machine-cost-display" style="font-size: 1.2em; color: var(--color-primary);">0.00 €</div>
-                </div>
-                <div>
-                    <strong>Arbeitskosten:</strong>
-                    <div id="labor-cost-display" style="font-size: 1.2em; color: var(--color-primary);">0.00 €</div>
-                </div>
-                <div style="background: rgba(255,255,255,0.5); padding: 10px; border-radius: 4px;">
-                    <strong>Gesamtkosten pro Einheit:</strong>
-                    <div id="total-cost-display" style="font-size: 1.5em; color: var(--color-success); font-weight: bold;">0.00 €</div>
+                <div style="margin: 20px 0; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 4px;">
+                    <strong>Kostenaufschlüsselung:</strong><br>
+                    Material: <span id="live-material-cost">0.00</span> € |
+                    Maschine: <span id="live-machine-cost">0.00</span> € |
+                    Arbeit: <span id="live-labor-cost">0.00</span> € |
+                    Komponenten: <span id="live-components-cost">0.00</span> € |
+                    Verpackung/Versand: <span id="live-packaging-shipping">0.00</span> €
                 </div>
             </div>
         </div>
@@ -213,7 +290,6 @@
 </div>
 
 <script>
-// Maschinen-Daten für JavaScript verfügbar machen
 const machinesData = {
     {% for m in machines %}
     "{{ m.id }}": {
@@ -223,60 +299,92 @@ const machinesData = {
     {% endfor %}
 };
 
-function toggleBatchFields() {
-    const mode = document.getElementById('calculation_mode').value;
-    const batchGroup = document.getElementById('batch-size-group');
+const allProductsOptions = `
+    <option value="">-- Kein Produkt --</option>
+    {% for p in all_products %}
+    <option value="{{ p.id }}">{{ p.name }}</option>
+    {% endfor %}
+`;
+
+// Dynamische Defaults je nach Kategorie
+const CATEGORY_DEFAULTS = {
+    'StickerSheet': { units: 3, label: 'Sticker-Sheets' },
+    'DieCut': { units: 9, label: 'DieCut-Sticker' }
+};
+
+function updateDefaultsByCategory() {
+    const category = document.getElementById('category').value;
+    const defaults = CATEGORY_DEFAULTS[category];
+    if (!defaults) return;
     
-    if (mode === 'per_batch') {
-        batchGroup.style.display = 'block';
-        document.getElementById('units_per_batch').required = true;
-    } else {
-        batchGroup.style.display = 'none';
-        document.getElementById('units_per_batch').required = false;
+    const unitsInput = document.getElementById('units_per_sheet');
+    const batchInput = document.getElementById('units_per_batch');
+    const helpText = document.getElementById('units-per-sheet-help');
+    
+    // Nur ändern, wenn das Feld leer oder auf Standardwert steht
+    const currentVal = parseInt(unitsInput.value) || 0;
+    const isDefault = currentVal === 6 || currentVal === 3 || currentVal === 9 || currentVal === 0;
+    
+    if (isDefault && defaults.units) {
+        unitsInput.value = defaults.units;
+        if (batchInput) batchInput.value = defaults.units;
+    }
+    
+    if (helpText) {
+        helpText.innerHTML = `Wie viele fertige ${defaults.label} entstehen aus einem Materialbogen?<br>Beispiel: ${defaults.units} ${defaults.label} pro Bogen.`;
     }
     calculateTotalCost();
 }
 
 function calculateTotalCost() {
-    // Materialkosten
     const materialSelect = document.getElementById('sheet_material_id');
     const materialCost = parseFloat(materialSelect.selectedOptions[0]?.dataset.price || 0);
-    
-    // Einheiten pro Bogen
+    const sheetCount = parseFloat(document.getElementById('sheet_count').value) || 1;
     const unitsPerSheet = parseFloat(document.getElementById('units_per_sheet').value) || 1;
     
-    // Berechnungsmodus
-    const calculationMode = document.getElementById('calculation_mode').value;
-    const unitsPerBatch = calculationMode === 'per_batch' 
-        ? (parseFloat(document.getElementById('units_per_batch').value) || unitsPerSheet)
-        : unitsPerSheet;
+    // Alle "pro Bogen"-Kosten werden durch Einheiten pro Bogen geteilt
+    const divisor = unitsPerSheet;
+    const totalMaterialCost = materialCost * sheetCount;
+    const materialPerUnit = totalMaterialCost / divisor;
     
-    // Materialkosten pro Einheit
-    const materialPerUnit = materialCost / unitsPerBatch;
-    
-    // Maschinenkosten (Summe aller ausgewählten Maschinen)
     let machineCostPerSheet = 0;
     document.querySelectorAll('.machine-select').forEach(select => {
         if (select.value && machinesData[select.value]) {
             machineCostPerSheet += machinesData[select.value].costPerSheet || 0;
         }
     });
-    const machinePerUnit = machineCostPerSheet / unitsPerBatch;
+    const totalMachineCost = machineCostPerSheet * sheetCount;
+    const machinePerUnit = totalMachineCost / divisor;
     
-    // Arbeitskosten
+    // Arbeitskosten: immer auf Einheit umrechnen (pro Bogen)
     const laborMinutes = parseFloat(document.getElementById('labor_minutes').value.replace(',', '.')) || 0;
     const laborRate = parseFloat(document.getElementById('labor_rate_per_hour').value) || 20;
-    const laborPerBatch = (laborMinutes / 60) * laborRate;
-    const laborPerUnit = laborPerBatch / unitsPerBatch;
+    const laborPerBogen = (laborMinutes / 60) * laborRate;
+    const laborPerUnit = laborPerBogen / divisor;
     
-    // Gesamtkosten pro Einheit
-    const totalPerUnit = materialPerUnit + machinePerUnit + laborPerUnit;
+    // Verpackung / Versand: NICHT teilen (pro Einheit)
+    const packagingCost = parseFloat(document.getElementById('packaging_cost').value) || 0;
+    const shippingCost = parseFloat(document.getElementById('shipping_cost').value) || 0;
+    const packagingShipping = packagingCost + shippingCost;
     
-    // Anzeige aktualisieren
-    document.getElementById('material-cost-display').textContent = materialPerUnit.toFixed(3) + ' €';
-    document.getElementById('machine-cost-display').textContent = machinePerUnit.toFixed(3) + ' €';
-    document.getElementById('labor-cost-display').textContent = laborPerUnit.toFixed(3) + ' €';
-    document.getElementById('total-cost-display').textContent = totalPerUnit.toFixed(3) + ' €';
+    // Komponenten: NICHT teilen (pro Einheit)
+    let componentsCost = 0;
+    document.querySelectorAll('.component-row').forEach(row => {
+        const qty = parseFloat(row.querySelector('[name="component_quantity"]')?.value) || 0;
+        const unitCost = parseFloat(row.querySelector('[name="component_unit_cost"]')?.value) || 0;
+        componentsCost += qty * unitCost;
+    });
+    
+    const purchasePrice = materialPerUnit + machinePerUnit + laborPerUnit + packagingShipping + componentsCost;
+    const sellingPrice = purchasePrice * 2;
+    
+    document.getElementById('live-material-cost').textContent = materialPerUnit.toFixed(3);
+    document.getElementById('live-machine-cost').textContent = machinePerUnit.toFixed(3);
+    document.getElementById('live-labor-cost').textContent = laborPerUnit.toFixed(3);
+    document.getElementById('live-components-cost').textContent = componentsCost.toFixed(3);
+    document.getElementById('live-packaging-shipping').textContent = packagingShipping.toFixed(3);
+    document.getElementById('live-purchase-price').textContent = purchasePrice.toFixed(3) + ' €';
+    document.getElementById('live-selling-price').textContent = sellingPrice.toFixed(3) + ' €';
 }
 
 function addMachineRow() {
@@ -309,7 +417,6 @@ function removeMachineRow(button) {
     const row = button.closest('.machine-row');
     row.remove();
     
-    // Labels neu nummerieren
     document.querySelectorAll('.machine-row').forEach((row, index) => {
         row.querySelector('label').textContent = `Maschine ${index + 1}`;
     });
@@ -317,9 +424,46 @@ function removeMachineRow(button) {
     calculateTotalCost();
 }
 
-// Initialisierung
+function addComponentRow() {
+    const container = document.getElementById('components-container');
+    const row = document.createElement('div');
+    row.className = 'component-row';
+    row.style.cssText = 'display: grid; grid-template-columns: 2fr 1fr 1fr 2fr auto; gap: 10px; margin-bottom: 10px; align-items: end;';
+    row.innerHTML = `
+        <div class="form-group" style="margin-bottom: 0;">
+            <label>Name</label>
+            <input type="text" name="component_name" placeholder="z.B. Metall-Ring">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+            <label>Menge</label>
+            <input type="number" name="component_quantity" value="1" step="0.01" min="0" placeholder="1" oninput="calculateTotalCost()">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+            <label>EK/Stück (€)</label>
+            <input type="number" name="component_unit_cost" value="0" step="0.01" min="0" placeholder="0.00" oninput="calculateTotalCost()">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+            <label>Notizen</label>
+            <input type="text" name="component_notes" placeholder="Optional">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+            <label>Verknüpfung</label>
+            <select name="component_linked_product_id" style="width: 100%;">
+                ${allProductsOptions}
+            </select>
+        </div>
+        <button type="button" class="btn btn-danger" onclick="removeComponentRow(this); calculateTotalCost();" style="margin-bottom: 0; height: 38px;">×</button>
+    `;
+    container.appendChild(row);
+    calculateTotalCost();
+}
+
+function removeComponentRow(button) {
+    button.closest('.component-row').remove();
+}
+
 document.addEventListener('DOMContentLoaded', function() {
-    toggleBatchFields();
+    document.getElementById('category').addEventListener('change', updateDefaultsByCategory);
     calculateTotalCost();
 });
 </script>

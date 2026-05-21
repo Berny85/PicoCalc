@@ -26,9 +26,7 @@
     <h2>Neues Produkt anlegen</h2>
     <div class="actions" style="margin-top: 20px;">
         <a href="/products/3d-print/new" class="btn btn-primary">+ 3D-Druck</a>
-        <a href="/products/sticker-sheet/new" class="btn btn-primary">+ Sticker-Sheet</a>
-        <a href="/products/diecut-sticker/new" class="btn btn-primary">+ Die-Cut Sticker</a>
-        <a href="/products/laser-engraving/new" class="btn btn-primary">+ Laser-Gravur</a>
+        <a href="/products/sticker/new" class="btn btn-primary">+ Sticker</a>
     </div>
 </div>
 
@@ -42,9 +40,8 @@
                 <th>Name</th>
                 <th>Typ</th>
                 <th>Material</th>
-                <th>Maschine</th>
-                <th>Einkaufspreis</th>
-                <th>Verkauf (50% / 100%)</th>
+                <th>Einkaufspreis (EK)</th>
+                <th>Verkaufspreis (VK)</th>
                 <th>Aktionen</th>
             </tr>
         </thead>
@@ -59,9 +56,8 @@
                     </span>
                 </td>
                 <td>{{ product.get_material_summary() }}</td>
-                <td>{{ product.machine.name if product.machine else '-' }}</td>
-                <td>{{ calc.total_cost }} €</td>
-                <td>{{ calc.selling_price_100 }} €</td>
+                <td>{{ calc.purchase_price }} €</td>
+                <td><strong>{{ calc.selling_price }} €</strong></td>
                 <td>
                     <a href="/products/{{ product.id }}" class="btn btn-primary" style="padding: 6px 12px; font-size: 14px;">Anzeigen</a>
                 </td>
@@ -78,28 +74,5 @@
     {% endif %}
 </div>
 
-<div class="grid">
-    <div class="card">
-        <h2>Schnellzugriff</h2>
-        <div class="actions">
-            <a href="/products" class="btn btn-secondary">Produktliste</a>
-            <a href="/materials" class="btn btn-secondary">Materialien</a>
-            <a href="/machines" class="btn btn-secondary">Maschinen</a>
-            <a href="/tools/converted-files" class="btn btn-secondary">🎨 SVG-Bibliothek</a>
-        </div>
-    </div>
-    
-    <div class="card">
-        <h2>Kategorien</h2>
-        <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px;">
-            {% for category in categories %}
-            <a href="/products?category={{ category }}" class="category-badge category-{{ category|lower }}">
-                {{ category }}
-            </a>
-            {% endfor %}
-        </div>
-    </div>
-</div>
+
 {% endblock %}
-
-

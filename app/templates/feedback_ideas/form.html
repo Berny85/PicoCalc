@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Picobellu Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>{{ title }}</h2>
+    
+    <form method="POST" action="{% if item %}/feedback-ideas/{{ item.id }}/update{% else %}/feedback-ideas{% endif %}">
+        <div class="form-group">
+            <label for="description">Beschreibung *</label>
+            <textarea id="description" name="description" rows="5" required
+                      placeholder="Beschreibe dein Feedback oder deine Idee...">{{ item.description if item else '' }}</textarea>
+        </div>
+        
+        <div class="actions">
+            <button type="submit" class="btn btn-primary">
+                {% if item %}Aktualisieren{% else %}Speichern{% endif %}
+            </button>
+            <a href="/feedback-ideas" class="btn btn-secondary">Abbrechen</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -168,15 +168,36 @@
     </div>
 </div>
 
-<!-- Suchleiste -->
+<!-- Suchleiste und Sortierung -->
 <div class="card">
-    <form method="GET" action="/tools/converted-files" class="search-box">
-        <input type="text" name="search" placeholder="Dateien suchen..." 
-               value="{{ search }}" style="flex: 1;">
-        <button type="submit" class="btn btn-primary">🔍 Suchen</button>
-        {% if search %}
-        <a href="/tools/converted-files" class="btn btn-secondary">Zurücksetzen</a>
-        {% endif %}
+    <form method="GET" action="/tools/converted-files" style="margin-bottom: 0;">
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: end;">
+            <div style="flex: 1; min-width: 200px;">
+                <label style="font-size: 0.85rem; color: var(--color-text-light);">Suche</label>
+                <input type="text" name="search" value="{{ search }}" placeholder="Dateiname, Beschreibung, Tags..." style="width: 100%;">
+            </div>
+            <div>
+                <label style="font-size: 0.85rem; color: var(--color-text-light);">Sortierung</label>
+                <select name="sort_by">
+                    <option value="original_filename" {% if sort_by == 'original_filename' %}selected{% endif %}>Dateiname</option>
+                    <option value="created_at" {% if sort_by == 'created_at' %}selected{% endif %}>Erstellt am</option>
+                    <option value="size_reduction" {% if sort_by == 'size_reduction' %}selected{% endif %}>Größe (SVG)</option>
+                </select>
+            </div>
+            <div>
+                <label style="font-size: 0.85rem; color: var(--color-text-light);">Reihenfolge</label>
+                <select name="sort_order">
+                    <option value="asc" {% if sort_order == 'asc' %}selected{% endif %}>Aufsteigend</option>
+                    <option value="desc" {% if sort_order == 'desc' %}selected{% endif %}>Absteigend</option>
+                </select>
+            </div>
+            <div>
+                <button type="submit" class="btn btn-primary">Anwenden</button>
+                {% if search or sort_by != 'original_filename' or sort_order != 'asc' %}
+                <a href="/tools/converted-files" class="btn btn-secondary">Zurücksetzen</a>
+                {% endif %}
+            </div>
+        </div>
     </form>
 </div>
 

@@ -9,6 +9,37 @@
         <a href="/machines/new" class="btn btn-primary">+ Neue Maschine</a>
     </div>
     
+    <!-- Suchleiste und Sortierung -->
+    <form method="GET" action="/machines" style="margin-bottom: 20px;">
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: end;">
+            <div style="flex: 1; min-width: 200px;">
+                <label style="font-size: 0.85rem; color: var(--color-text-light);">Suche</label>
+                <input type="text" name="search" value="{{ search }}" placeholder="Name oder Beschreibung..." style="width: 100%;">
+            </div>
+            <div>
+                <label style="font-size: 0.85rem; color: var(--color-text-light);">Sortierung</label>
+                <select name="sort_by">
+                    <option value="name" {% if sort_by == 'name' %}selected{% endif %}>Name</option>
+                    <option value="type" {% if sort_by == 'type' %}selected{% endif %}>Typ</option>
+                    <option value="depreciation" {% if sort_by == 'depreciation' %}selected{% endif %}>Abschreibung</option>
+                </select>
+            </div>
+            <div>
+                <label style="font-size: 0.85rem; color: var(--color-text-light);">Reihenfolge</label>
+                <select name="sort_order">
+                    <option value="asc" {% if sort_order == 'asc' %}selected{% endif %}>Aufsteigend</option>
+                    <option value="desc" {% if sort_order == 'desc' %}selected{% endif %}>Absteigend</option>
+                </select>
+            </div>
+            <div>
+                <button type="submit" class="btn btn-primary">Anwenden</button>
+                {% if search or sort_by != 'name' or sort_order != 'asc' %}
+                <a href="/machines" class="btn btn-secondary">Zurücksetzen</a>
+                {% endif %}
+            </div>
+        </div>
+    </form>
+    
     {% if machines %}
     <div class="table-responsive">
     <table>
@@ -66,8 +97,12 @@
     </div>
     {% else %}
     <p style="text-align: center; padding: 40px; color: var(--color-text-light);">
+        {% if search %}
+        Keine Maschinen gefunden. <a href="/machines">Filter zurücksetzen</a>
+        {% else %}
         Noch keine Maschinen vorhanden. <br>
         <a href="/machines/new">Erste Maschine anlegen</a>
+        {% endif %}
     </p>
     {% endif %}
     

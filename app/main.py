@@ -1,46 +1,37 @@
 from fastapi import FastAPI, Request, Depends, Form, HTTPException, UploadFile, File
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError
 from database import engine, get_db, SessionLocal
-from models import (Base, Product, Material, MaterialType, Machine, Feedback, Idea, 
-                     ConvertedFile, ProductImage, ProductComponent, SalesOrder, SalesOrderItem, 
-                     Article, ArticleCategory, ArticleComponent, Invoice, InvoiceItem, Customer, STROM_PREIS_KWH)
+from models import (Base, Product, Material, MaterialType, Machine, ProductComponent, FeedbackIdea, ConvertedFile, STROM_PREIS_KWH)
 from datetime import datetime
-import time
-import os
-import uuid
-import vtracer
 from pathlib import Path
+import time
+import uuid
+import os
+import shutil
+import vtracer
 
 
 def parse_decimal(value: str) -> float:
     """Konvertiert einen String mit Komma oder Punkt als Dezimaltrenner zu float"""
     if value is None or str(value).strip() == '':
         return 0.0
-    # Ersetze Komma durch Punkt für die Konvertierung
     return float(str(value).replace(',', '.'))
-
-
-def minutes_to_hours(minutes: float) -> float:
-    """Konvertiert Minuten in Stunden"""
-    return minutes / 60.0
 
 
 def seed_material_types(db: Session):
     """Initialisiert Standard-Materialtypen falls noch keine existieren"""
     existing = db.query(MaterialType).first()
     if existing:
-        return  # Bereits initialisiert
+        return
     
     default_types = [
         ("filament", "3D-Filament (€/kg)", "Filament für 3D-Drucker", 1),
         ("sticker_sheet", "Sticker-Sheet (€/Bogen)", "Bögen für Sticker", 2),
         ("diecut_sticker", "DieCut-Sticker Material", "Material für einzelne Sticker", 3),
-        ("paper", "Papier", "Verschiedene Papiersorten", 4),
-        ("laser_material", "Laser-Material (€/Stück)", "Material für Laser-Gravur", 5),
         ("other", "Sonstiges", "Andere Materialien", 99),
     ]
     
@@ -60,7 +51,6 @@ for i in range(max_retries):
     try:
         Base.metadata.create_all(bind=engine)
         print("Database connected and tables created successfully!")
-        # Initialisiere Standard-Materialtypen
         db = SessionLocal()
         try:
             seed_material_types(db)
@@ -85,7 +75,7 @@ templates = Jinja2Templates(directory="templates")
 # Categories
 CATEGORIES = [
     "Dekoration",
-    "Technik", 
+    "Technik",
     "Ersatzteile",
     "Spielzeug",
     "Werkzeuge",
@@ -105,9 +95,7 @@ def get_material_types(db: Session, only_active: bool = True):
 # Produkttypen
 PRODUCT_TYPES = [
     ("3d_print", "3D-Druck"),
-    ("sticker", "Sticker"),  # Sticker-Sheet und DieCut zusammengefasst
-    ("stationery", "Schreibwaren"),
-    ("assembly", "Zusammenbau-Produkt"),
+    ("sticker", "Sticker"),
 ]
 
 # Sticker-Kategorien (für Sticker-Produkttyp)
@@ -115,6 +103,7 @@ STICKER_CATEGORIES = [
     ("StickerSheet", "Sticker-Sheet (ganzer Bogen)"),
     ("DieCut", "DieCut-Sticker (einzeln geschnitten)"),
 ]
+
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request, db: Session = Depends(get_db)):
@@ -124,7 +113,6 @@ async def dashboard(request: Request, db: Session = Depends(get_db)):
     total_materials = db.query(Material).count()
     total_machines = db.query(Machine).count()
     
-    # Berechne Durchschnittskosten
     all_products = db.query(Product).all()
     avg_cost = 0
     if all_products:
@@ -137,29 +125,58 @@ async def dashboard(request: Request, db: Session = Depends(get_db)):
         "total_products": total_products,
         "total_materials": total_materials,
         "total_machines": total_machines,
-        "avg_cost": round(avg_cost, 2),
-        "categories": CATEGORIES
+        "avg_cost": round(avg_cost, 2)
     })
 
-# ===== MATERIAL ROUTES =====
+
+# =============================================================================
+# MATERIAL ROUTES
+# =============================================================================
 
 @app.get("/materials", response_class=HTMLResponse)
-async def list_materials(request: Request, material_type: str = "", db: Session = Depends(get_db)):
+async def list_materials(
+    request: Request,
+    material_type: str = "",
+    search: str = "",
+    sort_by: str = "name",
+    sort_order: str = "asc",
+    db: Session = Depends(get_db)
+):
     """Liste aller Materialien"""
     query = db.query(Material)
-    
     if material_type:
         query = query.filter(Material.material_type == material_type)
+    if search:
+        query = query.filter(
+            (Material.name.ilike(f"%{search}%")) |
+            (Material.brand.ilike(f"%{search}%")) |
+            (Material.color.ilike(f"%{search}%"))
+        )
     
-    materials = query.order_by(Material.material_type, Material.name).all()
+    sort_col = Material.name
+    if sort_by == "type":
+        sort_col = Material.material_type
+    elif sort_by == "price":
+        sort_col = Material.price_per_unit
+    
+    if sort_order == "desc":
+        query = query.order_by(sort_col.desc())
+    else:
+        query = query.order_by(sort_col.asc())
+    
+    materials = query.all()
     material_types = get_material_types(db)
     
     return templates.TemplateResponse("materials/list.html", {
         "request": request,
         "materials": materials,
         "material_type": material_type,
-        "material_types": material_types
+        "material_types": material_types,
+        "search": search,
+        "sort_by": sort_by,
+        "sort_order": sort_order
     })
+
 
 @app.get("/materials/new", response_class=HTMLResponse)
 async def new_material_form(request: Request, db: Session = Depends(get_db)):
@@ -171,6 +188,7 @@ async def new_material_form(request: Request, db: Session = Depends(get_db)):
         "material_types": material_types,
         "title": "Neues Material"
     })
+
 
 @app.post("/materials")
 async def create_material(
@@ -201,9 +219,10 @@ async def create_material(
     
     return RedirectResponse(url="/materials", status_code=303)
 
+
 @app.get("/materials/{material_id}/edit", response_class=HTMLResponse)
 async def edit_material_form(material_id: int, request: Request, db: Session = Depends(get_db)):
-    """Formular zum Bearbeiten eines Materials"""
+    """Material bearbeiten"""
     material = db.query(Material).filter(Material.id == material_id).first()
     if not material:
         raise HTTPException(status_code=404, detail="Material nicht gefunden")
@@ -215,6 +234,7 @@ async def edit_material_form(material_id: int, request: Request, db: Session = D
         "material_types": material_types,
         "title": "Material bearbeiten"
     })
+
 
 @app.post("/materials/{material_id}/update")
 async def update_material(
@@ -244,8 +264,8 @@ async def update_material(
     material.updated_at = datetime.utcnow()
     
     db.commit()
-    
     return RedirectResponse(url="/materials", status_code=303)
+
 
 @app.post("/materials/{material_id}/delete")
 async def delete_material(material_id: int, db: Session = Depends(get_db)):
@@ -256,21 +276,50 @@ async def delete_material(material_id: int, db: Session = Depends(get_db)):
     
     db.delete(material)
     db.commit()
-    
     return RedirectResponse(url="/materials", status_code=303)
 
-# ===== MATERIALTYPEN ROUTES =====
+
+# =============================================================================
+# MATERIAL TYPEN ROUTES
+# =============================================================================
 
 @app.get("/material-types", response_class=HTMLResponse)
-async def list_material_types(request: Request, db: Session = Depends(get_db)):
-    """Liste aller Materialtypen (Verwaltung)"""
-    material_types = db.query(MaterialType).order_by(MaterialType.sort_order, MaterialType.name).all()
+async def list_material_types(
+    request: Request,
+    search: str = "",
+    sort_by: str = "name",
+    sort_order: str = "asc",
+    db: Session = Depends(get_db)
+):
+    """Liste aller Materialtypen"""
+    query = db.query(MaterialType)
     
+    if search:
+        query = query.filter(
+            (MaterialType.name.ilike(f"%{search}%")) |
+            (MaterialType.key.ilike(f"%{search}%"))
+        )
+    
+    sort_col = MaterialType.name
+    if sort_by == "sort_order":
+        sort_col = MaterialType.sort_order
+    elif sort_by == "key":
+        sort_col = MaterialType.key
+    
+    if sort_order == "desc":
+        query = query.order_by(sort_col.desc())
+    else:
+        query = query.order_by(sort_col.asc())
+    
+    material_types = query.all()
     return templates.TemplateResponse("materials/type_list.html", {
         "request": request,
         "material_types": material_types,
-        "title": "Materialtypen verwalten"
+        "search": search,
+        "sort_by": sort_by,
+        "sort_order": sort_order
     })
+
 
 @app.get("/material-types/new", response_class=HTMLResponse)
 async def new_material_type_form(request: Request):
@@ -280,6 +329,7 @@ async def new_material_type_form(request: Request):
         "material_type": None,
         "title": "Neuer Materialtyp"
     })
+
 
 @app.post("/material-types")
 async def create_material_type(
@@ -291,28 +341,21 @@ async def create_material_type(
     db: Session = Depends(get_db)
 ):
     """Neuen Materialtyp erstellen"""
-    # Prüfe ob Key bereits existiert
-    existing = db.query(MaterialType).filter(MaterialType.key == key).first()
-    if existing:
-        raise HTTPException(status_code=400, detail=f"Materialtyp mit Schlüssel '{key}' existiert bereits")
-    
     material_type = MaterialType(
         key=key,
         name=name,
         description=description,
-        sort_order=sort_order,
-        is_active=1
+        sort_order=sort_order
     )
-    
     db.add(material_type)
     db.commit()
     db.refresh(material_type)
-    
     return RedirectResponse(url="/material-types", status_code=303)
+
 
 @app.get("/material-types/{type_id}/edit", response_class=HTMLResponse)
 async def edit_material_type_form(type_id: int, request: Request, db: Session = Depends(get_db)):
-    """Formular zum Bearbeiten eines Materialtyps"""
+    """Materialtyp bearbeiten"""
     material_type = db.query(MaterialType).filter(MaterialType.id == type_id).first()
     if not material_type:
         raise HTTPException(status_code=404, detail="Materialtyp nicht gefunden")
@@ -322,6 +365,7 @@ async def edit_material_type_form(type_id: int, request: Request, db: Session = 
         "material_type": material_type,
         "title": "Materialtyp bearbeiten"
     })
+
 
 @app.post("/material-types/{type_id}/update")
 async def update_material_type(
@@ -339,11 +383,6 @@ async def update_material_type(
     if not material_type:
         raise HTTPException(status_code=404, detail="Materialtyp nicht gefunden")
     
-    # Prüfe ob Key bereits von anderem Typ verwendet wird
-    existing = db.query(MaterialType).filter(MaterialType.key == key, MaterialType.id != type_id).first()
-    if existing:
-        raise HTTPException(status_code=400, detail=f"Materialtyp mit Schlüssel '{key}' existiert bereits")
-    
     material_type.key = key
     material_type.name = name
     material_type.description = description
@@ -352,44 +391,70 @@ async def update_material_type(
     material_type.updated_at = datetime.utcnow()
     
     db.commit()
-    
     return RedirectResponse(url="/material-types", status_code=303)
+
 
 @app.post("/material-types/{type_id}/delete")
 async def delete_material_type(type_id: int, db: Session = Depends(get_db)):
-    """Materialtyp löschen (nur wenn nicht in Verwendung)"""
+    """Materialtyp löschen"""
     material_type = db.query(MaterialType).filter(MaterialType.id == type_id).first()
     if not material_type:
         raise HTTPException(status_code=404, detail="Materialtyp nicht gefunden")
     
     # Prüfe ob Materialien diesen Typ verwenden
-    materials_using_type = db.query(Material).filter(Material.material_type == material_type.key).count()
-    if materials_using_type > 0:
-        raise HTTPException(status_code=400, detail=f"Materialtyp wird von {materials_using_type} Materialien verwendet und kann nicht gelöscht werden")
-    
-    db.delete(material_type)
-    db.commit()
+    usage_count = db.query(Material).filter(Material.material_type == material_type.key).count()
+    if usage_count > 0:
+        # Soft-delete: auf inaktiv setzen
+        material_type.is_active = 0
+        db.commit()
+    else:
+        db.delete(material_type)
+        db.commit()
     
     return RedirectResponse(url="/material-types", status_code=303)
 
-# ===== MACHINE ROUTES =====
+
+# =============================================================================
+# MASCHINEN ROUTES
+# =============================================================================
 
 @app.get("/machines", response_class=HTMLResponse)
-async def list_machines(request: Request, machine_type: str = "", db: Session = Depends(get_db)):
+async def list_machines(
+    request: Request,
+    search: str = "",
+    sort_by: str = "name",
+    sort_order: str = "asc",
+    db: Session = Depends(get_db)
+):
     """Liste aller Maschinen"""
     query = db.query(Machine)
     
-    if machine_type:
-        query = query.filter(Machine.machine_type == machine_type)
+    if search:
+        query = query.filter(
+            (Machine.name.ilike(f"%{search}%")) |
+            (Machine.description.ilike(f"%{search}%"))
+        )
     
-    machines = query.order_by(Machine.machine_type, Machine.name).all()
+    sort_col = Machine.name
+    if sort_by == "type":
+        sort_col = Machine.machine_type
+    elif sort_by == "depreciation":
+        sort_col = Machine.depreciation_euro
     
+    if sort_order == "desc":
+        query = query.order_by(sort_col.desc())
+    else:
+        query = query.order_by(sort_col.asc())
+    
+    machines = query.all()
     return templates.TemplateResponse("machines/list.html", {
         "request": request,
         "machines": machines,
-        "machine_type": machine_type,
-        "machine_types": [("3d_printer", "3D-Drucker"), ("cutter_plotter", "Cutter/Plotter"), ("inkjet_printer", "Tintenstrahl-Drucker"), ("other", "Sonstiges")]
+        "search": search,
+        "sort_by": sort_by,
+        "sort_order": sort_order
     })
+
 
 @app.get("/machines/new", response_class=HTMLResponse)
 async def new_machine_form(request: Request):
@@ -397,47 +462,45 @@ async def new_machine_form(request: Request):
     return templates.TemplateResponse("machines/form.html", {
         "request": request,
         "machine": None,
-        "machine_types": [("3d_printer", "3D-Drucker"), ("cutter_plotter", "Cutter/Plotter"), ("inkjet_printer", "Tintenstrahl-Drucker"), ("other", "Sonstiges")],
-        "title": "Neue Maschine",
-        "STROM_PREIS_KWH": STROM_PREIS_KWH
+        "title": "Neue Maschine"
     })
+
 
 @app.post("/machines")
 async def create_machine(
     request: Request,
     name: str = Form(...),
     machine_type: str = Form(...),
+    description: str = Form(""),
     depreciation_euro: str = Form("0"),
     lifespan_hours: str = Form("1"),
     power_kw: str = Form("0"),
     lifespan_pages: str = Form(""),
     depreciation_per_page: str = Form(""),
     cost_per_sheet: str = Form(""),
-    description: str = Form(""),
     db: Session = Depends(get_db)
 ):
     """Neue Maschine erstellen"""
     machine = Machine(
         name=name,
         machine_type=machine_type,
+        description=description,
         depreciation_euro=parse_decimal(depreciation_euro),
-        lifespan_hours=parse_decimal(lifespan_hours),
+        lifespan_hours=parse_decimal(lifespan_hours) or 1,
         power_kw=parse_decimal(power_kw),
         lifespan_pages=parse_decimal(lifespan_pages) if lifespan_pages else None,
         depreciation_per_page=parse_decimal(depreciation_per_page) if depreciation_per_page else None,
-        cost_per_sheet=parse_decimal(cost_per_sheet) if cost_per_sheet else None,
-        description=description
+        cost_per_sheet=parse_decimal(cost_per_sheet) if cost_per_sheet else None
     )
-    
     db.add(machine)
     db.commit()
     db.refresh(machine)
-    
     return RedirectResponse(url="/machines", status_code=303)
+
 
 @app.get("/machines/{machine_id}/edit", response_class=HTMLResponse)
 async def edit_machine_form(machine_id: int, request: Request, db: Session = Depends(get_db)):
-    """Formular zum Bearbeiten einer Maschine"""
+    """Maschine bearbeiten"""
     machine = db.query(Machine).filter(Machine.id == machine_id).first()
     if not machine:
         raise HTTPException(status_code=404, detail="Maschine nicht gefunden")
@@ -445,10 +508,9 @@ async def edit_machine_form(machine_id: int, request: Request, db: Session = Dep
     return templates.TemplateResponse("machines/form.html", {
         "request": request,
         "machine": machine,
-        "machine_types": [("3d_printer", "3D-Drucker"), ("cutter_plotter", "Cutter/Plotter"), ("inkjet_printer", "Tintenstrahl-Drucker"), ("other", "Sonstiges")],
-        "title": "Maschine bearbeiten",
-        "STROM_PREIS_KWH": STROM_PREIS_KWH
+        "title": "Maschine bearbeiten"
     })
+
 
 @app.post("/machines/{machine_id}/update")
 async def update_machine(
@@ -456,13 +518,13 @@ async def update_machine(
     request: Request,
     name: str = Form(...),
     machine_type: str = Form(...),
+    description: str = Form(""),
     depreciation_euro: str = Form("0"),
     lifespan_hours: str = Form("1"),
     power_kw: str = Form("0"),
     lifespan_pages: str = Form(""),
     depreciation_per_page: str = Form(""),
     cost_per_sheet: str = Form(""),
-    description: str = Form(""),
     db: Session = Depends(get_db)
 ):
     """Maschine aktualisieren"""
@@ -472,18 +534,18 @@ async def update_machine(
     
     machine.name = name
     machine.machine_type = machine_type
+    machine.description = description
     machine.depreciation_euro = parse_decimal(depreciation_euro)
-    machine.lifespan_hours = parse_decimal(lifespan_hours)
+    machine.lifespan_hours = parse_decimal(lifespan_hours) or 1
     machine.power_kw = parse_decimal(power_kw)
     machine.lifespan_pages = parse_decimal(lifespan_pages) if lifespan_pages else None
     machine.depreciation_per_page = parse_decimal(depreciation_per_page) if depreciation_per_page else None
     machine.cost_per_sheet = parse_decimal(cost_per_sheet) if cost_per_sheet else None
-    machine.description = description
     machine.updated_at = datetime.utcnow()
     
     db.commit()
-    
     return RedirectResponse(url="/machines", status_code=303)
+
 
 @app.post("/machines/{machine_id}/delete")
 async def delete_machine(machine_id: int, db: Session = Depends(get_db)):
@@ -494,65 +556,92 @@ async def delete_machine(machine_id: int, db: Session = Depends(get_db)):
     
     db.delete(machine)
     db.commit()
-    
     return RedirectResponse(url="/machines", status_code=303)
 
-# ===== PRODUCT ROUTES - Übersicht =====
+
+# =============================================================================
+# PRODUKT ROUTES
+# =============================================================================
 
 @app.get("/products", response_class=HTMLResponse)
 async def list_products(
-    request: Request, 
+    request: Request,
+    product_type: str = "",
     search: str = "",
-    category: str = "",
+    sort_by: str = "name",
+    sort_order: str = "asc",
     db: Session = Depends(get_db)
 ):
-    """Produktliste mit Filter"""
-    from sqlalchemy.orm import joinedload
+    """Liste aller Produkte"""
+    query = db.query(Product)
     
-    query = db.query(Product).options(joinedload(Product.images))
-    
+    if product_type:
+        query = query.filter(Product.product_type == product_type)
     if search:
         query = query.filter(Product.name.ilike(f"%{search}%"))
     
-    if category:
-        query = query.filter(Product.category == category)
+    # DB-Sortierung für Datenbankfelder
+    if sort_by == "name":
+        query = query.order_by(Product.name.desc() if sort_order == "desc" else Product.name.asc())
+    elif sort_by == "type":
+        query = query.order_by(Product.product_type.desc() if sort_order == "desc" else Product.product_type.asc())
+    elif sort_by == "updated_at":
+        query = query.order_by(Product.updated_at.asc() if sort_order == "asc" else Product.updated_at.desc())
+    else:
+        query = query.order_by(Product.name.asc())
     
-    products = query.order_by(Product.name).all()
+    products = query.all()
     
-    # Füge Berechnungen hinzu
-    products_with_calc = []
+    # Berechne Kosten für jedes Produkt
+    products_with_costs = []
     for p in products:
         calc = p.calculate_costs()
-        products_with_calc.append({
+        products_with_costs.append({
             'product': p,
-            'calc': calc
+            'costs': calc
         })
+    
+    # Python-seitige Sortierung für berechnete Felder
+    if sort_by == "purchase_price":
+        products_with_costs.sort(
+            key=lambda x: float(x['costs'].get('purchase_price', 0) or 0),
+            reverse=(sort_order == "desc")
+        )
+    elif sort_by == "selling_price":
+        products_with_costs.sort(
+            key=lambda x: float(x['costs'].get('selling_price', 0) or 0),
+            reverse=(sort_order == "desc")
+        )
     
     return templates.TemplateResponse("products/list.html", {
         "request": request,
-        "products": products_with_calc,
+        "products": products_with_costs,
+        "product_type": product_type,
+        "product_types": PRODUCT_TYPES,
         "search": search,
-        "category": category,
-        "categories": CATEGORIES
+        "sort_by": sort_by,
+        "sort_order": sort_order
     })
 
-# ===== NEUES PRODUKT - TYP AUSWAHL =====
 
 @app.get("/products/new", response_class=HTMLResponse)
-async def new_product_select_type(request: Request):
-    """Auswahlseite für Produkttyp beim Erstellen eines neuen Produkts"""
+async def new_product_type_select(request: Request):
+    """Produkttyp-Auswahl für neues Produkt"""
     return templates.TemplateResponse("products/product_type_select.html", {
         "request": request,
+        "product_types": PRODUCT_TYPES,
         "title": "Neues Produkt"
     })
 
-# ===== 3D-DRUCK PRODUKTE =====
+
+# ===== 3D-DRUCK ROUTES =====
 
 @app.get("/products/3d-print/new", response_class=HTMLResponse)
 async def new_3d_print_form(request: Request, db: Session = Depends(get_db)):
     """Formular für neues 3D-Druck Produkt"""
     filaments = db.query(Material).filter(Material.material_type == "filament").order_by(Material.name).all()
     machines = db.query(Machine).filter(Machine.machine_type == "3d_printer").order_by(Machine.name).all()
+    all_products = db.query(Product).order_by(Product.name).all()
     
     return templates.TemplateResponse("products/form_3d_print.html", {
         "request": request,
@@ -560,8 +649,10 @@ async def new_3d_print_form(request: Request, db: Session = Depends(get_db)):
         "categories": CATEGORIES,
         "filaments": filaments,
         "machines": machines,
+        "all_products": all_products,
         "title": "Neuer 3D-Druck"
     })
+
 
 @app.post("/products/3d-print")
 async def create_3d_print(
@@ -577,10 +668,15 @@ async def create_3d_print(
     packaging_cost: str = Form("0"),
     shipping_cost: str = Form("0"),
     notes: str = Form(""),
+    # Komponenten
+    component_name: list[str] = Form([]),
+    component_quantity: list[str] = Form([]),
+    component_unit_cost: list[str] = Form([]),
+    component_notes: list[str] = Form([]),
+    component_linked_product_id: list[str] = Form([]),
     db: Session = Depends(get_db)
 ):
     """Neues 3D-Druck Produkt erstellen"""
-    # Konvertiere Komma zu Punkt und berechne Stunden aus Minuten
     product = Product(
         name=name,
         product_type="3d_print",
@@ -600,289 +696,9 @@ async def create_3d_print(
     db.commit()
     db.refresh(product)
     
-    return RedirectResponse(url=f"/products/{product.id}", status_code=303)
-
-# ===== STICKER PRODUKTE (Sticker-Sheet + DieCut zusammengefasst) =====
-
-@app.get("/products/sticker/new", response_class=HTMLResponse)
-async def new_sticker_form(request: Request, db: Session = Depends(get_db)):
-    """Formular für neues Sticker Produkt"""
-    # Alle Materialien verfügbar (Filter kann später hinzugefügt werden)
-    materials = db.query(Material).order_by(Material.name).all()
-    # Lade alle Maschinen
-    machines = db.query(Machine).order_by(Machine.name).all()
-    
-    return templates.TemplateResponse("products/form_sticker.html", {
-        "request": request,
-        "product": None,
-        "categories": CATEGORIES,
-        "sticker_categories": STICKER_CATEGORIES,
-        "materials": materials,
-        "machines": machines,
-        "title": "Neues Sticker-Produkt"
-    })
-
-@app.post("/products/sticker")
-async def create_sticker(
-    request: Request,
-    name: str = Form(...),
-    category: str = Form("StickerSheet"),  # StickerSheet oder DieCut
-    sheet_material_id: int = Form(...),
-    units_per_sheet: str = Form("3"),
-    units_per_batch: str = Form("3"),
-    calculation_mode: str = Form("per_unit"),
-    machine_ids: list[int] = Form([]),  # Mehrere Maschinen
-    labor_minutes: str = Form("0"),
-    labor_rate_per_hour: str = Form("20.00"),
-    notes: str = Form(""),
-    db: Session = Depends(get_db)
-):
-    """Neues Sticker Produkt erstellen"""
-    # Erste Maschine als Hauptmaschine, restliche als kommaseparierte IDs
-    primary_machine_id = machine_ids[0] if machine_ids else None
-    additional_ids = ",".join(str(mid) for mid in machine_ids[1:]) if len(machine_ids) > 1 else None
-    
-    product = Product(
-        name=name,
-        product_type="sticker",
-        category=category,  # StickerSheet oder DieCut
-        sheet_material_id=sheet_material_id,
-        sheet_count=1,  # Immer 1
-        units_per_sheet=parse_decimal(units_per_sheet) if calculation_mode == "per_unit" else 1,
-        units_per_batch=int(units_per_batch) if calculation_mode == "per_batch" else 1,
-        calculation_mode=calculation_mode,
-        machine_id=primary_machine_id,
-        additional_machine_ids=additional_ids,
-        labor_minutes=parse_decimal(labor_minutes),
-        labor_rate_per_hour=parse_decimal(labor_rate_per_hour),
-        packaging_cost=0,  # Wird beim Verkauf erfasst
-        shipping_cost=0,   # Wird beim Verkauf erfasst
-        notes=notes
-    )
-    
-    db.add(product)
-    db.commit()
-    db.refresh(product)
-    
-    return RedirectResponse(url=f"/products/{product.id}", status_code=303)
-
-# ===== SCHREIBWAREN ROUTES =====
-
-@app.get("/products/stationery/new", response_class=HTMLResponse)
-async def new_stationery_form(request: Request, db: Session = Depends(get_db)):
-    """Formular für neue Schreibwaren"""
-    # Alle Materialien verfügbar (Filter kann später hinzugefügt werden)
-    materials = db.query(Material).order_by(Material.name).all()
-    machines = db.query(Machine).order_by(Machine.name).all()
-    
-    return templates.TemplateResponse("products/form_stationery.html", {
-        "request": request,
-        "product": None,
-        "categories": CATEGORIES,
-        "materials": materials,
-        "machines": machines,
-        "title": "Neue Schreibware"
-    })
-
-@app.post("/products/stationery")
-async def create_stationery(
-    request: Request,
-    name: str = Form(...),
-    category: str = Form("Sonstiges"),
-    sheet_material_id: int = Form(...),
-    units_per_sheet: str = Form("1"),
-    units_per_batch: str = Form("10"),
-    calculation_mode: str = Form("per_unit"),
-    machine_ids: list[int] = Form([]),
-    labor_minutes: str = Form("0"),
-    labor_rate_per_hour: str = Form("20.00"),
-    notes: str = Form(""),
-    db: Session = Depends(get_db)
-):
-    """Neue Schreibware erstellen"""
-    primary_machine_id = machine_ids[0] if machine_ids else None
-    additional_ids = ",".join(str(mid) for mid in machine_ids[1:]) if len(machine_ids) > 1 else None
-    
-    product = Product(
-        name=name,
-        product_type="stationery",
-        category=category,
-        sheet_material_id=sheet_material_id,
-        sheet_count=1,
-        units_per_sheet=parse_decimal(units_per_sheet) if calculation_mode == "per_unit" else 1,
-        units_per_batch=int(units_per_batch) if calculation_mode == "per_batch" else 1,
-        calculation_mode=calculation_mode,
-        machine_id=primary_machine_id,
-        additional_machine_ids=additional_ids,
-        labor_minutes=parse_decimal(labor_minutes),
-        labor_rate_per_hour=parse_decimal(labor_rate_per_hour),
-        packaging_cost=0,
-        shipping_cost=0,
-        notes=notes
-    )
-    
-    db.add(product)
-    db.commit()
-    db.refresh(product)
-    
-    return RedirectResponse(url=f"/products/{product.id}", status_code=303)
-
-# Legacy: Alte URLs auf neue weiterleiten
-@app.get("/products/sticker-sheet/new")
-async def redirect_sticker_sheet_new():
-    """Redirect alte Sticker-Sheet URL auf neue Sticker URL"""
-    return RedirectResponse(url="/products/sticker/new", status_code=307)
-
-@app.get("/products/diecut-sticker/new")
-async def redirect_diecut_sticker_new():
-    """Redirect alte DieCut-Sticker URL auf neue Sticker URL"""
-    return RedirectResponse(url="/products/sticker/new", status_code=307)
-
-# ===== LASER-GRAVUR ROUTES =====
-
-@app.get("/products/laser-engraving/new", response_class=HTMLResponse)
-async def new_laser_engraving_form(request: Request, db: Session = Depends(get_db)):
-    """Formular für neue Laser-Gravur"""
-    laser_materials = db.query(Material).filter(Material.material_type == "laser_material").order_by(Material.name).all()
-    
-    return templates.TemplateResponse("products/form_laser_engraving.html", {
-        "request": request,
-        "product": None,
-        "categories": CATEGORIES,
-        "laser_materials": laser_materials,
-        "title": "Neue Laser-Gravur"
-    })
-
-@app.post("/products/laser-engraving")
-async def create_laser_engraving(
-    request: Request,
-    name: str = Form(...),
-    category: str = Form("Sonstiges"),
-    laser_material_id: int = Form(...),
-    laser_design_name: str = Form(...),
-    # Layer 1
-    laser1_type: str = Form(...),
-    laser1_power_percent: str = Form("80.0"),
-    laser1_speed_mm_s: str = Form("200"),
-    laser1_passes: str = Form("1"),
-    laser1_dpi: str = Form("300"),
-    laser1_lines_per_cm: str = Form("60"),
-    # Layer 2 (optional)
-    laser2_type: str = Form(None),
-    laser2_power_percent: str = Form("100.0"),
-    laser2_speed_mm_s: str = Form("100"),
-    laser2_passes: str = Form("1"),
-    laser2_dpi: str = Form("300"),
-    laser2_lines_per_cm: str = Form("60"),
-    # Layer 3 (optional)
-    laser3_type: str = Form(None),
-    laser3_power_percent: str = Form("50.0"),
-    laser3_speed_mm_s: str = Form("300"),
-    laser3_passes: str = Form("1"),
-    laser3_dpi: str = Form("600"),
-    laser3_lines_per_cm: str = Form("120"),
-    labor_minutes: str = Form("0"),
-    labor_rate_per_hour: str = Form("20.00"),
-    packaging_cost: str = Form("0"),
-    shipping_cost: str = Form("0"),
-    notes: str = Form(""),
-    db: Session = Depends(get_db)
-):
-    """Neue Laser-Gravur erstellen"""
-    product = Product(
-        name=name,
-        product_type="laser_engraving",
-        category=category,
-        laser_material_id=laser_material_id,
-        laser_design_name=laser_design_name,
-        # Layer 1
-        laser1_type=laser1_type,
-        laser1_power_percent=parse_decimal(laser1_power_percent),
-        laser1_speed_mm_s=parse_decimal(laser1_speed_mm_s),
-        laser1_passes=int(parse_decimal(laser1_passes)),
-        laser1_dpi=int(parse_decimal(laser1_dpi)),
-        laser1_lines_per_cm=int(parse_decimal(laser1_lines_per_cm)),
-        # Layer 2
-        laser2_type=laser2_type if laser2_type else None,
-        laser2_power_percent=parse_decimal(laser2_power_percent),
-        laser2_speed_mm_s=parse_decimal(laser2_speed_mm_s),
-        laser2_passes=int(parse_decimal(laser2_passes)),
-        laser2_dpi=int(parse_decimal(laser2_dpi)),
-        laser2_lines_per_cm=int(parse_decimal(laser2_lines_per_cm)),
-        # Layer 3
-        laser3_type=laser3_type if laser3_type else None,
-        laser3_power_percent=parse_decimal(laser3_power_percent),
-        laser3_speed_mm_s=parse_decimal(laser3_speed_mm_s),
-        laser3_passes=int(parse_decimal(laser3_passes)),
-        laser3_dpi=int(parse_decimal(laser3_dpi)),
-        laser3_lines_per_cm=int(parse_decimal(laser3_lines_per_cm)),
-        labor_minutes=parse_decimal(labor_minutes),
-        labor_rate_per_hour=parse_decimal(labor_rate_per_hour),
-        packaging_cost=parse_decimal(packaging_cost),
-        shipping_cost=parse_decimal(shipping_cost),
-        notes=notes
-    )
-    
-    db.add(product)
-    db.commit()
-    db.refresh(product)
-    
-    return RedirectResponse(url=f"/products/{product.id}", status_code=303)
-
-# ===== ZUSAMMENBAU (ASSEMBLY) ROUTES =====
-
-@app.get("/products/assembly/new", response_class=HTMLResponse)
-async def new_assembly_form(request: Request, db: Session = Depends(get_db)):
-    """Formular für neues Zusammenbau-Produkt"""
-    # Lade alle Produkte für Verknüpfung
-    all_products = db.query(Product).order_by(Product.name).all()
-    
-    return templates.TemplateResponse("products/form_assembly.html", {
-        "request": request,
-        "product": None,
-        "categories": CATEGORIES,
-        "all_products": all_products,
-        "title": "Neues Zusammenbau-Produkt"
-    })
-
-@app.post("/products/assembly")
-async def create_assembly(
-    request: Request,
-    name: str = Form(...),
-    category: str = Form("Sonstiges"),
-    labor_minutes: str = Form("0"),
-    labor_rate_per_hour: str = Form("20.00"),
-    packaging_cost: str = Form("0"),
-    shipping_cost: str = Form("0"),
-    notes: str = Form(""),
-    # Komponenten (dynamische Felder)
-    component_name: list[str] = Form([]),
-    component_quantity: list[str] = Form([]),
-    component_unit_cost: list[str] = Form([]),
-    component_notes: list[str] = Form([]),
-    component_linked_product_id: list[str] = Form([]),
-    db: Session = Depends(get_db)
-):
-    """Neues Zusammenbau-Produkt erstellen"""
-    product = Product(
-        name=name,
-        product_type="assembly",
-        category=category,
-        labor_minutes=parse_decimal(labor_minutes),
-        labor_rate_per_hour=parse_decimal(labor_rate_per_hour),
-        packaging_cost=parse_decimal(packaging_cost),
-        shipping_cost=parse_decimal(shipping_cost),
-        notes=notes
-    )
-    
-    db.add(product)
-    db.commit()
-    db.refresh(product)
-    
     # Komponenten erstellen
     for i in range(len(component_name)):
         if i < len(component_name) and component_name[i].strip():
-            # Wenn ein verknüpftes Produkt ausgewählt wurde, hole dessen Kosten
             linked_id = None
             unit_cost = parse_decimal(component_unit_cost[i]) if i < len(component_unit_cost) else 0
             
@@ -891,7 +707,6 @@ async def create_assembly(
                     linked_id = int(component_linked_product_id[i])
                     linked_product = db.query(Product).filter(Product.id == linked_id).first()
                     if linked_product:
-                        # Berechne Kosten des verknüpften Produkts
                         linked_calc = linked_product.calculate_costs()
                         unit_cost = linked_calc['total_cost']
                 except (ValueError, TypeError):
@@ -909,15 +724,117 @@ async def create_assembly(
             db.add(comp)
     
     db.commit()
-    
     return RedirectResponse(url=f"/products/{product.id}", status_code=303)
+
+
+# ===== STICKER PRODUKTE =====
+
+@app.get("/products/sticker/new", response_class=HTMLResponse)
+async def new_sticker_form(request: Request, db: Session = Depends(get_db)):
+    """Formular für neues Sticker Produkt"""
+    materials = db.query(Material).order_by(Material.name).all()
+    machines = db.query(Machine).order_by(Machine.name).all()
+    all_products = db.query(Product).order_by(Product.name).all()
+    
+    return templates.TemplateResponse("products/form_sticker.html", {
+        "request": request,
+        "product": None,
+        "categories": CATEGORIES,
+        "sticker_categories": STICKER_CATEGORIES,
+        "materials": materials,
+        "machines": machines,
+        "all_products": all_products,
+        "title": "Neues Sticker-Produkt"
+    })
+
+
+@app.post("/products/sticker")
+async def create_sticker(
+    request: Request,
+    name: str = Form(...),
+    category: str = Form("StickerSheet"),
+    sheet_material_id: int = Form(...),
+    sheet_count: str = Form("1"),
+    units_per_sheet: str = Form("3"),
+    units_per_batch: str = Form("3"),
+    calculation_mode: str = Form("per_unit"),
+    machine_ids: list[int] = Form([]),
+    labor_minutes: str = Form("0"),
+    labor_rate_per_hour: str = Form("20.00"),
+    packaging_cost: str = Form("0"),
+    shipping_cost: str = Form("0"),
+    notes: str = Form(""),
+    # Komponenten
+    component_name: list[str] = Form([]),
+    component_quantity: list[str] = Form([]),
+    component_unit_cost: list[str] = Form([]),
+    component_notes: list[str] = Form([]),
+    component_linked_product_id: list[str] = Form([]),
+    db: Session = Depends(get_db)
+):
+    """Neues Sticker Produkt erstellen"""
+    primary_machine_id = machine_ids[0] if machine_ids else None
+    additional_ids = ",".join(str(mid) for mid in machine_ids[1:]) if len(machine_ids) > 1 else None
+    
+    product = Product(
+        name=name,
+        product_type="sticker",
+        category=category,
+        sheet_material_id=sheet_material_id,
+        sheet_count=parse_decimal(sheet_count) if sheet_count else 1,
+        units_per_sheet=parse_decimal(units_per_sheet) if calculation_mode == "per_unit" else 1,
+        units_per_batch=int(units_per_batch) if calculation_mode == "per_batch" else 1,
+        calculation_mode=calculation_mode,
+        machine_id=primary_machine_id,
+        additional_machine_ids=additional_ids,
+        labor_minutes=parse_decimal(labor_minutes),
+        labor_rate_per_hour=parse_decimal(labor_rate_per_hour),
+        packaging_cost=parse_decimal(packaging_cost),
+        shipping_cost=parse_decimal(shipping_cost),
+        notes=notes
+    )
+    
+    db.add(product)
+    db.commit()
+    db.refresh(product)
+    
+    # Komponenten erstellen
+    for i in range(len(component_name)):
+        if i < len(component_name) and component_name[i].strip():
+            linked_id = None
+            unit_cost = parse_decimal(component_unit_cost[i]) if i < len(component_unit_cost) else 0
+            
+            if i < len(component_linked_product_id) and component_linked_product_id[i]:
+                try:
+                    linked_id = int(component_linked_product_id[i])
+                    linked_product = db.query(Product).filter(Product.id == linked_id).first()
+                    if linked_product:
+                        linked_calc = linked_product.calculate_costs()
+                        unit_cost = linked_calc['total_cost']
+                except (ValueError, TypeError):
+                    linked_id = None
+            
+            comp = ProductComponent(
+                product_id=product.id,
+                name=component_name[i].strip(),
+                quantity=parse_decimal(component_quantity[i]) if i < len(component_quantity) else 1,
+                unit_cost=unit_cost,
+                notes=component_notes[i] if i < len(component_notes) else None,
+                linked_product_id=linked_id,
+                sort_order=i
+            )
+            db.add(comp)
+    
+    db.commit()
+    return RedirectResponse(url=f"/products/{product.id}", status_code=303)
+
 
 # ===== PRODUKT ANZEIGEN/BEARBEITEN =====
 
 @app.get("/products/{product_id}", response_class=HTMLResponse)
 async def view_product(
-    product_id: int, 
-    request: Request, 
+    product_id: int,
+    request: Request,
     success: str = "",
     error: str = "",
     db: Session = Depends(get_db)
@@ -929,45 +846,24 @@ async def view_product(
     
     calculations = product.calculate_costs()
     
-    # Lade Bilder des Produkts
-    images = db.query(ProductImage).filter(
-        ProductImage.product_id == product_id
-    ).order_by(ProductImage.is_primary.desc(), ProductImage.created_at.desc()).all()
-    
     # Lade Materialien je nach Typ
     filaments = []
     sticker_sheets = []
-    laser_materials = []
-    all_products = []
     if product.product_type == "3d_print":
         filaments = db.query(Material).filter(Material.material_type == "filament").order_by(Material.name).all()
-    elif product.product_type in ["sticker_sheet", "diecut_sticker", "stationery"]:
+    elif product.product_type == "sticker":
         sticker_sheets = db.query(Material).filter(Material.material_type == "sticker_sheet").order_by(Material.name).all()
-    elif product.product_type == "laser_engraving":
-        laser_materials = db.query(Material).filter(Material.material_type == "laser_material").order_by(Material.name).all()
-    elif product.product_type == "assembly":
-        # Lade alle Produkte für Verknüpfungs-Anzeige
-        all_products = db.query(Product).filter(Product.id != product_id).order_by(Product.name).all()
-    
-    # Lade Maschinen je nach Typ (nur für 3D-Druck)
-    machines = []
-    if product.product_type == "3d_print":
-        machines = db.query(Machine).filter(Machine.machine_type == "3d_printer").order_by(Machine.name).all()
     
     return templates.TemplateResponse("products/detail.html", {
         "request": request,
         "product": product,
         "calc": calculations,
-        "categories": CATEGORIES,
         "filaments": filaments,
         "sticker_sheets": sticker_sheets,
-        "laser_materials": laser_materials,
-        "machines": machines,
-        "images": images,
-        "all_products": all_products,
         "success_msg": success,
         "error_msg": error
     })
+
 
 @app.get("/products/{product_id}/edit", response_class=HTMLResponse)
 async def edit_product_form(product_id: int, request: Request, db: Session = Depends(get_db)):
@@ -976,22 +872,12 @@ async def edit_product_form(product_id: int, request: Request, db: Session = Dep
     if not product:
         raise HTTPException(status_code=404, detail="Produkt nicht gefunden")
     
-    # Lade alle Materialien für alle Produkttypen (Filter kann später hinzugefügt werden)
     all_materials = db.query(Material).order_by(Material.name).all()
-    filaments = all_materials
-    sticker_sheets = all_materials
-    laser_materials = all_materials
+    machines = db.query(Machine).order_by(Machine.name).all()
+    all_products = db.query(Product).filter(Product.id != product_id).order_by(Product.name).all()
     
-    # Lade entsprechende Maschinen
-    machines = []
     if product.product_type == "3d_print":
-        machines = db.query(Machine).filter(Machine.machine_type == "3d_printer").order_by(Machine.name).all()
-    elif product.product_type in ["sticker_sheet", "diecut_sticker", "stationery"]:
-        # Alle Maschinen laden
-        machines = db.query(Machine).order_by(Machine.name).all()
-    
-    # Wähle das richtige Template je nach Produkttyp
-    if product.product_type == "3d_print":
+        filaments = db.query(Material).filter(Material.material_type == "filament").order_by(Material.name).all()
         template = "products/form_3d_print.html"
         return templates.TemplateResponse(template, {
             "request": request,
@@ -999,7 +885,8 @@ async def edit_product_form(product_id: int, request: Request, db: Session = Dep
             "categories": CATEGORIES,
             "filaments": filaments,
             "machines": machines,
-            "title": f"Produkt bearbeiten"
+            "all_products": all_products,
+            "title": "Produkt bearbeiten"
         })
     elif product.product_type == "sticker":
         template = "products/form_sticker.html"
@@ -1008,51 +895,24 @@ async def edit_product_form(product_id: int, request: Request, db: Session = Dep
             "product": product,
             "categories": CATEGORIES,
             "sticker_categories": STICKER_CATEGORIES,
-            "materials": sticker_sheets,
+            "materials": all_materials,
             "machines": machines,
-            "title": f"Sticker-Produkt bearbeiten"
-        })
-    elif product.product_type == "stationery":
-        template = "products/form_stationery.html"
-        return templates.TemplateResponse(template, {
-            "request": request,
-            "product": product,
-            "categories": CATEGORIES,
-            "materials": sticker_sheets,
-            "machines": machines,
-            "title": f"Schreibware bearbeiten"
-        })
-    elif product.product_type == "laser_engraving":
-        template = "products/form_laser_engraving.html"
-        return templates.TemplateResponse(template, {
-            "request": request,
-            "product": product,
-            "categories": CATEGORIES,
-            "laser_materials": laser_materials,
-            "machines": machines,
-            "title": f"Laser-Gravur bearbeiten"
-        })
-    elif product.product_type == "assembly":
-        template = "products/form_assembly.html"
-        # Lade alle Produkte für Verknüpfung
-        all_products = db.query(Product).order_by(Product.name).all()
-        return templates.TemplateResponse(template, {
-            "request": request,
-            "product": product,
-            "categories": CATEGORIES,
             "all_products": all_products,
-            "machines": machines,
-            "title": f"Zusammenbau-Produkt bearbeiten"
+            "title": "Sticker-Produkt bearbeiten"
         })
     else:
-        template = "products/form_generic.html"
+        # Fallback für alte Produkttypen
+        template = "products/form_3d_print.html"
         return templates.TemplateResponse(template, {
             "request": request,
             "product": product,
             "categories": CATEGORIES,
+            "filaments": all_materials,
             "machines": machines,
-            "title": f"Produkt bearbeiten"
+            "all_products": all_products,
+            "title": "Produkt bearbeiten"
         })
+
 
 @app.post("/products/{product_id}/update")
 async def update_product(
@@ -1066,34 +926,11 @@ async def update_product(
     print_time_hours: str = Form("0"),
     # Sticker Felder
     sheet_material_id: int = Form(None),
-    sheet_count: str = Form(None),
+    sheet_count: str = Form("1"),
     units_per_sheet: str = Form("1"),
     units_per_batch: str = Form("1"),
     calculation_mode: str = Form("per_unit"),
     cut_time_hours: str = Form("0"),
-    # Laser-Gravur Felder - Layer 1
-    laser_material_id: int = Form(None),
-    laser_design_name: str = Form(None),
-    laser1_type: str = Form(None),
-    laser1_power_percent: str = Form("80.0"),
-    laser1_speed_mm_s: str = Form("200"),
-    laser1_passes: str = Form("1"),
-    laser1_dpi: str = Form("300"),
-    laser1_lines_per_cm: str = Form("60"),
-    # Laser-Gravur Felder - Layer 2
-    laser2_type: str = Form(None),
-    laser2_power_percent: str = Form("100.0"),
-    laser2_speed_mm_s: str = Form("100"),
-    laser2_passes: str = Form("1"),
-    laser2_dpi: str = Form("300"),
-    laser2_lines_per_cm: str = Form("60"),
-    # Laser-Gravur Felder - Layer 3
-    laser3_type: str = Form(None),
-    laser3_power_percent: str = Form("50.0"),
-    laser3_speed_mm_s: str = Form("300"),
-    laser3_passes: str = Form("1"),
-    laser3_dpi: str = Form("600"),
-    laser3_lines_per_cm: str = Form("120"),
     # Gemeinsame Felder
     machine_id: int = Form(None),
     labor_minutes: str = Form("0"),
@@ -1101,9 +938,9 @@ async def update_product(
     packaging_cost: str = Form("0"),
     shipping_cost: str = Form("0"),
     notes: str = Form(""),
-    # Mehrere Maschinen (für Sticker, Schreibwaren, DieCut)
+    # Mehrere Maschinen (für Sticker)
     machine_ids: list[int] = Form([]),
-    # Assembly Komponenten (dynamische Felder)
+    # Komponenten
     component_id: list[str] = Form([]),
     component_name: list[str] = Form([]),
     component_quantity: list[str] = Form([]),
@@ -1125,9 +962,10 @@ async def update_product(
         product.filament_material_id = filament_material_id
         product.filament_weight_g = parse_decimal(filament_weight_g) if filament_weight_g else None
         product.print_time_hours = parse_decimal(print_time_hours)
-    elif product.product_type in ["sticker", "stationery"]:
+        product.machine_id = machine_id
+    elif product.product_type == "sticker":
         product.sheet_material_id = sheet_material_id
-        product.sheet_count = 1  # Immer 1
+        product.sheet_count = parse_decimal(sheet_count) if sheet_count else 1
         product.calculation_mode = calculation_mode
         if calculation_mode == "per_unit":
             product.units_per_sheet = parse_decimal(units_per_sheet)
@@ -1135,86 +973,49 @@ async def update_product(
         else:
             product.units_per_batch = int(units_per_batch)
             product.units_per_sheet = 1
-        # Mehrere Maschinen speichern
         product.machine_id = machine_ids[0] if machine_ids else None
         product.additional_machine_ids = ",".join(str(mid) for mid in machine_ids[1:]) if len(machine_ids) > 1 else None
-    elif product.product_type == "laser_engraving":
-        product.laser_material_id = laser_material_id
-        product.laser_design_name = laser_design_name
-        # Layer 1
-        product.laser1_type = laser1_type
-        product.laser1_power_percent = parse_decimal(laser1_power_percent)
-        product.laser1_speed_mm_s = parse_decimal(laser1_speed_mm_s)
-        product.laser1_passes = int(parse_decimal(laser1_passes))
-        product.laser1_dpi = int(parse_decimal(laser1_dpi))
-        product.laser1_lines_per_cm = int(parse_decimal(laser1_lines_per_cm))
-        # Layer 2
-        product.laser2_type = laser2_type if laser2_type else None
-        product.laser2_power_percent = parse_decimal(laser2_power_percent)
-        product.laser2_speed_mm_s = parse_decimal(laser2_speed_mm_s)
-        product.laser2_passes = int(parse_decimal(laser2_passes))
-        product.laser2_dpi = int(parse_decimal(laser2_dpi))
-        product.laser2_lines_per_cm = int(parse_decimal(laser2_lines_per_cm))
-        # Layer 3
-        product.laser3_type = laser3_type if laser3_type else None
-        product.laser3_power_percent = parse_decimal(laser3_power_percent)
-        product.laser3_speed_mm_s = parse_decimal(laser3_speed_mm_s)
-        product.laser3_passes = int(parse_decimal(laser3_passes))
-        product.laser3_dpi = int(parse_decimal(laser3_dpi))
-        product.laser3_lines_per_cm = int(parse_decimal(laser3_lines_per_cm))
-    elif product.product_type == "assembly":
-        # Lösche bestehende Komponenten und erstelle neue
-        db.query(ProductComponent).filter(ProductComponent.product_id == product_id).delete()
-        
-        # Komponenten erstellen
-        for i in range(len(component_name)):
-            if i < len(component_name) and component_name[i].strip():
-                # Wenn ein verknüpftes Produkt ausgewählt wurde, hole dessen Kosten
-                linked_id = None
-                unit_cost = parse_decimal(component_unit_cost[i]) if i < len(component_unit_cost) else 0
-                
-                if i < len(component_linked_product_id) and component_linked_product_id[i]:
-                    try:
-                        linked_id = int(component_linked_product_id[i])
-                        linked_product = db.query(Product).filter(Product.id == linked_id).first()
-                        if linked_product:
-                            # Berechne Kosten des verknüpften Produkts
-                            linked_calc = linked_product.calculate_costs()
-                            unit_cost = linked_calc['total_cost']
-                    except (ValueError, TypeError):
-                        linked_id = None
-                
-                comp = ProductComponent(
-                    product_id=product.id,
-                    name=component_name[i].strip(),
-                    quantity=parse_decimal(component_quantity[i]) if i < len(component_quantity) else 1,
-                    unit_cost=unit_cost,
-                    notes=component_notes[i] if i < len(component_notes) else None,
-                    linked_product_id=linked_id,
-                    sort_order=i
-                )
-                db.add(comp)
     
     # Gemeinsame Felder
-    if product.product_type == "3d_print":
-        product.machine_id = machine_id
     product.labor_minutes = parse_decimal(labor_minutes)
     product.labor_rate_per_hour = parse_decimal(labor_rate_per_hour)
-    
-    # Verpackung/Versand nur für 3D-Druck und Laser (bei Sticker/Schreibwaren wird es beim Verkauf erfasst)
-    if product.product_type in ["3d_print", "laser_engraving"]:
-        product.packaging_cost = parse_decimal(packaging_cost)
-        product.shipping_cost = parse_decimal(shipping_cost)
-    else:
-        product.packaging_cost = 0
-        product.shipping_cost = 0
-    
+    product.packaging_cost = parse_decimal(packaging_cost)
+    product.shipping_cost = parse_decimal(shipping_cost)
     product.notes = notes
     product.updated_at = datetime.utcnow()
     
-    db.commit()
+    # Komponenten aktualisieren (löschen und neu erstellen)
+    db.query(ProductComponent).filter(ProductComponent.product_id == product_id).delete()
     
+    for i in range(len(component_name)):
+        if i < len(component_name) and component_name[i].strip():
+            linked_id = None
+            unit_cost = parse_decimal(component_unit_cost[i]) if i < len(component_unit_cost) else 0
+            
+            if i < len(component_linked_product_id) and component_linked_product_id[i]:
+                try:
+                    linked_id = int(component_linked_product_id[i])
+                    linked_product = db.query(Product).filter(Product.id == linked_id).first()
+                    if linked_product:
+                        linked_calc = linked_product.calculate_costs()
+                        unit_cost = linked_calc['total_cost']
+                except (ValueError, TypeError):
+                    linked_id = None
+            
+            comp = ProductComponent(
+                product_id=product.id,
+                name=component_name[i].strip(),
+                quantity=parse_decimal(component_quantity[i]) if i < len(component_quantity) else 1,
+                unit_cost=unit_cost,
+                notes=component_notes[i] if i < len(component_notes) else None,
+                linked_product_id=linked_id,
+                sort_order=i
+            )
+            db.add(comp)
+    
+    db.commit()
     return RedirectResponse(url=f"/products/{product_id}", status_code=303)
+
 
 @app.post("/products/{product_id}/delete")
 async def delete_product(product_id: int, db: Session = Depends(get_db)):
@@ -1223,7 +1024,7 @@ async def delete_product(product_id: int, db: Session = Depends(get_db)):
     if not product:
         raise HTTPException(status_code=404, detail="Produkt nicht gefunden")
     
-    # Lösche zuerst alle Komponenten (falls Assembly-Produkt)
+    # Lösche zuerst alle Komponenten
     db.query(ProductComponent).filter(ProductComponent.product_id == product_id).delete()
     
     db.delete(product)
@@ -1231,317 +1032,194 @@ async def delete_product(product_id: int, db: Session = Depends(get_db)):
     
     return RedirectResponse(url="/products", status_code=303)
 
-# ===== FEEDBACK ROUTES =====
 
-@app.get("/feedback", response_class=HTMLResponse)
-async def feedback_form(request: Request, page: str = "/", title: str = ""):
-    """Feedback-Formular anzeigen"""
-    return templates.TemplateResponse("feedback/form.html", {
-        "request": request,
-        "page_url": page,
-        "page_title": title,
-        "title": "Feedback senden"
-    })
+# =============================================================================
+# API ROUTES
+# =============================================================================
 
-@app.post("/feedback")
-async def submit_feedback(
+@app.get("/api/products/search")
+async def api_search_products(q: str = "", db: Session = Depends(get_db)):
+    """API: Produkte suchen (für Autocomplete)"""
+    query = db.query(Product)
+    if q:
+        query = query.filter(Product.name.ilike(f"%{q}%"))
+    products = query.order_by(Product.name).limit(20).all()
+    return [
+        {
+            "id": p.id,
+            "name": p.name,
+            "product_type": p.product_type,
+            "cost": p.calculate_costs()["total_cost"]
+        }
+        for p in products
+    ]
+
+
+@app.get("/api/products/{product_id}/details")
+async def api_product_details(product_id: int, db: Session = Depends(get_db)):
+    """API: Produktdetails für Verknüpfung"""
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Produkt nicht gefunden")
+    
+    calc = product.calculate_costs()
+    return {
+        "id": product.id,
+        "name": product.name,
+        "product_type": product.product_type,
+        "total_cost": calc["total_cost"]
+    }
+
+
+
+# ===== FEEDBACK & IDEEN =====
+
+@app.get("/feedback-ideas", response_class=HTMLResponse)
+async def list_feedback_ideas(
     request: Request,
-    page_url: str = Form(...),
-    page_title: str = Form(""),
-    category: str = Form(...),
-    message: str = Form(...),
+    status_filter: str = "",
+    search: str = "",
+    sort_by: str = "created_at",
+    sort_order: str = "desc",
     db: Session = Depends(get_db)
 ):
-    """Feedback speichern"""
-    feedback = Feedback(
-        page_url=page_url,
-        page_title=page_title,
-        category=category,
-        message=message,
-        status="new"
+    """Liste aller Feedback-Eintraege und Ideen"""
+    query = db.query(FeedbackIdea)
+    
+    if status_filter:
+        query = query.filter(FeedbackIdea.status == status_filter)
+    if search:
+        query = query.filter(FeedbackIdea.description.ilike(f"%{search}%"))
+    
+    sort_col = FeedbackIdea.created_at
+    if sort_by == "updated_at":
+        sort_col = FeedbackIdea.updated_at
+    elif sort_by == "status":
+        sort_col = FeedbackIdea.status
+    
+    if sort_order == "asc":
+        query = query.order_by(sort_col.asc())
+    else:
+        query = query.order_by(sort_col.desc())
+    
+    items = query.all()
+    open_count = db.query(FeedbackIdea).filter(FeedbackIdea.status == 'open').count()
+    done_count = db.query(FeedbackIdea).filter(FeedbackIdea.status == 'done').count()
+    
+    return templates.TemplateResponse("feedback_ideas/list.html", {
+        "request": request,
+        "items": items,
+        "status_filter": status_filter,
+        "open_count": open_count,
+        "done_count": done_count,
+        "search": search,
+        "sort_by": sort_by,
+        "sort_order": sort_order
+    })
+
+
+@app.get("/feedback-ideas/new", response_class=HTMLResponse)
+async def new_feedback_idea_form(request: Request):
+    """Formular für neues Feedback / neue Idee"""
+    return templates.TemplateResponse("feedback_ideas/form.html", {
+        "request": request,
+        "item": None,
+        "title": "Neues Feedback / Idee"
+    })
+
+
+@app.post("/feedback-ideas")
+async def create_feedback_idea(
+    request: Request,
+    description: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    """Neues Feedback oder Idee erstellen"""
+    item = FeedbackIdea(
+        description=description.strip(),
+        status='open'
     )
-    
-    db.add(feedback)
+    db.add(item)
     db.commit()
-    db.refresh(feedback)
-    
-    # Zurück zur vorherigen Seite mit Erfolgsmeldung
-    response = RedirectResponse(url=page_url, status_code=303)
-    return response
+    return RedirectResponse(url="/feedback-ideas", status_code=303)
 
-@app.get("/feedback/list", response_class=HTMLResponse)
-async def list_feedback(request: Request, db: Session = Depends(get_db)):
-    """Alle Feedback-Einträge anzeigen (Admin-Ansicht)"""
-    feedbacks = db.query(Feedback).order_by(Feedback.created_at.desc()).all()
-    
-    return templates.TemplateResponse("feedback/list.html", {
-        "request": request,
-        "feedbacks": feedbacks,
-        "title": "Feedback Übersicht"
-    })
 
-@app.post("/feedback/{feedback_id}/status")
-async def update_feedback_status(
-    feedback_id: int,
-    status: str = Form(...),
-    db: Session = Depends(get_db)
-):
-    """Status eines Feedback-Eintrags aktualisieren"""
-    feedback = db.query(Feedback).filter(Feedback.id == feedback_id).first()
-    if not feedback:
-        raise HTTPException(status_code=404, detail="Feedback nicht gefunden")
-    
-    feedback.status = status
-    feedback.updated_at = datetime.utcnow()
-    db.commit()
-    
-    return RedirectResponse(url="/feedback/list", status_code=303)
-
-@app.post("/feedback/{feedback_id}/delete")
-async def delete_feedback(feedback_id: int, db: Session = Depends(get_db)):
-    """Feedback-Eintrag löschen"""
-    feedback = db.query(Feedback).filter(Feedback.id == feedback_id).first()
-    if not feedback:
-        raise HTTPException(status_code=404, detail="Feedback nicht gefunden")
-    
-    db.delete(feedback)
-    db.commit()
-    
-    return RedirectResponse(url="/feedback/list", status_code=303)
-
-# ===== IDEEN-BOARD ROUTES =====
-
-@app.get("/ideas", response_class=HTMLResponse)
-async def ideas_board(request: Request, db: Session = Depends(get_db)):
-    """Kanban-Style Ideen-Board anzeigen"""
-    ideas_todo = db.query(Idea).filter(Idea.status == "todo").order_by(Idea.created_at.desc()).all()
-    ideas_in_progress = db.query(Idea).filter(Idea.status == "in_progress").order_by(Idea.created_at.desc()).all()
-    ideas_done = db.query(Idea).filter(Idea.status == "done").order_by(Idea.created_at.desc()).all()
-    
-    return templates.TemplateResponse("ideas/board.html", {
-        "request": request,
-        "ideas_todo": ideas_todo,
-        "ideas_in_progress": ideas_in_progress,
-        "ideas_done": ideas_done,
-        "title": "Ideen-Board"
-    })
-
-@app.post("/ideas")
-async def create_idea(
+@app.get("/feedback-ideas/{item_id}/edit", response_class=HTMLResponse)
+async def edit_feedback_idea_form(
+    item_id: int,
     request: Request,
-    subject: str = Form(...),
-    content: str = Form(""),
-    status: str = Form("todo"),
     db: Session = Depends(get_db)
 ):
-    """Neue Idee erstellen"""
-    idea = Idea(
-        subject=subject,
-        content=content,
-        status=status
-    )
+    """Formular zum Bearbeiten"""
+    item = db.query(FeedbackIdea).filter(FeedbackIdea.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Eintrag nicht gefunden")
     
-    db.add(idea)
-    db.commit()
-    db.refresh(idea)
-    
-    return RedirectResponse(url="/ideas", status_code=303)
-
-@app.post("/ideas/{idea_id}/update")
-async def update_idea(
-    idea_id: int,
-    request: Request,
-    subject: str = Form(...),
-    content: str = Form(""),
-    status: str = Form("todo"),
-    db: Session = Depends(get_db)
-):
-    """Idee aktualisieren"""
-    idea = db.query(Idea).filter(Idea.id == idea_id).first()
-    if not idea:
-        raise HTTPException(status_code=404, detail="Idee nicht gefunden")
-    
-    idea.subject = subject
-    idea.content = content
-    idea.status = status
-    idea.updated_at = datetime.utcnow()
-    
-    db.commit()
-    
-    return RedirectResponse(url="/ideas", status_code=303)
-
-@app.post("/ideas/{idea_id}/delete")
-async def delete_idea(idea_id: int, db: Session = Depends(get_db)):
-    """Idee löschen"""
-    idea = db.query(Idea).filter(Idea.id == idea_id).first()
-    if not idea:
-        raise HTTPException(status_code=404, detail="Idee nicht gefunden")
-    
-    db.delete(idea)
-    db.commit()
-    
-    return RedirectResponse(url="/ideas", status_code=303)
-
-
-@app.post("/ideas/{idea_id}/status")
-async def update_idea_status(
-    idea_id: int,
-    status: str = Form(...),
-    db: Session = Depends(get_db)
-):
-    """Nur Status einer Idee aktualisieren (für Drag & Drop)"""
-    idea = db.query(Idea).filter(Idea.id == idea_id).first()
-    if not idea:
-        raise HTTPException(status_code=404, detail="Idee nicht gefunden")
-    
-    idea.status = status
-    idea.updated_at = datetime.utcnow()
-    db.commit()
-    
-    return {"success": True, "id": idea_id, "status": status}
-
-
-# ========================================
-# SALES ORDERS - VERKAUFSAUFTRÄGE
-# ========================================
-
-@app.get("/sales-orders", response_class=HTMLResponse)
-async def list_sales_orders(request: Request, db: Session = Depends(get_db)):
-    """Liste aller Verkaufsaufträge"""
-    orders = db.query(SalesOrder).order_by(SalesOrder.created_at.desc()).all()
-    return templates.TemplateResponse("sales_orders/list.html", {
+    return templates.TemplateResponse("feedback_ideas/form.html", {
         "request": request,
-        "orders": orders
+        "item": item,
+        "title": "Feedback / Idee bearbeiten"
     })
 
-@app.get("/sales-orders/new", response_class=HTMLResponse)
-async def new_sales_order_form(request: Request, product_id: int = None, db: Session = Depends(get_db)):
-    """Formular für neuen Verkaufsauftrag"""
-    products = db.query(Product).order_by(Product.name).all()
-    articles = db.query(Article).filter(Article.is_active == 1).order_by(Article.name).all()
-    product = None
-    if product_id:
-        product = db.query(Product).filter(Product.id == product_id).first()
-    return templates.TemplateResponse("sales_orders/form.html", {
-        "request": request,
-        "order": None,
-        "products": products,
-        "articles": articles,
-        "product": product,
-        "title": "Neuer Verkaufsauftrag"
-    })
 
-@app.post("/sales-orders")
-async def create_sales_order(
+@app.post("/feedback-ideas/{item_id}/update")
+async def update_feedback_idea(
+    item_id: int,
     request: Request,
-    order_number: str = Form(""),
-    customer_name: str = Form(""),
-    packaging_cost: str = Form("0"),
-    shipping_cost: str = Form("0"),
-    labor_minutes_packaging: str = Form("0"),
-    labor_rate_packaging: str = Form("20.00"),
-    notes: str = Form(""),
-    # Dynamische Felder für Produkte und Artikel (Arrays)
-    item_type: list[str] = Form([]),
-    product_id: list[str] = Form([]),
-    article_id: list[str] = Form([]),
-    quantity: list[str] = Form([]),
-    unit_price: list[str] = Form([]),
-    cost_per_unit: list[str] = Form([]),
+    description: str = Form(...),
     db: Session = Depends(get_db)
 ):
-    """Neuen Verkaufsauftrag mit Produkten und/oder Artikeln erstellen"""
+    """Feedback/Idee aktualisieren"""
+    item = db.query(FeedbackIdea).filter(FeedbackIdea.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Eintrag nicht gefunden")
     
-    # Auftrag (Header) erstellen
-    order = SalesOrder(
-        order_number=order_number if order_number else None,
-        customer_name=customer_name if customer_name else None,
-        packaging_cost=parse_decimal(packaging_cost),
-        shipping_cost=parse_decimal(shipping_cost),
-        labor_minutes_packaging=parse_decimal(labor_minutes_packaging),
-        labor_rate_packaging=parse_decimal(labor_rate_packaging),
-        notes=notes if notes else None,
-        status="pending"
-    )
-    db.add(order)
-    db.commit()
-    db.refresh(order)
-    
-    # Auftragspositionen erstellen
-    for i in range(len(item_type)):
-        if i < len(quantity) and i < len(unit_price):
-            item_type_val = item_type[i] if i < len(item_type) else 'product'
-            
-            if item_type_val == 'product':
-                # Produkt-Position
-                pid = int(product_id[i]) if i < len(product_id) and product_id[i] else None
-                if pid:
-                    item = SalesOrderItem(
-                        sales_order_id=order.id,
-                        item_type='product',
-                        product_id=pid,
-                        article_id=None,
-                        quantity=int(quantity[i]),
-                        unit_price=parse_decimal(unit_price[i]),
-                        cost_per_unit=parse_decimal(cost_per_unit[i]) if i < len(cost_per_unit) else 0
-                    )
-                    db.add(item)
-            else:
-                # Artikel-Position
-                aid = int(article_id[i]) if i < len(article_id) and article_id[i] else None
-                if aid:
-                    item = SalesOrderItem(
-                        sales_order_id=order.id,
-                        item_type='article',
-                        product_id=None,
-                        article_id=aid,
-                        quantity=int(quantity[i]),
-                        unit_price=parse_decimal(unit_price[i]),
-                        cost_per_unit=parse_decimal(cost_per_unit[i]) if i < len(cost_per_unit) else 0
-                    )
-                    db.add(item)
+    item.description = description.strip()
+    item.updated_at = datetime.utcnow()
     
     db.commit()
-    return RedirectResponse(url=f"/sales-orders/{order.id}", status_code=303)
+    return RedirectResponse(url="/feedback-ideas", status_code=303)
 
-@app.get("/sales-orders/{order_id}", response_class=HTMLResponse)
-async def view_sales_order(order_id: int, request: Request, db: Session = Depends(get_db)):
-    """Verkaufsauftrag anzeigen"""
-    order = db.query(SalesOrder).filter(SalesOrder.id == order_id).first()
-    if not order:
-        raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
-    
-    return templates.TemplateResponse("sales_orders/detail.html", {
-        "request": request,
-        "order": order
-    })
 
-@app.post("/sales-orders/{order_id}/status")
-async def update_sales_order_status(
-    order_id: int,
+@app.post("/feedback-ideas/{item_id}/status")
+async def toggle_feedback_idea_status(
+    item_id: int,
     request: Request,
-    status: str = Form(...),
     db: Session = Depends(get_db)
 ):
-    """Status des Verkaufsauftrags aktualisieren"""
-    order = db.query(SalesOrder).filter(SalesOrder.id == order_id).first()
-    if not order:
-        raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
+    """Status toggeln (open <-> done)"""
+    item = db.query(FeedbackIdea).filter(FeedbackIdea.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Eintrag nicht gefunden")
     
-    order.status = status
-    if status == "produced":
-        order.produced_at = datetime.utcnow()
-    elif status == "shipped":
-        order.shipped_at = datetime.utcnow()
-    
+    item.status = 'done' if item.status == 'open' else 'open'
+    item.updated_at = datetime.utcnow()
     db.commit()
-    return RedirectResponse(url=f"/sales-orders/{order.id}", status_code=303)
+    
+    return RedirectResponse(url="/feedback-ideas", status_code=303)
+
+
+@app.post("/feedback-ideas/{item_id}/delete")
+async def delete_feedback_idea(
+    item_id: int,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Feedback/Idee löschen"""
+    item = db.query(FeedbackIdea).filter(FeedbackIdea.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Eintrag nicht gefunden")
+    
+    db.delete(item)
+    db.commit()
+    return RedirectResponse(url="/feedback-ideas", status_code=303)
+
 
 # ========================================
 # TOOLS - PNG TO SVG CONVERTER
 # ========================================
 
-# Verzeichnis für temporäre Uploads
+# Verzeichnis fuer temporaere Uploads
 UPLOAD_DIR = Path("/tmp/picocalc_uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -1578,7 +1256,7 @@ async def png_to_svg_convert(
 ):
     """PNG/JPG zu SVG konvertieren und optional speichern"""
     
-    # Prüfe Dateityp
+    # Pruefe Dateityp
     allowed_types = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/bmp']
     if image.content_type not in allowed_types:
         return templates.TemplateResponse("tools/png_to_svg.html", {
@@ -1617,15 +1295,14 @@ async def png_to_svg_convert(
         with open(output_path, "r", encoding="utf-8") as f:
             svg_content = f.read()
         
-        # Berechne Dateigrößen
+        # Berechne Dateigroessen
         original_size = len(content)
         svg_size = len(svg_content.encode('utf-8'))
         
         # Wenn speichern aktiviert, in permanenten Speicher verschieben
         db_entry = None
         if save_file == "true":
-            # Erstelle Unterordner basierend auf Datum für bessere Organisation
-            from datetime import datetime
+            # Erstelle Unterordner basierend auf Datum fuer bessere Organisation
             date_folder = datetime.now().strftime("%Y/%m")
             storage_subdir = FILE_STORAGE_PATH / date_folder
             storage_subdir.mkdir(parents=True, exist_ok=True)
@@ -1637,7 +1314,6 @@ async def png_to_svg_convert(
             svg_path = storage_subdir / svg_filename
             
             # Kopiere Dateien in permanenten Speicher
-            import shutil
             shutil.copy(input_path, png_path)
             shutil.copy(output_path, svg_path)
             
@@ -1658,7 +1334,7 @@ async def png_to_svg_convert(
             db.commit()
             db.refresh(db_entry)
         
-        # Lösche temporäre Dateien
+        # Loesche temporaere Dateien
         input_path.unlink(missing_ok=True)
         output_path.unlink(missing_ok=True)
         
@@ -1708,6 +1384,8 @@ async def download_fresh_svg(
 async def list_converted_files(
     request: Request,
     search: str = "",
+    sort_by: str = "original_filename",
+    sort_order: str = "asc",
     db: Session = Depends(get_db)
 ):
     """Liste aller gespeicherten Konvertierungen"""
@@ -1720,13 +1398,26 @@ async def list_converted_files(
             (ConvertedFile.tags.ilike(f"%{search}%"))
         )
     
-    files = query.order_by(ConvertedFile.created_at.desc()).all()
+    sort_col = ConvertedFile.original_filename
+    if sort_by == "created_at":
+        sort_col = ConvertedFile.created_at
+    elif sort_by == "size_reduction":
+        sort_col = ConvertedFile.svg_size_bytes
+    
+    if sort_order == "desc":
+        query = query.order_by(sort_col.desc())
+    else:
+        query = query.order_by(sort_col.asc())
+    
+    files = query.all()
     
     return templates.TemplateResponse("tools/converted_files_list.html", {
         "request": request,
         "title": "Gespeicherte Konvertierungen",
         "files": files,
-        "search": search
+        "search": search,
+        "sort_by": sort_by,
+        "sort_order": sort_order
     })
 
 @app.get("/tools/converted-files/{file_id}/preview", response_class=HTMLResponse)
@@ -1791,1437 +1482,20 @@ async def download_png(file_id: int, db: Session = Depends(get_db)):
 
 @app.post("/tools/converted-files/{file_id}/delete")
 async def delete_converted_file(file_id: int, db: Session = Depends(get_db)):
-    """Lösche eine gespeicherte Konvertierung"""
+    """Loesche eine gespeicherte Konvertierung"""
     file_entry = db.query(ConvertedFile).filter(ConvertedFile.id == file_id).first()
     if not file_entry:
         raise HTTPException(status_code=404, detail="Datei nicht gefunden")
     
-    # Lösche physische Dateien
+    # Loesche physische Dateien
     png_path = FILE_STORAGE_PATH / file_entry.file_path_png
     svg_path = FILE_STORAGE_PATH / file_entry.file_path_svg
     
     png_path.unlink(missing_ok=True)
     svg_path.unlink(missing_ok=True)
     
-    # Lösche DB-Eintrag
+    # Loesche DB-Eintrag
     db.delete(file_entry)
     db.commit()
     
     return RedirectResponse(url="/tools/converted-files", status_code=303)
-
-
-# ========================================
-# PRODUKT BILDER - UPLOAD UND VERWALTUNG
-# ========================================
-
-@app.post("/products/{product_id}/images/upload")
-async def upload_product_image(
-    product_id: int,
-    request: Request,
-    image: UploadFile = File(...),
-    description: str = Form(""),
-    is_primary: int = Form(0),
-    db: Session = Depends(get_db)
-):
-    """Lade ein Produktbild hoch (PNG, JPG - ohne SVG-Konvertierung)"""
-    
-    # Prüfe ob Produkt existiert
-    product = db.query(Product).filter(Product.id == product_id).first()
-    if not product:
-        raise HTTPException(status_code=404, detail="Produkt nicht gefunden")
-    
-    # Prüfe Dateityp
-    allowed_types = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp']
-    if image.content_type not in allowed_types:
-        return RedirectResponse(
-            url=f"/products/{product_id}?error=Nur PNG, JPG oder WEBP erlaubt", 
-            status_code=303
-        )
-    
-    try:
-        # Generiere eindeutigen Dateinamen
-        file_id = str(uuid.uuid4())
-        date_folder = datetime.now().strftime("%Y/%m")
-        storage_subdir = FILE_STORAGE_PATH / "products" / date_folder
-        storage_subdir.mkdir(parents=True, exist_ok=True)
-        
-        # Dateiendung bestimmen
-        ext = image.filename.split('.')[-1].lower()
-        if ext not in ['png', 'jpg', 'jpeg', 'webp']:
-            ext = 'png'
-        
-        filename = f"{file_id}.{ext}"
-        file_path = storage_subdir / filename
-        
-        # Speichere Datei
-        content = await image.read()
-        with open(file_path, "wb") as f:
-            f.write(content)
-        
-        # Falls is_primary gesetzt, setze alle anderen Bilder auf nicht-primary
-        if is_primary:
-            db.query(ProductImage).filter(
-                ProductImage.product_id == product_id
-            ).update({"is_primary": 0})
-        
-        # Datenbank-Eintrag erstellen
-        product_image = ProductImage(
-            product_id=product_id,
-            original_filename=image.filename,
-            stored_filename=file_id,
-            file_path=str(Path("products") / date_folder / filename),
-            file_size_bytes=len(content),
-            mime_type=image.content_type,
-            description=description if description else None,
-            is_primary=is_primary
-        )
-        db.add(product_image)
-        db.commit()
-        
-        return RedirectResponse(
-            url=f"/products/{product_id}?success=Bild erfolgreich hochgeladen", 
-            status_code=303
-        )
-        
-    except Exception as e:
-        return RedirectResponse(
-            url=f"/products/{product_id}?error=Fehler beim Upload: {str(e)}", 
-            status_code=303
-        )
-
-
-@app.get("/product-images/{image_id}")
-async def get_product_image(image_id: int, db: Session = Depends(get_db)):
-    """Zeige ein Produktbild an"""
-    image = db.query(ProductImage).filter(ProductImage.id == image_id).first()
-    if not image:
-        raise HTTPException(status_code=404, detail="Bild nicht gefunden")
-    
-    file_path = FILE_STORAGE_PATH / image.file_path
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Datei nicht gefunden")
-    
-    return FileResponse(
-        path=file_path,
-        media_type=image.mime_type or "image/png"
-    )
-
-
-@app.post("/product-images/{image_id}/delete")
-async def delete_product_image(image_id: int, db: Session = Depends(get_db)):
-    """Lösche ein Produktbild"""
-    image = db.query(ProductImage).filter(ProductImage.id == image_id).first()
-    if not image:
-        raise HTTPException(status_code=404, detail="Bild nicht gefunden")
-    
-    product_id = image.product_id
-    
-    # Lösche physische Datei
-    file_path = FILE_STORAGE_PATH / image.file_path
-    file_path.unlink(missing_ok=True)
-    
-    # Lösche DB-Eintrag
-    db.delete(image)
-    db.commit()
-    
-    return RedirectResponse(url=f"/products/{product_id}", status_code=303)
-
-
-@app.post("/product-images/{image_id}/set-primary")
-async def set_primary_image(image_id: int, db: Session = Depends(get_db)):
-    """Setze ein Bild als Hauptbild"""
-    image = db.query(ProductImage).filter(ProductImage.id == image_id).first()
-    if not image:
-        raise HTTPException(status_code=404, detail="Bild nicht gefunden")
-    
-    # Setze alle Bilder des Produkts auf nicht-primary
-    db.query(ProductImage).filter(
-        ProductImage.product_id == image.product_id
-    ).update({"is_primary": 0})
-    
-    # Setze dieses Bild als primary
-    image.is_primary = 1
-    db.commit()
-    
-    return RedirectResponse(url=f"/products/{image.product_id}", status_code=303)
-
-
-@app.post("/products/{product_id}/images/link-svg")
-async def link_svg_to_product(
-    product_id: int,
-    converted_file_id: int = Form(...),
-    description: str = Form(""),
-    db: Session = Depends(get_db)
-):
-    """Verknüpfe ein SVG aus der Bibliothek mit einem Produkt"""
-    
-    # Prüfe ob Produkt und SVG existieren
-    product = db.query(Product).filter(Product.id == product_id).first()
-    if not product:
-        raise HTTPException(status_code=404, detail="Produkt nicht gefunden")
-    
-    converted_file = db.query(ConvertedFile).filter(ConvertedFile.id == converted_file_id).first()
-    if not converted_file:
-        raise HTTPException(status_code=404, detail="SVG nicht gefunden")
-    
-    # Erstelle Verknüpfung
-    product_image = ProductImage(
-        product_id=product_id,
-        original_filename=converted_file.original_filename,
-        stored_filename=converted_file.stored_filename,
-        file_path=converted_file.file_path_png,  # Wir zeigen die PNG-Vorschau an
-        file_size_bytes=converted_file.original_size_bytes,
-        mime_type="image/png",
-        description=description if description else converted_file.description,
-        converted_file_id=converted_file_id
-    )
-    db.add(product_image)
-    db.commit()
-    
-    return RedirectResponse(
-        url=f"/products/{product_id}?success=SVG erfolgreich verknüpft", 
-        status_code=303
-    )
-
-
-# ========================================# ARTIKEL-VERWALTUNG
-# ========================================
-
-# Standard-Artikelkategorien beim ersten Start
-def seed_article_categories(db: Session):
-    """Initialisiert Standard-Artikelkategorien falls noch keine existieren"""
-    existing = db.query(ArticleCategory).first()
-    if existing:
-        return  # Bereits initialisiert
-    
-    default_categories = [
-        ("ART", "Allgemeine Artikel", "Sonstige Waren", "ART-", 1),
-        ("ST", "Sticker", "Alle Sticker-Produkte", "ST-", 1),
-        ("3D", "3D-Druck", "3D-gedruckte Artikel", "3D-", 1),
-        ("TX", "Textil", "T-Shirts, Taschen, Textilien", "TX-", 1),
-        ("PP", "Papierprodukte", "Karten, Blöcke, Papierwaren", "PP-", 1),
-        ("LZ", "Laser/Gravur", "Gegravarte Artikel", "LZ-", 1),
-    ]
-    
-    for code, name, desc, prefix, next_num in default_categories:
-        cat = ArticleCategory(
-            code=code, 
-            name=name, 
-            description=desc, 
-            prefix=prefix,
-            next_number=next_num
-        )
-        db.add(cat)
-    
-    db.commit()
-    print("Standard-Artikelkategorien wurden initialisiert.")
-
-
-@app.get("/articles", response_class=HTMLResponse)
-async def list_articles(
-    request: Request, 
-    category_id: int = None,
-    search: str = "",
-    db: Session = Depends(get_db)
-):
-    """Liste aller Artikel mit Filter"""
-    query = db.query(Article)
-    
-    if category_id:
-        query = query.filter(Article.category_id == category_id)
-    
-    if search:
-        query = query.filter(
-            (Article.name.ilike(f"%{search}%")) |
-            (Article.article_number.ilike(f"%{search}%")) |
-            (Article.description.ilike(f"%{search}%"))
-        )
-    
-    articles = query.filter(Article.is_active == 1).order_by(Article.article_number).all()
-    categories = db.query(ArticleCategory).filter(ArticleCategory.is_active == 1).order_by(ArticleCategory.name).all()
-    
-    return templates.TemplateResponse("articles/list.html", {
-        "request": request,
-        "articles": articles,
-        "categories": categories,
-        "selected_category": category_id,
-        "search": search
-    })
-
-
-@app.get("/articles/new", response_class=HTMLResponse)
-async def new_article_form(request: Request, product_id: int = None, db: Session = Depends(get_db)):
-    """Formular für neuen Artikel - optional mit vorausgefülltem Produkt"""
-    categories = db.query(ArticleCategory).filter(ArticleCategory.is_active == 1).order_by(ArticleCategory.name).all()
-    all_products = db.query(Product).order_by(Product.name).all()
-    
-    # Vorschau der nächsten Artikelnummer für jede Kategorie
-    category_numbers = {}
-    for cat in categories:
-        category_numbers[cat.id] = cat.generate_article_number()
-    
-    # Wenn Produkt-ID übergeben, lade Produkt-Daten für Vorausfüllung
-    selected_product = None
-    product_costs = None
-    if product_id:
-        selected_product = db.query(Product).filter(Product.id == product_id).first()
-        if selected_product:
-            product_costs = selected_product.calculate_costs()
-    
-    return templates.TemplateResponse("articles/form.html", {
-        "request": request,
-        "article": None,
-        "categories": categories,
-        "all_products": all_products,
-        "category_numbers": category_numbers,
-        "selected_product": selected_product,
-        "product_costs": product_costs,
-        "title": "Neuer Artikel"
-    })
-
-
-@app.post("/articles")
-async def create_article(
-    request: Request,
-    category_id: int = Form(...),
-    name: str = Form(...),
-    description: str = Form(""),
-    purchase_price: str = Form("0"),
-    selling_price: str = Form("0"),
-    stock_quantity: str = Form("0"),
-    unit: str = Form("Stück"),
-    # Zusammenbau-Felder
-    labor_minutes: str = Form("0"),
-    labor_rate_per_hour: str = Form("20"),
-    packaging_cost: str = Form("0"),
-    shipping_cost: str = Form("0"),
-    # Komponenten-Arrays
-    component_name: list[str] = Form([]),
-    component_quantity: list[str] = Form([]),
-    component_unit_cost: list[str] = Form([]),
-    component_linked_product_id: list[str] = Form([]),
-    component_notes: list[str] = Form([]),
-    db: Session = Depends(get_db)
-):
-    """Neuen Artikel erstellen mit automatischer Artikelnummer und Komponenten"""
-    
-    # Kategorie laden für Nummerngenerierung
-    category = db.query(ArticleCategory).filter(ArticleCategory.id == category_id).first()
-    if not category:
-        raise HTTPException(status_code=400, detail="Ungültige Kategorie")
-    
-    # Automatische Artikelnummer generieren
-    article_number = category.generate_article_number()
-    
-    # Zusammenbau-Kosten berechnen
-    labor_minutes_val = parse_decimal(labor_minutes)
-    labor_rate_val = parse_decimal(labor_rate_per_hour)
-    labor_cost = (labor_minutes_val / 60) * labor_rate_val
-    packaging_val = parse_decimal(packaging_cost)
-    shipping_val = parse_decimal(shipping_cost)
-    
-    # Komponenten-Kosten berechnen
-    components_cost = 0
-    for i in range(len(component_name)):
-        if i < len(component_name) and component_name[i].strip():
-            qty = parse_decimal(component_quantity[i]) if i < len(component_quantity) else 1
-            cost = parse_decimal(component_unit_cost[i]) if i < len(component_unit_cost) else 0
-            components_cost += qty * cost
-    
-    # Gesamtkosten = Komponenten + Arbeit + Verpackung + Versand
-    total_cost = components_cost + labor_cost + packaging_val + shipping_val
-    
-    # Artikel erstellen
-    article = Article(
-        article_number=article_number,
-        category_id=category_id,
-        name=name,
-        description=description if description else None,
-        purchase_price=total_cost,
-        selling_price=parse_decimal(selling_price),
-        stock_quantity=parse_decimal(stock_quantity),
-        unit=unit,
-        labor_minutes=labor_minutes_val,
-        labor_rate_per_hour=labor_rate_val,
-        packaging_cost=packaging_val,
-        shipping_cost=shipping_val,
-        is_active=1
-    )
-    db.add(article)
-    db.flush()  # Damit article.id verfügbar ist
-    
-    # Komponenten speichern
-    for i in range(len(component_name)):
-        if i < len(component_name) and component_name[i].strip():
-            linked_id = None
-            if i < len(component_linked_product_id) and component_linked_product_id[i]:
-                try:
-                    linked_id = int(component_linked_product_id[i])
-                except (ValueError, TypeError):
-                    linked_id = None
-            
-            component = ArticleComponent(
-                article_id=article.id,
-                name=component_name[i].strip(),
-                quantity=parse_decimal(component_quantity[i]) if i < len(component_quantity) else 1,
-                unit_cost=parse_decimal(component_unit_cost[i]) if i < len(component_unit_cost) else 0,
-                linked_product_id=linked_id,
-                notes=component_notes[i] if i < len(component_notes) and component_notes[i] else None,
-                sort_order=i
-            )
-            db.add(component)
-    
-    # Nummernzähler erhöhen
-    category.increment_number()
-    
-    db.commit()
-    db.refresh(article)
-    
-    return RedirectResponse(url=f"/articles/{article.id}", status_code=303)
-
-
-@app.get("/articles/{article_id}", response_class=HTMLResponse)
-async def view_article(article_id: int, request: Request, db: Session = Depends(get_db)):
-    """Artikel-Detailansicht"""
-    article = db.query(Article).filter(Article.id == article_id).first()
-    if not article:
-        raise HTTPException(status_code=404, detail="Artikel nicht gefunden")
-    
-    return templates.TemplateResponse("articles/detail.html", {
-        "request": request,
-        "article": article
-    })
-
-
-@app.get("/articles/{article_id}/edit", response_class=HTMLResponse)
-async def edit_article_form(article_id: int, request: Request, db: Session = Depends(get_db)):
-    """Formular zum Bearbeiten eines Artikels"""
-    article = db.query(Article).filter(Article.id == article_id).first()
-    if not article:
-        raise HTTPException(status_code=404, detail="Artikel nicht gefunden")
-    
-    categories = db.query(ArticleCategory).filter(ArticleCategory.is_active == 1).order_by(ArticleCategory.name).all()
-    all_products = db.query(Product).order_by(Product.name).all()
-    
-    return templates.TemplateResponse("articles/form.html", {
-        "request": request,
-        "article": article,
-        "categories": categories,
-        "all_products": all_products,
-        "category_numbers": {},
-        "title": "Artikel bearbeiten"
-    })
-
-
-@app.post("/articles/{article_id}")
-async def update_article(
-    article_id: int,
-    request: Request,
-    category_id: int = Form(...),
-    name: str = Form(...),
-    description: str = Form(""),
-    purchase_price: str = Form("0"),
-    selling_price: str = Form("0"),
-    stock_quantity: str = Form("0"),
-    unit: str = Form("Stück"),
-    is_active: int = Form(1),
-    # Zusammenbau-Felder
-    labor_minutes: str = Form("0"),
-    labor_rate_per_hour: str = Form("20"),
-    packaging_cost: str = Form("0"),
-    shipping_cost: str = Form("0"),
-    # Komponenten-Arrays
-    component_name: list[str] = Form([]),
-    component_quantity: list[str] = Form([]),
-    component_unit_cost: list[str] = Form([]),
-    component_linked_product_id: list[str] = Form([]),
-    component_notes: list[str] = Form([]),
-    db: Session = Depends(get_db)
-):
-    """Artikel aktualisieren mit Komponenten"""
-    article = db.query(Article).filter(Article.id == article_id).first()
-    if not article:
-        raise HTTPException(status_code=404, detail="Artikel nicht gefunden")
-    
-    # Zusammenbau-Kosten berechnen
-    labor_minutes_val = parse_decimal(labor_minutes)
-    labor_rate_val = parse_decimal(labor_rate_per_hour)
-    labor_cost = (labor_minutes_val / 60) * labor_rate_val
-    packaging_val = parse_decimal(packaging_cost)
-    shipping_val = parse_decimal(shipping_cost)
-    
-    # Komponenten-Kosten berechnen
-    components_cost = 0
-    for i in range(len(component_name)):
-        if i < len(component_name) and component_name[i].strip():
-            qty = parse_decimal(component_quantity[i]) if i < len(component_quantity) else 1
-            cost = parse_decimal(component_unit_cost[i]) if i < len(component_unit_cost) else 0
-            components_cost += qty * cost
-    
-    # Gesamtkosten = Komponenten + Arbeit + Verpackung + Versand
-    total_cost = components_cost + labor_cost + packaging_val + shipping_val
-    
-    article.category_id = category_id
-    article.name = name
-    article.description = description if description else None
-    article.purchase_price = total_cost
-    article.selling_price = parse_decimal(selling_price)
-    article.stock_quantity = parse_decimal(stock_quantity)
-    article.unit = unit
-    article.is_active = is_active
-    article.labor_minutes = labor_minutes_val
-    article.labor_rate_per_hour = labor_rate_val
-    article.packaging_cost = packaging_val
-    article.shipping_cost = shipping_val
-    
-    # Alte Komponenten löschen
-    db.query(ArticleComponent).filter(ArticleComponent.article_id == article_id).delete()
-    
-    # Neue Komponenten speichern
-    for i in range(len(component_name)):
-        if i < len(component_name) and component_name[i].strip():
-            linked_id = None
-            if i < len(component_linked_product_id) and component_linked_product_id[i]:
-                try:
-                    linked_id = int(component_linked_product_id[i])
-                except (ValueError, TypeError):
-                    linked_id = None
-            
-            component = ArticleComponent(
-                article_id=article.id,
-                name=component_name[i].strip(),
-                quantity=parse_decimal(component_quantity[i]) if i < len(component_quantity) else 1,
-                unit_cost=parse_decimal(component_unit_cost[i]) if i < len(component_unit_cost) else 0,
-                linked_product_id=linked_id,
-                notes=component_notes[i] if i < len(component_notes) and component_notes[i] else None,
-                sort_order=i
-            )
-            db.add(component)
-    
-    db.commit()
-    db.refresh(article)
-    
-    return RedirectResponse(url=f"/articles/{article.id}", status_code=303)
-
-
-@app.post("/articles/{article_id}/delete")
-async def delete_article(article_id: int, db: Session = Depends(get_db)):
-    """Artikel soft-delete (auf inaktiv setzen)"""
-    article = db.query(Article).filter(Article.id == article_id).first()
-    if not article:
-        raise HTTPException(status_code=404, detail="Artikel nicht gefunden")
-    
-    article.is_active = 0
-    db.commit()
-    
-    return RedirectResponse(url="/articles", status_code=303)
-
-
-# Artikelkategorien-Verwaltung
-@app.get("/article-categories", response_class=HTMLResponse)
-async def list_article_categories(request: Request, db: Session = Depends(get_db)):
-    """Liste aller Artikelkategorien"""
-    categories = db.query(ArticleCategory).order_by(ArticleCategory.name).all()
-    return templates.TemplateResponse("articles/category_list.html", {
-        "request": request,
-        "categories": categories
-    })
-
-
-@app.post("/article-categories")
-async def create_article_category(
-    request: Request,
-    code: str = Form(...),
-    name: str = Form(...),
-    description: str = Form(""),
-    prefix: str = Form(...),
-    db: Session = Depends(get_db)
-):
-    """Neue Artikelkategorie erstellen"""
-    category = ArticleCategory(
-        code=code.upper(),
-        name=name,
-        description=description if description else None,
-        prefix=prefix,
-        next_number=1,
-        is_active=1
-    )
-    db.add(category)
-    db.commit()
-    db.refresh(category)
-    
-    return RedirectResponse(url="/article-categories", status_code=303)
-
-
-# API-Endpunkt für Artikel-Suche (Autocomplete)
-@app.get("/api/articles/search")
-async def search_articles_api(q: str = "", limit: int = 10, db: Session = Depends(get_db)):
-    """API-Endpunkt für Artikel-Suche (Autocomplete)"""
-    if not q or len(q) < 2:
-        return []
-    
-    articles = db.query(Article).filter(
-        Article.is_active == 1,
-        (Article.name.ilike(f"%{q}%")) |
-        (Article.article_number.ilike(f"%{q}%"))
-    ).limit(limit).all()
-    
-    return [
-        {
-            "id": a.id,
-            "article_number": a.article_number,
-            "name": a.name,
-            "selling_price": float(a.selling_price),
-            "purchase_price": float(a.purchase_price),
-            "unit": a.unit,
-            "display": f"{a.article_number} - {a.name}"
-        }
-        for a in articles
-    ]
-
-
-# API-Endpunkt für Produkt-Suche (Autocomplete für Artikel-Erstellung)
-@app.get("/api/products/search")
-async def search_products_api(q: str = "", limit: int = 20, db: Session = Depends(get_db)):
-    """API-Endpunkt für Produkt-Suche (Autocomplete)"""
-    query = db.query(Product)
-    
-    if q and len(q) >= 1:
-        query = query.filter(Product.name.ilike(f"%{q}%"))
-    
-    products = query.order_by(Product.name).limit(limit).all()
-    
-    result = []
-    for p in products:
-        costs = p.calculate_costs()
-        result.append({
-            "id": p.id,
-            "name": p.name,
-            "product_type": p.product_type,
-            "cost": costs['total_cost'],
-            "display": f"{p.name} (EK: {costs['total_cost']:.2f} €)"
-        })
-    
-    return result
-
-
-# API-Endpunkt für einzelnes Produkt (für Zusammenbau-Komponenten)
-@app.get("/api/products/{product_id}/details")
-async def get_product_details(product_id: int, db: Session = Depends(get_db)):
-    """API-Endpunkt um Produktdetails für Komponenten zu laden"""
-    product = db.query(Product).filter(Product.id == product_id).first()
-    if not product:
-        raise HTTPException(status_code=404, detail="Produkt nicht gefunden")
-    
-    costs = product.calculate_costs()
-    return {
-        "id": product.id,
-        "name": product.name,
-        "total_cost": costs['total_cost']
-    }
-
-
-# ========================================# RECHNUNGS-VERWALTUNG
-# ========================================
-
-def generate_invoice_number(db: Session) -> str:
-    """Generiert die nächste Rechnungsnummer (RE-YYYY-XXXX)"""
-    current_year = datetime.now().year
-    prefix = f"RE-{current_year}-"
-    
-    # Suche die höchste Nummer für dieses Jahr
-    latest_invoice = db.query(Invoice).filter(
-        Invoice.invoice_number.like(f"{prefix}%")
-    ).order_by(Invoice.invoice_number.desc()).first()
-    
-    if latest_invoice:
-        # Extrahiere Nummer aus z.B. "RE-2024-0042"
-        try:
-            last_num = int(latest_invoice.invoice_number.split("-")[-1])
-            next_num = last_num + 1
-        except:
-            next_num = 1
-    else:
-        next_num = 1
-    
-    return f"{prefix}{str(next_num).zfill(4)}"
-
-
-@app.get("/invoices", response_class=HTMLResponse)
-async def list_invoices(
-    request: Request,
-    status: str = "",
-    search: str = "",
-    db: Session = Depends(get_db)
-):
-    """Liste aller Rechnungen"""
-    query = db.query(Invoice)
-    
-    if status:
-        query = query.filter(Invoice.status == status)
-    
-    if search:
-        query = query.filter(
-            (Invoice.invoice_number.ilike(f"%{search}%")) |
-            (Invoice.customer_name.ilike(f"%{search}%"))
-        )
-    
-    invoices = query.order_by(Invoice.created_at.desc()).all()
-    
-    return templates.TemplateResponse("invoices/list.html", {
-        "request": request,
-        "invoices": invoices,
-        "filter_status": status,
-        "search": search
-    })
-
-
-@app.get("/invoices/new", response_class=HTMLResponse)
-async def new_invoice_form(
-    request: Request,
-    sales_order_id: int = None,
-    customer_id: int = None,
-    db: Session = Depends(get_db)
-):
-    """Formular für neue Rechnung"""
-    from models import Config
-    
-    sales_order = None
-    if sales_order_id:
-        sales_order = db.query(SalesOrder).filter(SalesOrder.id == sales_order_id).first()
-    
-    # Lade Kunde wenn übergeben
-    customer = None
-    if customer_id:
-        customer = db.query(Customer).filter(Customer.id == customer_id).first()
-    
-    # Generiere Vorschau der Rechnungsnummer
-    invoice_number_preview = generate_invoice_number(db)
-    
-    # Lade aktive Artikel für Dropdown
-    articles = db.query(Article).filter(Article.is_active == 1).order_by(Article.name).all()
-    
-    # Lade Standard-Bankdaten aus Config
-    default_bank_info = "Revolut Bank UAB - IBAN DE61 1001 0178 4978 2800 27 - BIC REVODEB2"
-    config_bank = db.query(Config).filter(Config.key == "company_bank_info").first()
-    if config_bank and config_bank.value:
-        default_bank_info = config_bank.value
-    
-    return templates.TemplateResponse("invoices/form.html", {
-        "request": request,
-        "invoice": None,
-        "sales_order": sales_order,
-        "customer": customer,
-        "invoice_number": invoice_number_preview,
-        "articles": articles,
-        "bank_info": None,
-        "default_bank_info": default_bank_info,
-        "today": datetime.now().strftime("%Y-%m-%d"),
-        "title": "Neue Rechnung"
-    })
-
-
-@app.post("/invoices")
-async def create_invoice(
-    request: Request,
-    invoice_number: str = Form(...),
-    customer_id: int = Form(None),
-    customer_name: str = Form(""),
-    customer_address: str = Form(""),
-    invoice_date: str = Form(...),
-    due_date: str = Form(""),
-    vat_rate: str = Form("19.00"),
-    discount_percent: str = Form("0.00"),
-    bank_info: str = Form(""),
-    notes: str = Form(""),
-    footer_text: str = Form(""),
-    sales_order_id: int = Form(None),
-    # Positionen (Arrays)
-    position_desc: list[str] = Form([]),
-    position_article_id: list[str] = Form([]),
-    position_qty: list[str] = Form([]),
-    position_unit: list[str] = Form([]),
-    position_price: list[str] = Form([]),
-    db: Session = Depends(get_db)
-):
-    """Neue Rechnung erstellen"""
-    
-    # Wenn Kunde ausgewählt wurde, Daten aus Kundenstamm übernehmen
-    if customer_id:
-        customer = db.query(Customer).filter(Customer.id == customer_id).first()
-        if customer:
-            customer_name = customer.display_name
-            customer_address = customer.full_address
-    
-    # Rechnung erstellen
-    invoice = Invoice(
-        invoice_number=invoice_number,
-        sales_order_id=sales_order_id,
-        customer_id=customer_id,
-        customer_name=customer_name if customer_name else None,
-        customer_address=customer_address if customer_address else None,
-        invoice_date=datetime.strptime(invoice_date, "%Y-%m-%d"),
-        due_date=datetime.strptime(due_date, "%Y-%m-%d") if due_date else None,
-        vat_rate=parse_decimal(vat_rate),
-        discount_percent=parse_decimal(discount_percent),
-        bank_info=bank_info if bank_info else None,
-        notes=notes if notes else None,
-        footer_text=footer_text if footer_text else None,
-        status="draft"
-    )
-    db.add(invoice)
-    db.commit()
-    db.refresh(invoice)
-    
-    # Positionen hinzufügen
-    total_net = 0
-    for i in range(len(position_desc)):
-        if position_desc[i].strip():  # Nur wenn Beschreibung vorhanden
-            qty = parse_decimal(position_qty[i]) if i < len(position_qty) else 1
-            price = parse_decimal(position_price[i]) if i < len(position_price) else 0
-            item_total = qty * price
-            
-            article_id = int(position_article_id[i]) if i < len(position_article_id) and position_article_id[i] else None
-            
-            item = InvoiceItem(
-                invoice_id=invoice.id,
-                position=i + 1,
-                article_id=article_id,
-                article_number=None,  # Wird unten gefüllt wenn Artikel vorhanden
-                description=position_desc[i],
-                quantity=qty,
-                unit=position_unit[i] if i < len(position_unit) else "Stück",
-                unit_price_net=price,
-                total_net=item_total
-            )
-            
-            # Wenn Artikel verknüpft, Artikelnummer kopieren
-            if article_id:
-                article = db.query(Article).filter(Article.id == article_id).first()
-                if article:
-                    item.article_number = article.article_number
-            
-            db.add(item)
-            total_net += item_total
-    
-    # Summen berechnen (mit Rabatt)
-    invoice.total_net = total_net
-    invoice.discount_amount = total_net * (float(invoice.discount_percent) / 100)
-    net_after_discount = total_net - float(invoice.discount_amount)
-    invoice.vat_amount = net_after_discount * (float(invoice.vat_rate) / 100)
-    invoice.total_gross = net_after_discount + float(invoice.vat_amount)
-    
-    db.commit()
-    db.refresh(invoice)
-    
-    return RedirectResponse(url=f"/invoices/{invoice.id}", status_code=303)
-
-
-@app.get("/invoices/{invoice_id}", response_class=HTMLResponse)
-async def view_invoice(invoice_id: int, request: Request, db: Session = Depends(get_db)):
-    """Rechnungs-Detailansicht"""
-    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
-    if not invoice:
-        raise HTTPException(status_code=404, detail="Rechnung nicht gefunden")
-    
-    return templates.TemplateResponse("invoices/detail.html", {
-        "request": request,
-        "invoice": invoice
-    })
-
-
-@app.get("/invoices/{invoice_id}/print", response_class=HTMLResponse)
-async def print_invoice(invoice_id: int, request: Request, db: Session = Depends(get_db)):
-    """Druckansicht der Rechnung mit automatischer Seitenumbruch"""
-    from models import Config
-    
-    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
-    if not invoice:
-        raise HTTPException(status_code=404, detail="Rechnung nicht gefunden")
-    
-    # Bankdaten laden (aus Rechnung oder globaler Config)
-    bank_info = invoice.bank_info
-    if not bank_info:
-        config_bank = db.query(Config).filter(Config.key == "company_bank_info").first()
-        if config_bank:
-            bank_info = config_bank.value
-    
-    # Items sortieren
-    items = sorted(invoice.items, key=lambda x: x.position)
-    
-    # Seitenaufteilung: Konservativ für A4 (Footer muss immer passen!)
-    # Erste Seite hat Header (80px) + Titel (60px) + Ansprache (40px) + Footer (60px) = 240px fix
-    # Folgeseiten haben nur Header (80px) + Seiteninfo (20px) + Footer (60px) = 160px fix
-    # Jede Tabellenzeile braucht ca. 30px
-    ITEMS_PER_PAGE_FIRST = 6    # Konservativ: 6 Positionen auf erster Seite
-    ITEMS_PER_PAGE_FOLLOWING = 10  # 10 Positionen auf Folgeseiten
-    
-    pages = []
-    if not items:
-        # Leere Rechnung - trotzdem eine Seite erstellen
-        pages.append({
-            "page_number": 1,
-            "items": [],
-            "is_last": True
-        })
-    else:
-        remaining_items = items.copy()
-        page_number = 1
-        
-        while remaining_items:
-            # Bestimme wie viele Items auf diese Seite passen
-            if page_number == 1:
-                items_on_page = min(ITEMS_PER_PAGE_FIRST, len(remaining_items))
-            else:
-                items_on_page = min(ITEMS_PER_PAGE_FOLLOWING, len(remaining_items))
-            
-            # Items für diese Seite nehmen
-            page_items = remaining_items[:items_on_page]
-            remaining_items = remaining_items[items_on_page:]
-            
-            pages.append({
-                "page_number": page_number,
-                "page_items": page_items,
-                "is_last": len(remaining_items) == 0  # Letzte Seite?
-            })
-            
-            page_number += 1
-    
-    return templates.TemplateResponse("invoices/print.html", {
-        "request": request,
-        "invoice": invoice,
-        "pages": pages,
-        "bank_info": bank_info,
-        "print_mode": True
-    })
-
-
-@app.post("/invoices/{invoice_id}/status")
-async def update_invoice_status(
-    invoice_id: int,
-    status: str = Form(...),
-    db: Session = Depends(get_db)
-):
-    """Status der Rechnung aktualisieren"""
-    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
-    if not invoice:
-        raise HTTPException(status_code=404, detail="Rechnung nicht gefunden")
-    
-    invoice.status = status
-    
-    if status == "sent":
-        invoice.sent_at = datetime.utcnow()
-    elif status == "paid":
-        invoice.paid_at = datetime.utcnow()
-    
-    db.commit()
-    return RedirectResponse(url=f"/invoices/{invoice.id}", status_code=303)
-
-
-@app.post("/invoices/{invoice_id}/status-htmx", response_class=HTMLResponse)
-async def update_invoice_status_htmx(
-    request: Request,
-    invoice_id: int,
-    status: str = Form(...),
-    db: Session = Depends(get_db)
-):
-    """Status der Rechnung aktualisieren (HTMX - gibt nur das <td> zurück)"""
-    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
-    if not invoice:
-        raise HTTPException(status_code=404, detail="Rechnung nicht gefunden")
-    
-    invoice.status = status
-    
-    if status == "sent":
-        invoice.sent_at = datetime.utcnow()
-    elif status == "paid":
-        invoice.paid_at = datetime.utcnow()
-    
-    db.commit()
-    
-    # Gib nur das <td> Element zurück für HTMX
-    return templates.TemplateResponse("invoices/partials/status_dropdown.html", {
-        "request": request,
-        "invoice": invoice
-    })
-
-
-@app.get("/invoices/{invoice_id}/edit", response_class=HTMLResponse)
-async def edit_invoice_form(invoice_id: int, request: Request, db: Session = Depends(get_db)):
-    """Formular zum Bearbeiten einer Rechnung (nur Entwürfe)"""
-    from models import Config
-    
-    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
-    if not invoice:
-        raise HTTPException(status_code=404, detail="Rechnung nicht gefunden")
-    
-    # Nur Entwürfe können bearbeitet werden
-    if invoice.status != "draft":
-        raise HTTPException(status_code=400, detail="Nur Entwürfe können bearbeitet werden")
-    
-    # Kunde laden falls vorhanden
-    customer = None
-    if invoice.customer_id:
-        customer = db.query(Customer).filter(Customer.id == invoice.customer_id).first()
-    
-    # Bankdaten aus Config laden für Vorschau
-    default_bank_info = ""
-    config_bank = db.query(Config).filter(Config.key == "company_bank_info").first()
-    if config_bank:
-        default_bank_info = config_bank.value
-    
-    return templates.TemplateResponse("invoices/form.html", {
-        "request": request,
-        "invoice": invoice,
-        "customer": customer,
-        "today": invoice.invoice_date.strftime("%Y-%m-%d") if invoice.invoice_date else datetime.now().strftime("%Y-%m-%d"),
-        "default_bank_info": default_bank_info,
-        "invoice_number": invoice.invoice_number,
-        "title": f"Rechnung {invoice.invoice_number} bearbeiten"
-    })
-
-
-@app.post("/invoices/{invoice_id}")
-async def update_invoice(
-    invoice_id: int,
-    request: Request,
-    invoice_number: str = Form(...),
-    customer_id: int = Form(None),
-    customer_name: str = Form(""),
-    customer_address: str = Form(""),
-    invoice_date: str = Form(...),
-    due_date: str = Form(""),
-    vat_rate: str = Form("19.00"),
-    discount_percent: str = Form("0.00"),
-    bank_info: str = Form(""),
-    notes: str = Form(""),
-    footer_text: str = Form(""),
-    # Positionen (Arrays)
-    position_desc: list[str] = Form([]),
-    position_article_id: list[str] = Form([]),
-    position_qty: list[str] = Form([]),
-    position_unit: list[str] = Form([]),
-    position_price: list[str] = Form([]),
-    db: Session = Depends(get_db)
-):
-    """Rechnung aktualisieren (nur Entwürfe)"""
-    
-    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
-    if not invoice:
-        raise HTTPException(status_code=404, detail="Rechnung nicht gefunden")
-    
-    if invoice.status != "draft":
-        raise HTTPException(status_code=400, detail="Nur Entwürfe können bearbeitet werden")
-    
-    # Wenn Kunde ausgewählt wurde, Daten aus Kundenstamm übernehmen
-    if customer_id:
-        customer = db.query(Customer).filter(Customer.id == customer_id).first()
-        if customer:
-            customer_name = customer.display_name
-            customer_address = customer.full_address
-    
-    # Rechnung aktualisieren
-    invoice.invoice_number = invoice_number
-    invoice.customer_id = customer_id
-    invoice.customer_name = customer_name if customer_name else None
-    invoice.customer_address = customer_address if customer_address else None
-    invoice.invoice_date = datetime.strptime(invoice_date, "%Y-%m-%d")
-    invoice.due_date = datetime.strptime(due_date, "%Y-%m-%d") if due_date else None
-    invoice.vat_rate = parse_decimal(vat_rate)
-    invoice.discount_percent = parse_decimal(discount_percent)
-    invoice.bank_info = bank_info if bank_info else None
-    invoice.notes = notes if notes else None
-    invoice.footer_text = footer_text if footer_text else None
-    
-    # Alte Positionen löschen
-    db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice_id).delete()
-    
-    # Neue Positionen hinzufügen
-    total_net = 0
-    for i in range(len(position_desc)):
-        if position_desc[i].strip():  # Nur wenn Beschreibung vorhanden
-            qty = parse_decimal(position_qty[i]) if i < len(position_qty) else 1
-            price = parse_decimal(position_price[i]) if i < len(position_price) else 0
-            item_total = qty * price
-            
-            article_id = int(position_article_id[i]) if i < len(position_article_id) and position_article_id[i] else None
-            
-            item = InvoiceItem(
-                invoice_id=invoice.id,
-                position=i + 1,
-                article_id=article_id,
-                article_number=None,
-                description=position_desc[i],
-                quantity=qty,
-                unit=position_unit[i] if i < len(position_unit) else "Stück",
-                unit_price_net=price,
-                total_net=item_total
-            )
-            
-            # Wenn Artikel verknüpft, Artikelnummer kopieren
-            if article_id:
-                article = db.query(Article).filter(Article.id == article_id).first()
-                if article:
-                    item.article_number = article.article_number
-            
-            db.add(item)
-            total_net += item_total
-    
-    # Summen berechnen (mit Rabatt)
-    invoice.total_net = total_net
-    invoice.discount_amount = total_net * (float(invoice.discount_percent) / 100)
-    net_after_discount = total_net - float(invoice.discount_amount)
-    invoice.vat_amount = net_after_discount * (float(invoice.vat_rate) / 100)
-    invoice.total_gross = net_after_discount + float(invoice.vat_amount)
-    
-    db.commit()
-    db.refresh(invoice)
-    
-    return RedirectResponse(url=f"/invoices/{invoice.id}", status_code=303)
-
-
-@app.post("/invoices/{invoice_id}/delete")
-async def delete_invoice(invoice_id: int, db: Session = Depends(get_db)):
-    """Rechnung löschen (nur wenn Status 'draft')"""
-    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
-    if not invoice:
-        raise HTTPException(status_code=404, detail="Rechnung nicht gefunden")
-    
-    if invoice.status != "draft":
-        raise HTTPException(status_code=400, detail="Nur Entwürfe können gelöscht werden")
-    
-    # Zuerst alle Positionen löschen
-    db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice_id).delete()
-    
-    # Dann die Rechnung löschen
-    db.delete(invoice)
-    db.commit()
-    
-    return RedirectResponse(url="/invoices", status_code=303)
-
-
-# =============================================================================
-# KONFIGURATION / EINSTELLUNGEN
-# =============================================================================
-
-@app.get("/config", response_class=HTMLResponse)
-async def config_list(request: Request, db: Session = Depends(get_db)):
-    """Übersicht aller Konfigurationseinstellungen"""
-    from models import Config
-    
-    # Initialisiere Standard-Konfigurationen falls noch keine vorhanden
-    init_default_configs(db)
-    
-    configs = db.query(Config).order_by(Config.category, Config.key).all()
-    
-    return templates.TemplateResponse("config/list.html", {
-        "request": request,
-        "configs": configs
-    })
-
-
-@app.get("/config/{config_key}/edit", response_class=HTMLResponse)
-async def config_edit_form(config_key: str, request: Request, db: Session = Depends(get_db)):
-    """Formular zum Bearbeiten einer Konfiguration"""
-    from models import Config
-    
-    config = db.query(Config).filter(Config.key == config_key).first()
-    if not config:
-        raise HTTPException(status_code=404, detail="Einstellung nicht gefunden")
-    
-    return templates.TemplateResponse("config/form.html", {
-        "request": request,
-        "config": config,
-        "title": f"Einstellung bearbeiten: {config_key}"
-    })
-
-
-@app.post("/config/{config_key}/edit")
-async def config_update(
-    config_key: str,
-    value: str = Form(""),
-    description: str = Form(""),
-    db: Session = Depends(get_db)
-):
-    """Konfiguration aktualisieren"""
-    from models import Config
-    
-    config = db.query(Config).filter(Config.key == config_key).first()
-    if not config:
-        raise HTTPException(status_code=404, detail="Einstellung nicht gefunden")
-    
-    config.value = value if value else None
-    config.description = description if description else None
-    db.commit()
-    
-    return RedirectResponse(url="/config", status_code=303)
-
-
-# Hilfsfunktion: Initialisiere Standard-Konfigurationen
-def init_default_configs(db: Session):
-    """Erstellt Standard-Konfigurationen falls nicht vorhanden"""
-    from models import Config
-    
-    defaults = [
-        {
-            "key": "company_bank_info",
-            "value": "Revolut Bank UAB - IBAN DE61 1001 0178 4978 2800 27 - BIC REVODEB2",
-            "description": "Bankdaten für Rechnungsfußzeile",
-            "category": "invoice"
-        },
-        {
-            "key": "company_phone",
-            "value": "(0152) 37709958",
-            "description": "Telefonnummer für Rechnungsfußzeile",
-            "category": "invoice"
-        },
-        {
-            "key": "company_email",
-            "value": "info@picobellu.de",
-            "description": "E-Mail für Rechnungsfußzeile",
-            "category": "invoice"
-        }
-    ]
-    
-    for default in defaults:
-        existing = db.query(Config).filter(Config.key == default["key"]).first()
-        if not existing:
-            config = Config(**default)
-            db.add(config)
-    
-    db.commit()
-
-
-# =============================================================================
-# KUNDEN-VERWALTUNG
-# =============================================================================
-
-def generate_customer_number(db: Session) -> str:
-    """Generiert die nächste Kundennummer (K-0001, K-0002, ...)"""
-    last_customer = db.query(Customer).order_by(Customer.id.desc()).first()
-    next_num = 1
-    if last_customer and last_customer.customer_number:
-        # Versuche Nummer aus letzter Kundennummer zu extrahieren
-        try:
-            parts = last_customer.customer_number.split('-')
-            if len(parts) == 2 and parts[1].isdigit():
-                next_num = int(parts[1]) + 1
-        except:
-            pass
-    return f"K-{next_num:04d}"
-
-@app.get("/customers", response_class=HTMLResponse)
-async def list_customers(request: Request, search: str = "", db: Session = Depends(get_db)):
-    """Kundenliste mit Suche"""
-    query = db.query(Customer).filter(Customer.is_active == 1)
-    
-    if search:
-        search_filter = (
-            Customer.customer_number.ilike(f"%{search}%") |
-            Customer.company_name.ilike(f"%{search}%") |
-            Customer.first_name.ilike(f"%{search}%") |
-            Customer.last_name.ilike(f"%{search}%") |
-            Customer.email.ilike(f"%{search}%")
-        )
-        query = query.filter(search_filter)
-    
-    customers = query.order_by(Customer.last_name, Customer.first_name).all()
-    
-    return templates.TemplateResponse("customers/list.html", {
-        "request": request,
-        "customers": customers,
-        "search": search
-    })
-
-@app.get("/customers/new", response_class=HTMLResponse)
-async def new_customer_form(request: Request, db: Session = Depends(get_db)):
-    """Formular für neuen Kunden"""
-    customer_number = generate_customer_number(db)
-    
-    return templates.TemplateResponse("customers/form.html", {
-        "request": request,
-        "customer": None,
-        "customer_number": customer_number,
-        "title": "Neuer Kunde"
-    })
-
-@app.post("/customers")
-async def create_customer(
-    request: Request,
-    customer_number: str = Form(...),
-    company_name: str = Form(""),
-    first_name: str = Form(...),
-    last_name: str = Form(...),
-    address_line1: str = Form(""),
-    address_line2: str = Form(""),
-    postal_code: str = Form(""),
-    city: str = Form(""),
-    country: str = Form("Deutschland"),
-    email: str = Form(""),
-    phone: str = Form(""),
-    vat_id: str = Form(""),
-    notes: str = Form(""),
-    db: Session = Depends(get_db)
-):
-    """Neuen Kunden anlegen"""
-    customer = Customer(
-        customer_number=customer_number,
-        company_name=company_name if company_name else None,
-        first_name=first_name,
-        last_name=last_name,
-        address_line1=address_line1 if address_line1 else None,
-        address_line2=address_line2 if address_line2 else None,
-        postal_code=postal_code if postal_code else None,
-        city=city if city else None,
-        country=country,
-        email=email if email else None,
-        phone=phone if phone else None,
-        vat_id=vat_id if vat_id else None,
-        notes=notes if notes else None,
-        is_active=1
-    )
-    
-    db.add(customer)
-    db.commit()
-    db.refresh(customer)
-    
-    return RedirectResponse(url=f"/customers/{customer.id}", status_code=303)
-
-@app.get("/customers/{customer_id}", response_class=HTMLResponse)
-async def view_customer(customer_id: int, request: Request, db: Session = Depends(get_db)):
-    """Kunden-Detailansicht"""
-    customer = db.query(Customer).filter(Customer.id == customer_id).first()
-    if not customer:
-        raise HTTPException(status_code=404, detail="Kunde nicht gefunden")
-    
-    # Rechnungen des Kunden laden
-    invoices = db.query(Invoice).filter(
-        Invoice.customer_id == customer_id
-    ).order_by(Invoice.invoice_date.desc()).all()
-    
-    return templates.TemplateResponse("customers/detail.html", {
-        "request": request,
-        "customer": customer,
-        "invoices": invoices
-    })
-
-@app.get("/customers/{customer_id}/edit", response_class=HTMLResponse)
-async def edit_customer_form(customer_id: int, request: Request, db: Session = Depends(get_db)):
-    """Formular zum Bearbeiten eines Kunden"""
-    customer = db.query(Customer).filter(Customer.id == customer_id).first()
-    if not customer:
-        raise HTTPException(status_code=404, detail="Kunde nicht gefunden")
-    
-    return templates.TemplateResponse("customers/form.html", {
-        "request": request,
-        "customer": customer,
-        "customer_number": customer.customer_number,
-        "title": "Kunde bearbeiten"
-    })
-
-@app.post("/customers/{customer_id}")
-async def update_customer(
-    customer_id: int,
-    request: Request,
-    company_name: str = Form(""),
-    first_name: str = Form(...),
-    last_name: str = Form(...),
-    address_line1: str = Form(""),
-    address_line2: str = Form(""),
-    postal_code: str = Form(""),
-    city: str = Form(""),
-    country: str = Form("Deutschland"),
-    email: str = Form(""),
-    phone: str = Form(""),
-    vat_id: str = Form(""),
-    notes: str = Form(""),
-    db: Session = Depends(get_db)
-):
-    """Kunden aktualisieren"""
-    customer = db.query(Customer).filter(Customer.id == customer_id).first()
-    if not customer:
-        raise HTTPException(status_code=404, detail="Kunde nicht gefunden")
-    
-    customer.company_name = company_name if company_name else None
-    customer.first_name = first_name
-    customer.last_name = last_name
-    customer.address_line1 = address_line1 if address_line1 else None
-    customer.address_line2 = address_line2 if address_line2 else None
-    customer.postal_code = postal_code if postal_code else None
-    customer.city = city if city else None
-    customer.country = country
-    customer.email = email if email else None
-    customer.phone = phone if phone else None
-    customer.vat_id = vat_id if vat_id else None
-    customer.notes = notes if notes else None
-    
-    db.commit()
-    
-    return RedirectResponse(url=f"/customers/{customer_id}", status_code=303)
-
-@app.post("/customers/{customer_id}/delete")
-async def delete_customer(customer_id: int, db: Session = Depends(get_db)):
-    """Kunden als inaktiv markieren (Soft Delete)"""
-    customer = db.query(Customer).filter(Customer.id == customer_id).first()
-    if not customer:
-        raise HTTPException(status_code=404, detail="Kunde nicht gefunden")
-    
-    # Prüfe ob Kunde Rechnungen hat
-    invoice_count = db.query(Invoice).filter(Invoice.customer_id == customer_id).count()
-    if invoice_count > 0:
-        # Soft Delete: Nur als inaktiv markieren
-        customer.is_active = 0
-        db.commit()
-    else:
-        # Hard Delete: Kunden ohne Rechnungen komplett löschen
-        db.delete(customer)
-        db.commit()
-    
-    return RedirectResponse(url="/customers", status_code=303)
-
-@app.get("/api/customers/search")
-async def search_customers(q: str = "", db: Session = Depends(get_db)):
-    """AJAX API für Kundensuche (für Rechnungsformular)"""
-    if len(q) < 2:
-        return []
-    
-    customers = db.query(Customer).filter(
-        Customer.is_active == 1
-    ).filter(
-        (Customer.customer_number.ilike(f"%{q}%")) |
-        (Customer.company_name.ilike(f"%{q}%")) |
-        (Customer.first_name.ilike(f"%{q}%")) |
-        (Customer.last_name.ilike(f"%{q}%"))
-    ).limit(10).all()
-    
-    return [
-        {
-            "id": c.id,
-            "customer_number": c.customer_number,
-            "display": f"{c.customer_number} - {c.display_name}",
-            "company_name": c.company_name,
-            "first_name": c.first_name,
-            "last_name": c.last_name,
-            "full_address": c.full_address,
-            "email": c.email,
-            "phone": c.phone,
-            "vat_id": c.vat_id
-        }
-        for c in customers
-    ]
-
-
-# ========================================# Initialisiere Standarddaten
-# ========================================
-
-# Starte Initialisierung der Artikelkategorien
-db = SessionLocal()
-try:
-    seed_article_categories(db)
-finally:
-    db.close()
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=5000)
