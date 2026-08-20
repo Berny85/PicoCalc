@@ -9,7 +9,15 @@ cd /mnt/user/appdata/picocalc
 echo "Aktualisiere Code..."
 git pull origin main
 
+if docker-compose version > /dev/null 2>&1; then
+    COMPOSE_CMD="docker-compose"
+elif docker compose version > /dev/null 2>&1; then
+    COMPOSE_CMD="docker compose"
+else
+    COMPOSE_CMD="docker-compose"
+fi
+
 echo "Starte Container neu..."
-docker compose -f docker-compose.prod.yml up -d
+$COMPOSE_CMD -f docker-compose.prod.yml up -d
 
 echo "Fertig!"

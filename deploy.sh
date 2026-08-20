@@ -35,16 +35,25 @@ echo "========================================"
 # Ins Projektverzeichnis wechseln
 cd /mnt/user/appdata/picocalc
 
+# Docker Compose Befehl ermitteln (docker-compose vs. docker compose)
+if docker-compose version > /dev/null 2>&1; then
+    COMPOSE_CMD="docker-compose"
+elif docker compose version > /dev/null 2>&1; then
+    COMPOSE_CMD="docker compose"
+else
+    COMPOSE_CMD="docker-compose"
+fi
+
 log "[1/5] Aktualisiere Code aus GitHub..."
 git pull origin main
 success "Code aktualisiert"
 
 log "[2/5] Stoppe alte Container..."
-docker compose -f docker-compose.prod.yml down
+$COMPOSE_CMD -f docker-compose.prod.yml down
 success "Container gestoppt"
 
 log "[3/5] Baue und starte neue Container..."
-docker compose -f docker-compose.prod.yml up --build -d
+$COMPOSE_CMD -f docker-compose.prod.yml up --build -d
 success "Container gestartet"
 
 log "[4/5] Warte auf Datenbank..."
@@ -54,7 +63,7 @@ MAX_RETRIES=30
 RETRY_COUNT=0
 
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-    if docker compose -f docker-compose.prod.yml exec -T db pg_isready -U printuser > /dev/null 2>&1; then
+    if $COMPOSE_CMD -f docker-compose.prod.yml exec -T db pg_isready -U printuser > /dev/null 2>&1; then
         success "Datenbank ist bereit"
         break
     fi
@@ -66,7 +75,7 @@ done
 
 if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
     error "Datenbank ist nicht bereit nach 60 Sekunden!"
-    docker compose -f docker-compose.prod.yml logs db --tail 20
+    $COMPOSE_CMD -f docker-compose.prod.yml logs db --tail 20
     exit 1
 fi
 
@@ -76,15 +85,15 @@ sleep 3
 log "[4.5/5] Führe Datenbank-Migrationen aus..."
 
 # Führe Migrationen aus
-if docker compose -f docker-compose.prod.yml exec -T web alembic upgrade head; then
+if $COMPOSE_CMD -f docker-compose.prod.yml exec -T web alembic upgrade head; then
     success "Migrationen erfolgreich ausgeführt"
 else
     error "Migration fehlgeschlagen!"
     warning "Versuche Datenbank-Status zu prüfen..."
     
     # Zeige aktuellen Alembic-Status
-    docker compose -f docker-compose.prod.yml exec -T web alembic current || true
-    docker compose -f docker-compose.prod.yml exec -T web alembic history --verbose || true
+    $COMPOSE_CMD -f docker-compose.prod.yml exec -T web alembic current || true
+    $COMPOSE_CMD -f docker-compose.prod.yml exec -T web alembic history --verbose || true
     
     exit 1
 fi
@@ -100,10 +109,10 @@ else
 fi
 
 log "[5/5] Prüfe Container-Status..."
-docker compose -f docker-compose.prod.yml ps
+$COMPOSE_CMD -f docker-compose.prod.yml ps
 
 echo ""
 echo "========================================"
 success "Deployment abgeschlossen!"
-echo "App erreichbar unter: http://NUC-IP:5000"
+echo "App erreichbar unter: http://192.168.50.8:5000"
 echo "========================================"
