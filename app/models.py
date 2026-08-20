@@ -162,6 +162,9 @@ class Product(Base):
     calculation_mode = Column(String(20), default="per_unit")
     units_per_batch = Column(Integer, default=1)
     
+    # === FLOHMARKT / EVENT VERFÜGBARKEIT ===
+    is_for_market = Column(Integer, default=1, nullable=False)  # 1 = aktiv für Events, 0 = Einmalprodukt/nur Kalkulation
+    
     # === NOTIZEN ===
     notes = Column(Text, nullable=True)
     
@@ -495,3 +498,192 @@ class ConvertedFile(Base):
         if self.original_size_bytes and self.svg_size_bytes and self.original_size_bytes > 0:
             return round((1 - self.svg_size_bytes / self.original_size_bytes) * 100, 1)
         return 0
+
+
+class MarketEvent(Base):
+    """Markt / Flohmarkt / Event für Vorproduktions-Planung"""
+    __tablename__ = "market_events"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    event_date = Column(DateTime, nullable=True)
+    location = Column(String(255), nullable=True)
+    description = Column(Text, nullable=True)
+    status = Column(String(50), nullable=False, default="planning")  # planning, in_production, ready, completed, archived
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Beziehungen mit Kaskadierung
+    items = relationship("EventItem", back_populates="event", cascade="all, delete-orphan", order_by="EventItem.sort_order, EventItem.id")
+    todos = relationship("EventTodo", back_populates="event", cascade="all, delete-orphan", order_by="EventTodo.sort_order, EventTodo.id")
+    
+    def __repr__(self):
+        return f"MarketEvent({self.id}: {self.name} [{self.status}])"
+    
+    def calculate_totals(self):
+        """Berechnet Gesamtstatistiken, Materialbedarfe und Finanzsummen für dieses Event"""
+        total_target_units = 0
+        total_produced_units = 0
+        total_ek = 0.0
+        total_vk = 0.0
+        total_print_time_hours = 0.0
+        total_labor_minutes = 0.0
+        
+        filament_breakdown = {}  # {material_name: grams}
+        sheet_breakdown = {}     # {material_name: sheets}
+        
+        for item in self.items:
+            target_qty = int(item.target_quantity or 0)
+            produced_qty = int(item.produced_quantity or 0)
+            total_target_units += target_qty
+            total_produced_units += produced_qty
+            
+            if item.product:
+                prod = item.product
+                costs = prod.calculate_costs()
+                total_ek += float(costs.get('purchase_price', 0)) * target_qty
+                total_vk += float(costs.get('selling_price', 0)) * target_qty
+                
+                # Druckzeit
+                if prod.product_type == '3d_print' and prod.print_time_hours:
+                    total_print_time_hours += float(prod.print_time_hours) * target_qty
+                
+                # Arbeitszeit
+                if prod.labor_minutes:
+                    total_labor_minutes += float(prod.labor_minutes) * target_qty
+                
+                # Filamentbedarf
+                if prod.product_type == '3d_print' and prod.filament_weight_g:
+                    mat_name = prod.filament_material.name if prod.filament_material else "Unbekanntes Filament"
+                    weight_g = float(prod.filament_weight_g) * target_qty
+                    filament_breakdown[mat_name] = filament_breakdown.get(mat_name, 0.0) + weight_g
+                
+                # Sticker-Bögen-Bedarf
+                if prod.product_type in ['sticker', 'sticker_sheet', 'diecut_sticker', 'stationery', 'paper']:
+                    mat_name = prod.sheet_material.name if prod.sheet_material else "Unbekannter Stickerbogen"
+                    units_per_sheet = float(prod.units_per_sheet or 1)
+                    if units_per_sheet > 0:
+                        sheets_needed = target_qty / units_per_sheet
+                    else:
+                        sheets_needed = float(target_qty)
+                    sheet_breakdown[mat_name] = sheet_breakdown.get(mat_name, 0.0) + sheets_needed
+        
+        progress_percent = round((total_produced_units / total_target_units) * 100, 1) if total_target_units > 0 else 0.0
+        if progress_percent > 100.0:
+            progress_percent = 100.0
+            
+        todos_total = len(self.todos)
+        todos_done = sum(1 for t in self.todos if t.is_done == 1)
+        todo_progress_percent = round((todos_done / todos_total) * 100, 1) if todos_total > 0 else 0.0
+        
+        # Filament gerundet
+        formatted_filament = {name: round(weight, 1) for name, weight in filament_breakdown.items()}
+        # Bögen gerundet (aufgerundet auf 1 Nachkommastelle bzw. Ganze)
+        formatted_sheets = {name: round(sheets, 1) for name, sheets in sheet_breakdown.items()}
+        
+        return {
+            'total_target_units': total_target_units,
+            'total_produced_units': total_produced_units,
+            'progress_percent': progress_percent,
+            'total_ek': round(total_ek, 2),
+            'total_vk': round(total_vk, 2),
+            'potential_profit': round(total_vk - total_ek, 2),
+            'total_print_time_hours': round(total_print_time_hours, 1),
+            'total_labor_hours': round(total_labor_minutes / 60.0, 1),
+            'total_labor_minutes': round(total_labor_minutes, 0),
+            'filament_breakdown': formatted_filament,
+            'total_filament_weight_g': round(sum(filament_breakdown.values()), 1),
+            'sheet_breakdown': formatted_sheets,
+            'total_sheets_count': round(sum(sheet_breakdown.values()), 1),
+            'todos_total': todos_total,
+            'todos_done': todos_done,
+            'todo_progress_percent': todo_progress_percent,
+        }
+
+
+class EventItem(Base):
+    """Einzelner Vorproduktions-Artikel innerhalb eines Events"""
+    __tablename__ = "event_items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey("market_events.id", ondelete="CASCADE"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="SET NULL"), nullable=True)
+    custom_name = Column(String(255), nullable=True)  # Falls kein Produkt hinterlegt ist
+    target_quantity = Column(Integer, default=1, nullable=False)
+    produced_quantity = Column(Integer, default=0, nullable=False)
+    notes = Column(Text, nullable=True)
+    sort_order = Column(Integer, default=0)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Beziehungen
+    event = relationship("MarketEvent", back_populates="items")
+    product = relationship("Product")
+    
+    def __repr__(self):
+        return f"EventItem({self.get_name()}: {self.produced_quantity}/{self.target_quantity})"
+    
+    def get_name(self):
+        """Gibt den Namen des Artikels zurück"""
+        if self.product:
+            return self.product.name
+        return self.custom_name or "Unbenannter Artikel"
+    
+    def get_product_type(self):
+        """Gibt den Produkttyp zurück"""
+        if self.product:
+            return self.product.product_type
+        return "custom"
+    
+    def get_progress_percent(self):
+        """Berechnet den Fertigstellungsgrad in Prozent"""
+        if not self.target_quantity or self.target_quantity <= 0:
+            return 100.0 if self.produced_quantity > 0 else 0.0
+        pct = round((float(self.produced_quantity) / float(self.target_quantity)) * 100, 1)
+        return min(100.0, max(0.0, pct))
+    
+    def is_completed(self):
+        """Prüft, ob die Soll-Menge erreicht wurde"""
+        return self.produced_quantity >= self.target_quantity
+    
+    def get_costs(self):
+        """Gibt Kosteninformationen für diesen Artikel zurück"""
+        if self.product:
+            c = self.product.calculate_costs()
+            ek_unit = float(c.get('purchase_price', 0))
+            vk_unit = float(c.get('selling_price', 0))
+        else:
+            ek_unit = 0.0
+            vk_unit = 0.0
+        
+        target_qty = int(self.target_quantity or 0)
+        return {
+            'ek_unit': round(ek_unit, 2),
+            'vk_unit': round(vk_unit, 2),
+            'ek_total': round(ek_unit * target_qty, 2),
+            'vk_total': round(vk_unit * target_qty, 2),
+        }
+
+
+class EventTodo(Base):
+    """Aufgabe / Packlisten-Eintrag für ein Event"""
+    __tablename__ = "event_todos"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey("market_events.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String(255), nullable=False)
+    category = Column(String(100), default="Allgemein")  # 'Stand & Aufbau', 'Kasse & Finanzen', 'Verpackung & Deko', 'Allgemein'
+    is_done = Column(Integer, default=0)  # 0 = offen, 1 = erledigt
+    sort_order = Column(Integer, default=0)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Beziehung
+    event = relationship("MarketEvent", back_populates="todos")
+    
+    def __repr__(self):
+        return f"EventTodo({'[x]' if self.is_done else '[ ]'} {self.title})"
+

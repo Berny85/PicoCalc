@@ -1,0 +1,344 @@
+{% extends "base.html" %}
+
+{% block title %}{{ event.name }} - Flohmarkt-Planer - Picobellu Kalkulator{% endblock %}
+
+{% block content %}
+<!-- Kopfbereich Event Info -->
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 15px;">
+        <div>
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <h2 style="margin-bottom: 0;">🎪 {{ event.name }}</h2>
+                <span style="font-size: 0.85rem; padding: 4px 10px; border-radius: 12px; font-weight: bold; background: {% if event.status == 'ready' %}#d4edda; color: #155724;{% elif event.status == 'in_production' %}#fff3cd; color: #856404;{% elif event.status == 'completed' %}#e2e3e5; color: #383d41;{% else %}#e8eaf6; color: #3f51b5;{% endif %}">
+                    {% if event.status == 'planning' %}📝 Planung
+                    {% elif event.status == 'in_production' %}⚙️ In Produktion
+                    {% elif event.status == 'ready' %}📦 Bereit für Event
+                    {% elif event.status == 'completed' %}🏁 Abgeschlossen
+                    {% elif event.status == 'archived' %}🗄️ Archiviert
+                    {% else %}{{ event.status }}{% endif %}
+                </span>
+            </div>
+            
+            <div style="color: var(--color-text-light); margin-top: 8px; font-size: 0.95rem;">
+                {% if event.event_date %}📅 <strong>{{ event.event_date.strftime('%d.%m.%Y') }}</strong>{% endif %}
+                {% if event.location %}&nbsp;|&nbsp; 📍 {{ event.location }}{% endif %}
+            </div>
+        </div>
+
+        <div class="actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <a href="/events/{{ event.id }}/print" class="btn btn-primary" target="_blank" style="display: flex; align-items: center; gap: 5px;">
+                🖨️ Druckansicht
+            </a>
+            <a href="/events/{{ event.id }}/edit" class="btn btn-secondary">✏️ Bearbeiten</a>
+            <form method="POST" action="/events/{{ event.id }}/delete" style="display: inline;"
+                  onsubmit="return confirm('Möchtest du dieses Event und alle zugehörigen Planungsdaten wirklich löschen?');">
+                <button type="submit" class="btn btn-danger">🗑️ Löschen</button>
+            </form>
+        </div>
+    </div>
+
+    {% if event.description %}
+    <div style="margin-top: 15px; padding: 12px; background: var(--color-bg-hover); border-radius: 6px; font-size: 0.95rem;">
+        <strong>Notizen & Info:</strong> {{ event.description }}
+    </div>
+    {% endif %}
+
+    <!-- Status Schnell-Wechsel -->
+    <div style="margin-top: 15px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border-top: 1px solid var(--color-border); padding-top: 12px;">
+        <span style="font-size: 0.85rem; color: var(--color-text-light);">Status ändern:</span>
+        <form method="POST" action="/events/{{ event.id }}/status" style="display: inline-flex; gap: 5px; flex-wrap: wrap;">
+            <button type="submit" name="status" value="planning" class="btn {% if event.status == 'planning' %}btn-primary{% else %}btn-secondary{% endif %}" style="padding: 4px 8px; font-size: 0.8rem;">📝 Planung</button>
+            <button type="submit" name="status" value="in_production" class="btn {% if event.status == 'in_production' %}btn-primary{% else %}btn-secondary{% endif %}" style="padding: 4px 8px; font-size: 0.8rem;">⚙️ In Produktion</button>
+            <button type="submit" name="status" value="ready" class="btn {% if event.status == 'ready' %}btn-primary{% else %}btn-secondary{% endif %}" style="padding: 4px 8px; font-size: 0.8rem;">📦 Bereit</button>
+            <button type="submit" name="status" value="completed" class="btn {% if event.status == 'completed' %}btn-primary{% else %}btn-secondary{% endif %}" style="padding: 4px 8px; font-size: 0.8rem;">🏁 Abgeschlossen</button>
+        </form>
+    </div>
+</div>
+
+<!-- Gesamt-Fortschritt & Kennzahlen Dashboard -->
+<div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 20px;">
+    <!-- Produktion Fortschritt -->
+    <div class="stat-card" style="border-top: 4px solid var(--color-primary);">
+        <h3 style="font-size: 1.6rem; color: var(--color-primary);">{{ totals.total_produced_units }} / {{ totals.total_target_units }} <span style="font-size: 1rem; font-weight: normal;">Stück</span></h3>
+        <p style="font-weight: 600;">Produktions-Fortschritt</p>
+        <div style="background: #e9ecef; border-radius: 6px; height: 8px; overflow: hidden; margin-top: 8px;">
+            <div style="background: {% if totals.progress_percent >= 100 %}#28a745{% else %}var(--color-primary){% endif %}; width: {{ totals.progress_percent }}%; height: 100%;"></div>
+        </div>
+        <small style="color: var(--color-text-light); display: block; margin-top: 4px;">{{ totals.progress_percent }}% gefertigt</small>
+    </div>
+
+    <!-- Stand-Wert VK -->
+    <div class="stat-card" style="border-top: 4px solid #28a745;">
+        <h3 style="font-size: 1.6rem; color: #28a745;">{{ totals.total_vk }} €</h3>
+        <p style="font-weight: 600;">Verkaufswert am Stand (VK)</p>
+        <small style="color: var(--color-text-light);">Gewinnpotenzial: ~{{ totals.potential_profit }} €</small>
+    </div>
+
+    <!-- Selbstkosten EK -->
+    <div class="stat-card" style="border-top: 4px solid #17a2b8;">
+        <h3 style="font-size: 1.6rem; color: #17a2b8;">{{ totals.total_ek }} €</h3>
+        <p style="font-weight: 600;">Selbstkosten Vorproduktion (EK)</p>
+        <small style="color: var(--color-text-light);">Material, Maschine, Arbeit</small>
+    </div>
+
+    <!-- Zeitaufwand -->
+    <div class="stat-card" style="border-top: 4px solid #ffc107;">
+        <h3 style="font-size: 1.6rem; color: #d39e00;">{{ totals.total_print_time_hours }} h <span style="font-size: 1rem; font-weight: normal;">Druck</span></h3>
+        <p style="font-weight: 600;">Zeitaufwand Gesamt</p>
+        <small style="color: var(--color-text-light);">+ {{ totals.total_labor_hours }} h Handarbeit</small>
+    </div>
+</div>
+
+<!-- Ressourcen-Bedarf Aufschlüsselung (Filament / Sticker) -->
+{% if totals.filament_breakdown or totals.sheet_breakdown %}
+<div class="card" style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%); border-left: 4px solid var(--color-primary);">
+    <h3 style="font-size: 1.1rem; color: var(--color-primary-dark); margin-bottom: 12px;">📦 Benötigte Rohmaterialien für Vorproduktion</h3>
+    <div style="display: flex; flex-wrap: wrap; gap: 20px;">
+        {% if totals.filament_breakdown %}
+        <div style="flex: 1; min-width: 240px;">
+            <strong>🧵 Filament (Gesamt: {{ totals.total_filament_weight_g }} g):</strong>
+            <ul style="margin-top: 6px; padding-left: 20px; font-size: 0.95rem;">
+                {% for mat_name, weight in totals.filament_breakdown.items() %}
+                <li>{{ mat_name }}: <strong>{{ weight }} g</strong> (~{{ (weight / 1000)|round(2) }} Spulen)</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if totals.sheet_breakdown %}
+        <div style="flex: 1; min-width: 240px;">
+            <strong>📄 Sticker-Bögen (Gesamt: {{ totals.total_sheets_count }} Bögen):</strong>
+            <ul style="margin-top: 6px; padding-left: 20px; font-size: 0.95rem;">
+                {% for mat_name, sheets in totals.sheet_breakdown.items() %}
+                <li>{{ mat_name }}: <strong>{{ sheets }} Bögen</strong></li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Sektion 1: Vorproduktions-Liste (Produkte) -->
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 15px;">
+        <div>
+            <h2>📋 Vorproduktions-Liste</h2>
+            <p style="color: var(--color-text-light); font-size: 0.9rem;">
+                Definiere deine Zielmengen und hake Stück für Stück ab, sobald sie fertig aus dem Drucker oder Plotter kommen.
+            </p>
+        </div>
+    </div>
+
+    <!-- Neues Produkt zur Liste hinzufügen -->
+    <div style="background: var(--color-bg-hover); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+        <h3 style="font-size: 1rem; color: var(--color-primary-dark); margin-bottom: 10px;">+ Artikel zur Vorproduktion hinzufügen</h3>
+        <form method="POST" action="/events/{{ event.id }}/items/add" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
+            <div style="flex: 2; min-width: 220px;">
+                <label style="font-size: 0.85rem;">Produkt auswählen *</label>
+                <select name="product_id" required style="width: 100%;">
+                    <option value="">-- Produkt auswählen --</option>
+                    {% if market_products %}
+                    <optgroup label="🎪 Flohmarkt-Produkte">
+                        {% for p in market_products %}
+                        <option value="{{ p.id }}">{{ p.name }} ({{ p.product_type }})</option>
+                        {% endfor %}
+                    </optgroup>
+                    {% endif %}
+                    {% set non_market = all_products|selectattr("is_for_market", "equalto", 0)|list %}
+                    {% if non_market %}
+                    <optgroup label="🔒 Einmalprodukte / Nur Kalkulation">
+                        {% for p in non_market %}
+                        <option value="{{ p.id }}">{{ p.name }} ({{ p.product_type }})</option>
+                        {% endfor %}
+                    </optgroup>
+                    {% endif %}
+                </select>
+            </div>
+            <div style="width: 110px;">
+                <label style="font-size: 0.85rem;">Soll-Menge *</label>
+                <input type="number" name="target_quantity" value="5" min="1" required style="width: 100%;">
+            </div>
+            <div style="flex: 1; min-width: 150px;">
+                <label style="font-size: 0.85rem;">Notiz (Farbe / Variante)</label>
+                <input type="text" name="notes" placeholder="z. B. 3x Weiß, 2x Schwarz" style="width: 100%;">
+            </div>
+            <div>
+                <button type="submit" class="btn btn-primary" style="padding: 10px 18px;">Hinzufügen</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Tabelle der Artikel -->
+    {% if event.items %}
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>Produkt</th>
+                    <th>Typ</th>
+                    <th style="text-align: center;">Gefertigt / Soll</th>
+                    <th style="min-width: 140px;">Fortschritt</th>
+                    <th style="text-align: right;">EK gesamt</th>
+                    <th style="text-align: right;">VK gesamt</th>
+                    <th>Notiz</th>
+                    <th style="text-align: right;">Aktion</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in event.items %}
+                {% set costs = item.get_costs() %}
+                {% set pct = item.get_progress_percent() %}
+                <tr style="{% if item.is_completed() %}background-color: rgba(40, 167, 69, 0.05);{% endif %}">
+                    <td>
+                        <strong>
+                            {% if item.product %}
+                            <a href="/products/{{ item.product.id }}" target="_blank" style="color: inherit; text-decoration: underline;">{{ item.get_name() }}</a>
+                            {% else %}
+                            {{ item.get_name() }}
+                            {% endif %}
+                        </strong>
+                        {% if item.product and item.product.product_type == '3d_print' %}
+                        <div style="font-size: 0.8rem; color: var(--color-text-light);">
+                            {{ item.product.filament_weight_g }}g | {{ item.product.print_time_hours }}h Druck
+                        </div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="category-badge category-{{ item.get_product_type() }}">
+                            {{ item.get_product_type() }}
+                        </span>
+                    </td>
+                    <td style="text-align: center;">
+                        <div style="display: inline-flex; align-items: center; gap: 6px;">
+                            <!-- -1 Button -->
+                            <form method="POST" action="/events/{{ event.id }}/items/{{ item.id }}/adjust" style="display: inline;">
+                                <input type="hidden" name="delta" value="-1">
+                                <button type="submit" class="btn btn-secondary" style="padding: 2px 8px; font-size: 0.85rem; line-height: 1;" {% if item.produced_quantity <= 0 %}disabled{% endif %}>-</button>
+                            </form>
+
+                            <span style="font-size: 1.1rem; font-weight: bold; min-width: 30px; text-align: center; {% if item.is_completed() %}color: #28a745;{% endif %}">
+                                {{ item.produced_quantity }}
+                            </span>
+                            <span style="color: var(--color-text-light);">/ {{ item.target_quantity }}</span>
+
+                            <!-- +1 Button -->
+                            <form method="POST" action="/events/{{ event.id }}/items/{{ item.id }}/adjust" style="display: inline;">
+                                <input type="hidden" name="delta" value="1">
+                                <button type="submit" class="btn btn-primary" style="padding: 2px 8px; font-size: 0.85rem; line-height: 1;">+</button>
+                            </form>
+                        </div>
+                    </td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div style="flex: 1; background: #e9ecef; border-radius: 4px; height: 8px; overflow: hidden;">
+                                <div style="background: {% if pct >= 100 %}#28a745{% else %}var(--color-primary){% endif %}; width: {{ pct }}%; height: 100%;"></div>
+                            </div>
+                            <span style="font-size: 0.8rem; min-width: 40px; text-align: right; font-weight: 600; {% if pct >= 100 %}color: #28a745;{% endif %}">
+                                {{ pct }}%
+                            </span>
+                        </div>
+                    </td>
+                    <td style="text-align: right; font-size: 0.9rem;">
+                        {{ costs.ek_total }} €
+                    </td>
+                    <td style="text-align: right; font-weight: bold; font-size: 0.95rem;">
+                        {{ costs.vk_total }} €
+                    </td>
+                    <td style="font-size: 0.85rem; color: var(--color-text-light);">
+                        {{ item.notes or '-' }}
+                    </td>
+                    <td style="text-align: right;">
+                        <form method="POST" action="/events/{{ event.id }}/items/{{ item.id }}/delete" style="display: inline;"
+                              onsubmit="return confirm('Möchtest du diesen Artikel aus der Vorproduktion entfernen?');">
+                            <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 0.8rem;">🗑️</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p style="text-align: center; padding: 25px; color: var(--color-text-light);">
+        Noch keine Produkte zur Vorproduktionsliste hinzugefügt. Wähle oben ein Produkt aus, um zu starten!
+    </p>
+    {% endif %}
+</div>
+
+<!-- Sektion 2: Packliste & ToDos -->
+<div class="card" id="todos">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 15px;">
+        <div>
+            <h2>🎒 Pack- & Orga-Checkliste ({{ totals.todos_done }}/{{ totals.todos_total }} erledigt)</h2>
+            <p style="color: var(--color-text-light); font-size: 0.9rem;">
+                Alles für den Standaufbau, Kasse, Verpackung und Notfallkoffer.
+            </p>
+        </div>
+
+        <form method="POST" action="/events/{{ event.id }}/todos/load-template" style="display: inline;">
+            <button type="submit" class="btn btn-secondary" style="font-size: 0.85rem;">
+                📋 Standard-Packliste laden
+            </button>
+        </form>
+    </div>
+
+    <!-- Neues ToDo hinzufügen -->
+    <div style="background: var(--color-bg-hover); padding: 12px; border-radius: 8px; margin-bottom: 20px;">
+        <form method="POST" action="/events/{{ event.id }}/todos/add" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
+            <div style="flex: 2; min-width: 200px;">
+                <label style="font-size: 0.85rem;">Aufgabe / Gegenstand *</label>
+                <input type="text" name="title" required placeholder="z. B. Ladekabel für EC-Gerät einpacken" style="width: 100%;">
+            </div>
+            <div style="width: 180px;">
+                <label style="font-size: 0.85rem;">Kategorie</label>
+                <select name="category" style="width: 100%;">
+                    <option value="Stand & Aufbau">⛺ Stand & Aufbau</option>
+                    <option value="Kasse & Finanzen">💶 Kasse & Finanzen</option>
+                    <option value="Verkauf & Marketing">🛍️ Verkauf & Marketing</option>
+                    <option value="Allgemein & Notfall" selected>🧰 Allgemein & Notfall</option>
+                </select>
+            </div>
+            <div>
+                <button type="submit" class="btn btn-primary" style="padding: 10px 16px;">+ Hinzufügen</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- ToDo-Listen nach Kategorien -->
+    {% if todos_by_category %}
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px;">
+        {% for cat_name, todos in todos_by_category.items() %}
+        <div style="background: white; border: 1px solid var(--color-border); border-radius: 6px; padding: 15px;">
+            <h4 style="color: var(--color-primary-dark); margin-bottom: 10px; border-bottom: 1px solid var(--color-border); padding-bottom: 6px;">
+                {{ cat_name }}
+            </h4>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                {% for todo in todos %}
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 4px; {% if todo.is_done %}background: #f8f9fa; opacity: 0.65; text-decoration: line-through;{% endif %}">
+                    <form method="POST" action="/events/{{ event.id }}/todos/{{ todo.id }}/toggle" style="display: flex; align-items: center; gap: 8px; flex: 1; margin: 0;">
+                        <input type="checkbox" onchange="this.form.submit()" {% if todo.is_done %}checked{% endif %} style="width: 18px; height: 18px; cursor: pointer;">
+                        <span style="cursor: pointer; font-size: 0.95rem;" onclick="this.previousElementSibling.click()">{{ todo.title }}</span>
+                    </form>
+                    <form method="POST" action="/events/{{ event.id }}/todos/{{ todo.id }}/delete" style="display: inline;"
+                          onsubmit="return confirm('Möchtest du dieses ToDo löschen?');">
+                        <button type="submit" style="background: none; border: none; cursor: pointer; color: #dc3545; font-size: 0.9rem;" title="Löschen">✕</button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p style="text-align: center; padding: 20px; color: var(--color-text-light);">
+        Noch keine Checklisten-Einträge. Klicke auf <strong>„📋 Standard-Packliste laden“</strong> oder trage eigene ToDos ein!
+    </p>
+    {% endif %}
+</div>
+
+<div style="margin-top: 25px;">
+    <a href="/events" class="btn btn-secondary">← Zurück zur Übersicht</a>
+</div>
+
+{% endblock %}

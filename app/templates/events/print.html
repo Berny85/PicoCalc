@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Druckansicht: {{ event.name }} - Picobellu</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #111;
+            background: #fff;
+            margin: 0;
+            padding: 20px;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+
+        .no-print {
+            margin-bottom: 20px;
+            padding: 10px 15px;
+            background: #eef2ff;
+            border: 1px solid #c7d2fe;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 8px 16px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: bold;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+        }
+
+        h1 {
+            font-size: 1.6rem;
+            margin: 0 0 5px 0;
+            color: #1e1e2f;
+        }
+
+        h2 {
+            font-size: 1.2rem;
+            margin: 20px 0 10px 0;
+            border-bottom: 2px solid #333;
+            padding-bottom: 4px;
+        }
+
+        h3 {
+            font-size: 1rem;
+            margin: 15px 0 6px 0;
+            color: #444;
+        }
+
+        .meta {
+            font-size: 0.95rem;
+            color: #444;
+            margin-bottom: 15px;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .summary-box {
+            border: 1px solid #ccc;
+            padding: 10px;
+            border-radius: 4px;
+            background: #fafafa;
+        }
+
+        .summary-box .val {
+            font-size: 1.3rem;
+            font-weight: bold;
+        }
+
+        .summary-box .lbl {
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+
+        th, td {
+            border: 1px solid #ccc;
+            padding: 6px 8px;
+            text-align: left;
+        }
+
+        th {
+            background: #f0f0f0;
+            font-weight: 600;
+        }
+
+        .checkbox-cell {
+            width: 24px;
+            text-align: center;
+            font-size: 16px;
+        }
+
+        .checklist-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .checklist-cat {
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 10px;
+            break-inside: avoid;
+        }
+
+        .checklist-item {
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .cb-box {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 1px solid #333;
+            border-radius: 2px;
+        }
+
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            body {
+                padding: 0;
+            }
+            .summary-box {
+                background: none;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="no-print">
+    <div>
+        <strong>Druckansicht:</strong> Bereit für DIN-A4-Ausdruck
+    </div>
+    <div>
+        <button onclick="window.print()" class="btn">🖨️ Jetzt Drucken</button>
+        <a href="/events/{{ event.id }}" class="btn btn-secondary">Zurück</a>
+    </div>
+</div>
+
+<h1>🎪 {{ event.name }}</h1>
+<div class="meta">
+    {% if event.event_date %}📅 <strong>Datum:</strong> {{ event.event_date.strftime('%d.%m.%Y') }} &nbsp;|&nbsp; {% endif %}
+    {% if event.location %}📍 <strong>Ort:</strong> {{ event.location }} &nbsp;|&nbsp; {% endif %}
+    <strong>Status:</strong> {{ event.status }}
+</div>
+
+{% if event.description %}
+<p style="font-size: 0.9rem; margin-bottom: 15px;"><em>Notizen: {{ event.description }}</em></p>
+{% endif %}
+
+<!-- Kennzahlen Übersicht -->
+<div class="summary-grid">
+    <div class="summary-box">
+        <div class="val">{{ totals.total_produced_units }} / {{ totals.total_target_units }}</div>
+        <div class="lbl">Stück gefertigt ({{ totals.progress_percent }}%)</div>
+    </div>
+    <div class="summary-box">
+        <div class="val">{{ totals.total_vk }} €</div>
+        <div class="lbl">Stand-Verkaufswert (VK)</div>
+    </div>
+    <div class="summary-box">
+        <div class="val">{{ totals.total_print_time_hours }} h</div>
+        <div class="lbl">Gesamte Druckzeit</div>
+    </div>
+    <div class="summary-box">
+        <div class="val">{{ totals.todos_done }} / {{ totals.todos_total }}</div>
+        <div class="lbl">Checkliste erledigt</div>
+    </div>
+</div>
+
+<!-- Vorproduktions-Tabelle -->
+<h2>📋 Vorproduktions-Liste</h2>
+<table>
+    <thead>
+        <tr>
+            <th style="width: 30px;">Fertig</th>
+            <th style="width: 30px;">Pack</th>
+            <th>Produkt</th>
+            <th>Typ</th>
+            <th style="text-align: center; width: 60px;">Soll</th>
+            <th style="text-align: center; width: 60px;">Ist</th>
+            <th style="text-align: right; width: 70px;">VK / Stk</th>
+            <th style="text-align: right; width: 80px;">VK Gesamt</th>
+            <th>Notizen & Varianten</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in event.items %}
+        {% set costs = item.get_costs() %}
+        <tr>
+            <td class="checkbox-cell">
+                <span class="cb-box">{% if item.is_completed() %}✓{% endif %}</span>
+            </td>
+            <td class="checkbox-cell">
+                <span class="cb-box"></span>
+            </td>
+            <td><strong>{{ item.get_name() }}</strong></td>
+            <td>{{ item.get_product_type() }}</td>
+            <td style="text-align: center; font-weight: bold;">{{ item.target_quantity }}</td>
+            <td style="text-align: center;">{{ item.produced_quantity }}</td>
+            <td style="text-align: right;">{{ costs.vk_unit }} €</td>
+            <td style="text-align: right; font-weight: bold;">{{ costs.vk_total }} €</td>
+            <td>{{ item.notes or '' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<!-- Materialbedarf -->
+{% if totals.filament_breakdown or totals.sheet_breakdown %}
+<h2>🧵 Materialbedarf Vorproduktion</h2>
+<div style="display: flex; gap: 30px; margin-bottom: 20px;">
+    {% if totals.filament_breakdown %}
+    <div style="flex: 1;">
+        <strong>Filament gesamt: {{ totals.total_filament_weight_g }} g</strong>
+        <ul style="margin: 5px 0; padding-left: 20px;">
+            {% for name, weight in totals.filament_breakdown.items() %}
+            <li>{{ name }}: {{ weight }} g</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {% if totals.sheet_breakdown %}
+    <div style="flex: 1;">
+        <strong>Sticker-Bögen gesamt: {{ totals.total_sheets_count }} Bögen</strong>
+        <ul style="margin: 5px 0; padding-left: 20px;">
+            {% for name, sheets in totals.sheet_breakdown.items() %}
+            <li>{{ name }}: {{ sheets }} Bögen</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Pack- und ToDo-Checkliste -->
+<h2>🎒 Pack- & Orga-Checkliste</h2>
+<div class="checklist-grid">
+    {% for cat_name, todos in todos_by_category.items() %}
+    <div class="checklist-cat">
+        <h3 style="margin-top: 0; border-bottom: 1px solid #ddd; padding-bottom: 4px;">{{ cat_name }}</h3>
+        {% for todo in todos %}
+        <div class="checklist-item">
+            <span class="cb-box">{% if todo.is_done %}✓{% endif %}</span>
+            <span {% if todo.is_done %}style="text-decoration: line-through; color: #777;"{% endif %}>{{ todo.title }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+</div>
+
+<div style="margin-top: 30px; border-top: 1px dashed #aaa; padding-top: 10px; font-size: 0.8rem; color: #666; text-align: center;">
+    Gedruckt am {{ now.strftime('%d.%m.%Y um %H:%M') }} mit Picobellu Kalkulator
+</div>
+
+</body>
+</html>

@@ -20,9 +20,20 @@
     <div style="display: flex; justify-content: space-between; align-items: start; flex-wrap: wrap; gap: 15px;">
         <div>
             <h2>{{ product.name }}</h2>
-            <span class="category-badge category-{{ product.product_type }}">
-                {{ product.product_type }}
-            </span>
+            <div style="display: flex; gap: 6px; align-items: center; margin-top: 5px; flex-wrap: wrap;">
+                <span class="category-badge category-{{ product.product_type }}">
+                    {{ product.product_type }}
+                </span>
+                {% if product.is_for_market == 1 %}
+                <span style="font-size: 0.8rem; padding: 3px 8px; border-radius: 12px; font-weight: bold; background: #e8eaf6; color: #3f51b5;">
+                    🎪 Flohmarkt-Bereit
+                </span>
+                {% else %}
+                <span style="font-size: 0.8rem; padding: 3px 8px; border-radius: 12px; font-weight: bold; background: #f8d7da; color: #721c24;">
+                    🔒 Nur Kalkulation / Einmalprodukt
+                </span>
+                {% endif %}
+            </div>
         </div>
         <div class="actions" style="flex-wrap: wrap;">
             <a href="/products/{{ product.id }}/edit" class="btn btn-primary">✏️ Bearbeiten</a>

@@ -160,6 +160,21 @@ Komponenten für Produkte (z.B. Metall-Ring, Anhänger):
 - `sort_order` - Für Reihenfolge
 - Methode: `calculate_total_cost()`
 
+### MarketEvent (`models.py`)
+Markt / Flohmarkt / Event-Vorproduktions-Verwaltung:
+- `name`, `event_date`, `location`, `description`, `status` ('planning', 'in_production', 'ready', 'completed', 'archived')
+- `items` (Beziehung zu `EventItem`), `todos` (Beziehung zu `EventTodo`)
+- Methode: `calculate_totals()` - Berechnet Gesamtstückzahlen, Fertigstellungsgrad (%), aggregierten EK und VK, Gewinnpotenzial, Filamentgewicht (g) nach Material, Stickerbögen, gesamte Druckzeiten und Arbeitszeiten
+
+### EventItem (`models.py`)
+Artikel auf der Vorproduktionsliste:
+- `event_id`, `product_id`, `custom_name`, `target_quantity`, `produced_quantity`, `notes`, `sort_order`
+- Methoden: `get_name()`, `get_product_type()`, `get_progress_percent()`, `is_completed()`, `get_costs()`
+
+### EventTodo (`models.py`)
+Orga- & Packlisten-Aufgaben für ein Event:
+- `event_id`, `title`, `category` ('Stand & Aufbau', 'Kasse & Finanzen', 'Verkauf & Marketing', 'Allgemein & Notfall'), `is_done`, `sort_order`
+
 > **Hinweis**: Folgende Tabellen existieren noch in der Datenbank, wurden aber aus dem Code entfernt:
 > `articles`, `article_categories`, `article_components`, `customers`, `sales_orders`, 
 > `sales_order_items`, `invoices`, `invoice_items`, `feedback`, `ideas`, `product_images`, `config`.
@@ -597,8 +612,9 @@ docker-compose up -d    # Erstellt neu
     - Nur `description` als Eingabe (kein Typ/Titel mehr)
     - Status-Toggle, Bearbeiten, Löschen
 
-18. **Navigation Structure**: Die Header-Navigation ist reduziert auf:
+18. **Navigation Structure**: Die Header-Navigation umfasst:
     - Dashboard (📊)
+    - Flohmärkte & Events (🎪)
     - Produkte (🛠️)
     - Materialien (🧻)
     - Maschinen (⚙️)
@@ -615,3 +631,11 @@ docker-compose up -d    # Erstellt neu
     - `old_project/` enthält den alten Projektstand vor dem Aufräumen
     - Wird für Wiederherstellung entfernter Features verwendet (z.B. SVG Converter)
     - Sollte nicht gelöscht werden solange Features daraus noch benötigt werden könnten
+
+21. **Flohmarkt & Event-Vorproduktion**:
+    - `GET /events` - Liste aller Märkte/Events (aktiv / abgeschlossen)
+    - `GET /events/{id}` - Dashboard für ein Event mit Vorproduktions-Liste (Soll/Ist, Live `+1`/`-1` Buttons)
+    - Ressourcen- & Wertkalkulation (gesamtes Filament in g, Bögen, Druckstunden, Stand-VK, Vorproduktions-EK)
+    - Orga- & Pack-Checkliste (Aufgaben, Standard-Packliste importieren, abhaken)
+    - `GET /events/{id}/print` - DIN-A4 Druckansicht
+

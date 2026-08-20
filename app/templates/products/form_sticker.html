@@ -251,6 +251,17 @@
             <label for="notes">Notizen</label>
             <textarea id="notes" name="notes">{{ product.notes if product else '' }}</textarea>
         </div>
+
+        <!-- Flohmarkt / Event Verfügbarkeit -->
+        <div class="form-group" style="background: var(--color-bg-hover); padding: 12px 15px; border-radius: 6px; border-left: 4px solid var(--color-primary); margin-top: 20px;">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; margin-bottom: 0;">
+                <input type="checkbox" name="is_for_market" value="1" {% if not product or product.is_for_market == 1 %}checked{% endif %} style="width: 18px; height: 18px;">
+                <span>
+                    <strong>🎪 Für Flohmärkte & Events verfügbar</strong><br>
+                    <small style="color: var(--color-text-light);">Haken entfernen, wenn es sich um ein Einmalprodukt, einen Spezialauftrag oder eine reine Test-Kalkulation handelt.</small>
+                </span>
+            </label>
+        </div>
         
         <!-- Live-Kostenberechnung -->
         <div class="card" style="margin-top: 30px;">

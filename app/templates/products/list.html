@@ -48,9 +48,17 @@
     <!-- Suchleiste und Sortierung -->
     <form method="GET" action="/products" style="margin-bottom: 20px;">
         <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: end;">
-            <div style="flex: 1; min-width: 200px;">
+            <div style="flex: 1; min-width: 180px;">
                 <label style="font-size: 0.85rem; color: var(--color-text-light);">Suche</label>
                 <input type="text" name="search" value="{{ search }}" placeholder="Produktname suchen..." style="width: 100%;">
+            </div>
+            <div>
+                <label style="font-size: 0.85rem; color: var(--color-text-light);">Verfügbarkeit</label>
+                <select name="market_filter">
+                    <option value="" {% if not market_filter %}selected{% endif %}>Alle Produkte</option>
+                    <option value="market" {% if market_filter == 'market' %}selected{% endif %}>🎪 Nur Flohmarkt</option>
+                    <option value="non_market" {% if market_filter == 'non_market' %}selected{% endif %}>🔒 Nur Einmalprodukte</option>
+                </select>
             </div>
             <div>
                 <label style="font-size: 0.85rem; color: var(--color-text-light);">Sortierung</label>
@@ -71,7 +79,7 @@
             </div>
             <div>
                 <button type="submit" class="btn btn-primary">Anwenden</button>
-                {% if search or sort_by != 'name' or sort_order != 'asc' %}
+                {% if search or market_filter or sort_by != 'name' or sort_order != 'asc' %}
                 <a href="/products" class="btn btn-secondary">Zurücksetzen</a>
                 {% endif %}
             </div>
@@ -85,6 +93,7 @@
                 <tr>
                     <th>Name</th>
                     <th>Typ</th>
+                    <th style="text-align: center; width: 90px;" title="Für Flohmärkte & Events verfügbar">🎪 Flohmarkt</th>
                     <th>Material</th>
                     <th style="text-align: right;">EK</th>
                     <th style="text-align: right;">VK</th>
@@ -103,6 +112,17 @@
                         <span class="product-type-badge {{ item.product.product_type }}">
                             {{ item.product.product_type }}
                         </span>
+                    </td>
+                    <td style="text-align: center;">
+                        <form method="POST" action="/products/{{ item.product.id }}/toggle-market" style="display: inline; margin: 0;">
+                            <input type="checkbox" 
+                                   hx-post="/products/{{ item.product.id }}/toggle-market"
+                                   hx-swap="none"
+                                   onchange="if(!window.htmx) this.form.submit()"
+                                   {% if item.product.is_for_market == 1 %}checked{% endif %}
+                                   style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--color-primary);"
+                                   title="Klicken zum Umschalten der Flohmarkt-Verfügbarkeit">
+                        </form>
                     </td>
                     <td style="font-size: 0.85rem; color: var(--color-text-light);">
                         {{ item.product.get_material_summary()[:40] }}{% if item.product.get_material_summary()|length > 40 %}...{% endif %}

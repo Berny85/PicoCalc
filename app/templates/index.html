@@ -22,6 +22,56 @@
     </div>
 </div>
 
+<div class="card" style="border-left: 4px solid var(--color-primary);">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+        <h2 style="margin-bottom: 0;">🎪 Flohmärkte & Vorproduktion</h2>
+        <a href="/events/new" class="btn btn-primary" style="padding: 6px 14px; font-size: 0.9rem;">+ Neues Event</a>
+    </div>
+    {% if upcoming_events %}
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; margin-top: 15px;">
+        {% for evt in upcoming_events %}
+        {% set evt_totals = evt.calculate_totals() %}
+        <div style="background: var(--color-bg-hover); padding: 15px; border-radius: 6px; border: 1px solid var(--color-border);">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <strong><a href="/events/{{ evt.id }}" style="color: inherit; text-decoration: none;">{{ evt.name }}</a></strong>
+                <span style="font-size: 0.75rem; padding: 2px 6px; border-radius: 10px; background: #e8eaf6; color: #3f51b5; font-weight: bold;">
+                    {{ evt.status }}
+                </span>
+            </div>
+            {% if evt.event_date %}
+            <div style="font-size: 0.85rem; color: var(--color-text-light); margin-top: 4px;">📅 {{ evt.event_date.strftime('%d.%m.%Y') }} {% if evt.location %}| 📍 {{ evt.location }}{% endif %}</div>
+            {% endif %}
+            
+            <div style="margin-top: 10px;">
+                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 3px;">
+                    <span>Produktion: {{ evt_totals.total_produced_units }} / {{ evt_totals.total_target_units }} Stk.</span>
+                    <strong>{{ evt_totals.progress_percent }}%</strong>
+                </div>
+                <div style="background: #e9ecef; border-radius: 4px; height: 6px; overflow: hidden;">
+                    <div style="background: {% if evt_totals.progress_percent >= 100 %}#28a745{% else %}var(--color-primary){% endif %}; width: {{ evt_totals.progress_percent }}%; height: 100%;"></div>
+                </div>
+            </div>
+
+            <div style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 0.85rem; color: var(--color-text-light);">Stand-Wert: <strong>{{ evt_totals.total_vk }} €</strong></span>
+                <a href="/events/{{ evt.id }}" class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.8rem;">Öffnen →</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <div style="margin-top: 15px;">
+        <a href="/events" class="btn btn-secondary" style="font-size: 0.9rem;">Alle Events anzeigen</a>
+    </div>
+    {% else %}
+    <p style="margin-top: 10px; color: var(--color-text-light);">
+        Aktuell keine aktiven Flohmärkte oder Events geplant.
+    </p>
+    <div style="margin-top: 12px;">
+        <a href="/events/new" class="btn btn-secondary" style="font-size: 0.9rem;">+ Erstes Event anlegen</a>
+    </div>
+    {% endif %}
+</div>
+
 <div class="card">
     <h2>Neues Produkt anlegen</h2>
     <div class="actions" style="margin-top: 20px;">
