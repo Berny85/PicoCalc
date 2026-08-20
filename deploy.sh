@@ -35,13 +35,25 @@ echo "========================================"
 # Ins Projektverzeichnis wechseln
 cd /mnt/user/appdata/picocalc
 
-# Docker Compose Befehl ermitteln (docker-compose vs. docker compose)
-if docker-compose version > /dev/null 2>&1; then
+# Docker Compose Befehl ermitteln oder automatisch bereitstellen
+if command -v docker-compose > /dev/null 2>&1; then
     COMPOSE_CMD="docker-compose"
 elif docker compose version > /dev/null 2>&1; then
     COMPOSE_CMD="docker compose"
+elif [ -f "./docker-compose" ] && [ -x "./docker-compose" ]; then
+    COMPOSE_CMD="./docker-compose"
+elif [ -f "/usr/local/bin/docker-compose" ] && [ -x "/usr/local/bin/docker-compose" ]; then
+    COMPOSE_CMD="/usr/local/bin/docker-compose"
 else
-    COMPOSE_CMD="docker-compose"
+    log "docker-compose nicht gefunden. Lade docker-compose herunter..."
+    curl -sSL "https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-linux-x86_64" -o /usr/local/bin/docker-compose 2>/dev/null && chmod +x /usr/local/bin/docker-compose 2>/dev/null || true
+    if [ -x "/usr/local/bin/docker-compose" ]; then
+        COMPOSE_CMD="/usr/local/bin/docker-compose"
+    else
+        curl -sSL "https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-linux-x86_64" -o ./docker-compose && chmod +x ./docker-compose
+        COMPOSE_CMD="./docker-compose"
+    fi
+    success "docker-compose bereitgestellt: $COMPOSE_CMD"
 fi
 
 log "[1/5] Aktualisiere Code aus GitHub..."
