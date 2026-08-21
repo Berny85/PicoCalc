@@ -17,7 +17,7 @@
         <p>Maschinen</p>
     </div>
     <div class="stat-card">
-        <h3>{{ avg_cost }} €</h3>
+        <h3><span class="streamer-mask">{{ avg_cost }} €</span></h3>
         <p>Durchschnittskosten</p>
     </div>
 </div>
@@ -53,7 +53,7 @@
             </div>
 
             <div style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 0.85rem; color: var(--color-text-light);">Stand-Wert: <strong>{{ evt_totals.total_vk }} €</strong></span>
+                <span style="font-size: 0.85rem; color: var(--color-text-light);">Stand-Wert: <strong class="streamer-mask">{{ evt_totals.total_vk }} €</strong></span>
                 <a href="/events/{{ evt.id }}" class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.8rem;">Öffnen →</a>
             </div>
         </div>
@@ -106,8 +106,8 @@
                     </span>
                 </td>
                 <td>{{ product.get_material_summary() }}</td>
-                <td>{{ calc.purchase_price }} €</td>
-                <td><strong>{{ calc.selling_price }} €</strong></td>
+                <td><span class="streamer-mask streamer-mask-compact">{{ calc.purchase_price }} €</span></td>
+                <td><strong class="streamer-mask streamer-mask-compact">{{ calc.selling_price }} €</strong></td>
                 <td>
                     <a href="/products/{{ product.id }}" class="btn btn-primary" style="padding: 6px 12px; font-size: 14px;">Anzeigen</a>
                 </td>

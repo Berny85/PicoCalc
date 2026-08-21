@@ -659,6 +659,30 @@ async def toggle_product_market_status(
     return RedirectResponse(url=request.headers.get("referer", "/products"), status_code=303)
 
 
+@app.post("/products/bulk-toggle-market")
+async def bulk_toggle_product_market_status(
+    request: Request,
+    product_ids: str = Form(...),
+    is_for_market: int = Form(...),
+    db: Session = Depends(get_db)
+):
+    """Mehrere Produkte gleichzeitig auf Flohmarkt-Verfügbarkeit setzen"""
+    try:
+        ids = [int(x.strip()) for x in product_ids.split(",") if x.strip()]
+        if ids:
+            db.query(Product).filter(Product.id.in_(ids)).update(
+                {Product.is_for_market: is_for_market, Product.updated_at: datetime.utcnow()},
+                synchronize_session=False
+            )
+            db.commit()
+    except Exception as e:
+        print(f"Error in bulk_toggle_product_market_status: {e}")
+        
+    if request.headers.get("hx-request"):
+        return Response(status_code=204)
+    return RedirectResponse(url=request.headers.get("referer", "/products"), status_code=303)
+
+
 @app.get("/products/new", response_class=HTMLResponse)
 async def new_product_type_select(request: Request):
     """Produkttyp-Auswahl für neues Produkt"""
@@ -1303,7 +1327,8 @@ async def list_events(
         query = query.filter(
             (MarketEvent.name.ilike(search_pattern)) |
             (MarketEvent.location.ilike(search_pattern)) |
-            (MarketEvent.description.ilike(search_pattern))
+            (MarketEvent.description.ilike(search_pattern)) |
+            (MarketEvent.product_ideas.ilike(search_pattern))
         )
         
     if sort_by == "name":
@@ -1354,6 +1379,7 @@ async def create_event(
     event_date: str = Form(None),
     location: str = Form(None),
     description: str = Form(None),
+    product_ideas: str = Form(None),
     status: str = Form("planning"),
     load_default_packlist: str = Form(None),
     db: Session = Depends(get_db)
@@ -1371,6 +1397,7 @@ async def create_event(
         event_date=parsed_date,
         location=location.strip() if location else None,
         description=description.strip() if description else None,
+        product_ideas=product_ideas.strip() if product_ideas else None,
         status=status
     )
     db.add(event)
@@ -1444,6 +1471,7 @@ async def update_event(
     event_date: str = Form(None),
     location: str = Form(None),
     description: str = Form(None),
+    product_ideas: str = Form(None),
     status: str = Form("planning"),
     db: Session = Depends(get_db)
 ):
@@ -1463,11 +1491,30 @@ async def update_event(
     event.event_date = parsed_date
     event.location = location.strip() if location else None
     event.description = description.strip() if description else None
+    event.product_ideas = product_ideas.strip() if product_ideas else None
     event.status = status
     event.updated_at = datetime.utcnow()
     
     db.commit()
     return RedirectResponse(url=f"/events/{event.id}", status_code=303)
+
+
+@app.post("/events/{event_id}/ideas")
+async def update_event_ideas(
+    event_id: int,
+    request: Request,
+    product_ideas: str = Form(None),
+    db: Session = Depends(get_db)
+):
+    """Produkt-Ideen & Chat-Brainstorming schnell speichern"""
+    event = db.query(MarketEvent).filter(MarketEvent.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event nicht gefunden")
+        
+    event.product_ideas = product_ideas.strip() if product_ideas else None
+    event.updated_at = datetime.utcnow()
+    db.commit()
+    return RedirectResponse(url=f"/events/{event.id}#product-ideas", status_code=303)
 
 
 @app.post("/events/{event_id}/status")
@@ -1504,14 +1551,21 @@ async def add_event_item(
     event_id: int,
     product_id: int = Form(None),
     target_quantity: int = Form(1),
+    custom_vk: str = Form(None),
     notes: str = Form(None),
     db: Session = Depends(get_db)
 ):
-    """Produkt zur Vorproduktionsliste hinzufügen"""
+    """Produkt zur Vorproduktionsliste hinzufügen mit optionalem individuellem Flohmarkt-VK"""
     event = db.query(MarketEvent).filter(MarketEvent.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event nicht gefunden")
         
+    parsed_custom_vk = None
+    if custom_vk and custom_vk.strip():
+        val = parse_decimal(custom_vk)
+        if val > 0:
+            parsed_custom_vk = val
+            
     # Prüfen ob Artikel bereits vorhanden -> dann Soll-Menge erhöhen
     existing_item = db.query(EventItem).filter(
         EventItem.event_id == event_id,
@@ -1520,6 +1574,8 @@ async def add_event_item(
     
     if existing_item:
         existing_item.target_quantity += max(1, target_quantity)
+        if parsed_custom_vk is not None:
+            existing_item.custom_vk = parsed_custom_vk
         if notes and notes.strip():
             if existing_item.notes:
                 existing_item.notes += f", {notes.strip()}"
@@ -1531,10 +1587,34 @@ async def add_event_item(
             product_id=product_id if product_id else None,
             target_quantity=max(1, target_quantity),
             produced_quantity=0,
+            custom_vk=parsed_custom_vk,
             notes=notes.strip() if notes else None
         )
         db.add(new_item)
         
+    db.commit()
+    return RedirectResponse(url=f"/events/{event_id}", status_code=303)
+
+
+@app.post("/events/{event_id}/items/{item_id}/update-vk")
+async def update_event_item_vk(
+    event_id: int,
+    item_id: int,
+    custom_vk: str = Form(None),
+    db: Session = Depends(get_db)
+):
+    """Individuellen Flohmarkt-VK eines Artikels aktualisieren"""
+    item = db.query(EventItem).filter(EventItem.id == item_id, EventItem.event_id == event_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Artikel nicht gefunden")
+        
+    if custom_vk and custom_vk.strip():
+        val = parse_decimal(custom_vk)
+        item.custom_vk = val if val > 0 else None
+    else:
+        item.custom_vk = None
+        
+    item.updated_at = datetime.utcnow()
     db.commit()
     return RedirectResponse(url=f"/events/{event_id}", status_code=303)
 
@@ -1658,6 +1738,29 @@ async def load_event_todo_template(
             db.add(todo)
             
     db.commit()
+    return RedirectResponse(url=f"/events/{event_id}#todos", status_code=303)
+
+
+@app.post("/events/{event_id}/todos/bulk-toggle")
+async def bulk_toggle_event_todos(
+    event_id: int,
+    request: Request,
+    is_done: int = Form(...),
+    category: str = Form(None),
+    db: Session = Depends(get_db)
+):
+    """Mehrere ToDos auf einmal als erledigt oder unerledigt markieren"""
+    event = db.query(MarketEvent).filter(MarketEvent.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event nicht gefunden")
+        
+    query = db.query(EventTodo).filter(EventTodo.event_id == event_id)
+    if category and category.strip():
+        query = query.filter(EventTodo.category == category.strip())
+        
+    query.update({EventTodo.is_done: is_done, EventTodo.updated_at: datetime.utcnow()}, synchronize_session=False)
+    db.commit()
+    
     return RedirectResponse(url=f"/events/{event_id}#todos", status_code=303)
 
 

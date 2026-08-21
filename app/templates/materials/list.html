@@ -78,7 +78,7 @@
                 <td><strong>{{ m.name }}</strong></td>
                 <td>{{ m.brand or '-' }}</td>
                 <td>{{ m.color or '-' }}</td>
-                <td><strong>{{ m.price_per_unit }} €</strong></td>
+                <td><strong><span class="streamer-mask streamer-mask-compact">{{ m.price_per_unit }} €</span></strong></td>
                 <td>{{ m.unit }}</td>
                 <td>
                     <a href="/materials/{{ m.id }}/edit" class="btn btn-primary" 

@@ -109,11 +109,11 @@
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; background: var(--color-bg-hover); padding: 10px; border-radius: 6px; font-size: 0.85rem; margin-bottom: 15px;">
                     <div>
                         <span style="color: var(--color-text-light);">Stand-Wert (VK):</span><br>
-                        <strong>{{ totals.total_vk }} €</strong>
+                        <strong class="streamer-mask">{{ totals.total_vk }} €</strong>
                     </div>
                     <div>
                         <span style="color: var(--color-text-light);">Selbstkosten (EK):</span><br>
-                        <strong>{{ totals.total_ek }} €</strong>
+                        <strong class="streamer-mask">{{ totals.total_ek }} €</strong>
                     </div>
                     <div>
                         <span style="color: var(--color-text-light);">Druckzeit:</span><br>
@@ -124,6 +124,15 @@
                         <strong>{{ totals.todos_done }} / {{ totals.todos_total }}</strong> ToDos
                     </div>
                 </div>
+
+                {% if event.product_ideas %}
+                <div style="margin-bottom: 12px; padding: 8px 10px; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 6px; font-size: 0.82rem; color: #92400e; display: flex; align-items: flex-start; gap: 6px;">
+                    <span>💡</span>
+                    <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                        <strong>Ideen:</strong> {{ event.product_ideas.split('\n')[0][:50] }}{% if event.product_ideas.split('\n')[0]|length > 50 or event.product_ideas.split('\n')|length > 1 %}...{% endif %}
+                    </span>
+                </div>
+                {% endif %}
             </div>
 
             <div style="display: flex; gap: 8px; justify-content: space-between; align-items: center; border-top: 1px solid var(--color-border); padding-top: 12px; margin-top: 10px;">

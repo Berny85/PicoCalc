@@ -69,16 +69,16 @@
                 
                 {% if m.machine_type == 'inkjet_printer' %}
                     {# Tintenstrahl-Drucker: Seitenbasierte Anzeige #}
-                    <td><strong>{{ "%.4f"|format(m.depreciation_per_page or 0) }} €/Seite</strong></td>
+                    <td><strong><span class="streamer-mask streamer-mask-compact">{{ "%.4f"|format(m.depreciation_per_page or 0) }} €/Seite</span></strong></td>
                     <td><strong>{{ m.lifespan_pages|int if m.lifespan_pages else '-' }} Seiten</strong></td>
                     <td><strong>-</strong></td>
-                    <td><strong>{{ "%.4f"|format(m.calculate_cost_per_page()) }} €/Seite</strong></td>
+                    <td><strong><span class="streamer-mask streamer-mask-compact">{{ "%.4f"|format(m.calculate_cost_per_page()) }} €/Seite</span></strong></td>
                 {% else %}
                     {# Andere Maschinen: Zeitbasierte Anzeige #}
-                    <td><strong>{{ m.depreciation_euro }} €</strong></td>
+                    <td><strong><span class="streamer-mask streamer-mask-compact">{{ m.depreciation_euro }} €</span></strong></td>
                     <td><strong>{{ m.lifespan_hours }} h</strong></td>
                     <td><strong>{{ m.power_kw }} kW</strong></td>
-                    <td><strong>{{ "%.3f"|format(m.calculate_cost_per_hour()) }} €/h</strong></td>
+                    <td><strong><span class="streamer-mask streamer-mask-compact">{{ "%.3f"|format(m.calculate_cost_per_hour()) }} €/h</span></strong></td>
                 {% endif %}
                 
                 <td>

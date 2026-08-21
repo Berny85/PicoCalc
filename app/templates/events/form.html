@@ -38,8 +38,14 @@
         </div>
 
         <div class="form-group">
-            <label for="description">Notizen & Details</label>
-            <textarea id="description" name="description" placeholder="Standgebühr, Aufbauzeit, Standgröße, Besonderheiten..." rows="4">{{ event.description if event else '' }}</textarea>
+            <label for="description">Notizen & Details zum Event</label>
+            <textarea id="description" name="description" placeholder="Standgebühr, Aufbauzeit, Standgröße, Besonderheiten..." rows="3">{{ event.description if event else '' }}</textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="product_ideas">💡 Produkt-Ideen & Chat-Brainstorming</label>
+            <textarea id="product_ideas" name="product_ideas" placeholder="z. B. Ideen aus dem Stream, Produktwünsche, Farbvarianten..." rows="5">{{ event.product_ideas if event else '' }}</textarea>
+            <small style="color: var(--color-text-light);">Mehrzeiliges Notizfeld – kann auch jederzeit direkt in der Event-Detailansicht während des Streams bearbeitet werden.</small>
         </div>
 
         {% if not is_edit %}

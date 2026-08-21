@@ -509,6 +509,7 @@ class MarketEvent(Base):
     event_date = Column(DateTime, nullable=True)
     location = Column(String(255), nullable=True)
     description = Column(Text, nullable=True)
+    product_ideas = Column(Text, nullable=True)  # Freitext für Produkt-Ideen & Chat-Brainstorming
     status = Column(String(50), nullable=False, default="planning")  # planning, in_production, ready, completed, archived
     
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -539,12 +540,12 @@ class MarketEvent(Base):
             total_target_units += target_qty
             total_produced_units += produced_qty
             
+            item_costs = item.get_costs()
+            total_ek += item_costs['ek_total']
+            total_vk += item_costs['vk_total']
+            
             if item.product:
                 prod = item.product
-                costs = prod.calculate_costs()
-                total_ek += float(costs.get('purchase_price', 0)) * target_qty
-                total_vk += float(costs.get('selling_price', 0)) * target_qty
-                
                 # Druckzeit
                 if prod.product_type == '3d_print' and prod.print_time_hours:
                     total_print_time_hours += float(prod.print_time_hours) * target_qty
@@ -612,6 +613,7 @@ class EventItem(Base):
     custom_name = Column(String(255), nullable=True)  # Falls kein Produkt hinterlegt ist
     target_quantity = Column(Integer, default=1, nullable=False)
     produced_quantity = Column(Integer, default=0, nullable=False)
+    custom_vk = Column(Numeric(10, 2), nullable=True)  # Individueller Flohmarkt-VK pro Stück
     notes = Column(Text, nullable=True)
     sort_order = Column(Integer, default=0)
     
@@ -653,15 +655,26 @@ class EventItem(Base):
         if self.product:
             c = self.product.calculate_costs()
             ek_unit = float(c.get('purchase_price', 0))
-            vk_unit = float(c.get('selling_price', 0))
+            default_vk = float(c.get('selling_price', 0))
         else:
             ek_unit = 0.0
-            vk_unit = 0.0
+            default_vk = 0.0
+        
+        # Individuellen Flohmarkt-VK nutzen falls gesetzt und > 0
+        if self.custom_vk is not None and float(self.custom_vk) > 0:
+            vk_unit = float(self.custom_vk)
+            is_custom_vk = True
+        else:
+            vk_unit = default_vk
+            is_custom_vk = False
         
         target_qty = int(self.target_quantity or 0)
         return {
             'ek_unit': round(ek_unit, 2),
             'vk_unit': round(vk_unit, 2),
+            'default_vk': round(default_vk, 2),
+            'custom_vk': float(self.custom_vk) if self.custom_vk is not None else None,
+            'is_custom_vk': is_custom_vk,
             'ek_total': round(ek_unit * target_qty, 2),
             'vk_total': round(vk_unit * target_qty, 2),
         }

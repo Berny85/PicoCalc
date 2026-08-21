@@ -69,14 +69,14 @@
 
     <!-- Stand-Wert VK -->
     <div class="stat-card" style="border-top: 4px solid #28a745;">
-        <h3 style="font-size: 1.6rem; color: #28a745;">{{ totals.total_vk }} €</h3>
+        <h3 style="font-size: 1.6rem; color: #28a745;"><span class="streamer-mask">{{ totals.total_vk }} €</span></h3>
         <p style="font-weight: 600;">Verkaufswert am Stand (VK)</p>
-        <small style="color: var(--color-text-light);">Gewinnpotenzial: ~{{ totals.potential_profit }} €</small>
+        <small style="color: var(--color-text-light);">Gewinnpotenzial: <span class="streamer-mask">~{{ totals.potential_profit }} €</span></small>
     </div>
 
     <!-- Selbstkosten EK -->
     <div class="stat-card" style="border-top: 4px solid #17a2b8;">
-        <h3 style="font-size: 1.6rem; color: #17a2b8;">{{ totals.total_ek }} €</h3>
+        <h3 style="font-size: 1.6rem; color: #17a2b8;"><span class="streamer-mask">{{ totals.total_ek }} €</span></h3>
         <p style="font-weight: 600;">Selbstkosten Vorproduktion (EK)</p>
         <small style="color: var(--color-text-light);">Material, Maschine, Arbeit</small>
     </div>
@@ -119,6 +119,37 @@
 </div>
 {% endif %}
 
+<!-- Sektion: Produkt-Ideen & Chat-Brainstorming -->
+<div class="card" id="product-ideas" style="border-left: 4px solid #f59e0b; background: linear-gradient(135deg, rgba(245, 158, 11, 0.03) 0%, rgba(255, 255, 255, 1) 100%);">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+        <div>
+            <h2 style="margin-bottom: 0; color: #b45309; font-size: 1.25rem; display: flex; align-items: center; gap: 8px; border-bottom: none; padding-bottom: 0;">
+                💡 Produkt-Ideen & Chat-Brainstorming
+            </h2>
+            <p style="color: var(--color-text-light); font-size: 0.9rem; margin-top: 4px;">
+                Sammle hier Ideen, Wünsche und Vorschläge aus dem Live-Stream für diesen Flohmarkt.
+            </p>
+        </div>
+        <span style="font-size: 0.8rem; background: #fef3c7; color: #92400e; padding: 3px 10px; border-radius: 12px; font-weight: bold;">
+            💬 Stream & Chat
+        </span>
+    </div>
+
+    <form method="POST" action="/events/{{ event.id }}/ideas">
+        <div class="form-group" style="margin-bottom: 12px;">
+            <textarea name="product_ideas" rows="5" placeholder="z. B.&#10;- Süße Geister-Schlüsselanhänger in Glow-in-the-Dark&#10;- Pflanzen-Stecker für Kräuter (Basilikum, Minze...)&#10;- Holografische Katzen-Sticker 5x5cm&#10;- Mini-Mülleimer für den Schreibtisch..." style="width: 100%; font-family: inherit; font-size: 0.95rem; line-height: 1.5; padding: 12px; border-radius: 6px; border: 1px solid var(--color-border); resize: vertical;">{{ event.product_ideas or '' }}</textarea>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <small style="color: var(--color-text-light);">
+                💡 Jederzeit direkt im Stream editierbar und speicherbar
+            </small>
+            <button type="submit" class="btn btn-primary" style="padding: 8px 18px; font-weight: 600;">
+                💾 Ideen speichern
+            </button>
+        </div>
+    </form>
+</div>
+
 <!-- Sektion 1: Vorproduktions-Liste (Produkte) -->
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 15px;">
@@ -136,12 +167,13 @@
         <form method="POST" action="/events/{{ event.id }}/items/add" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
             <div style="flex: 2; min-width: 220px;">
                 <label style="font-size: 0.85rem;">Produkt auswählen *</label>
-                <select name="product_id" required style="width: 100%;">
+                <select name="product_id" id="eventProductSelect" onchange="onProductSelectChange(this)" required style="width: 100%;">
                     <option value="">-- Produkt auswählen --</option>
                     {% if market_products %}
                     <optgroup label="🎪 Flohmarkt-Produkte">
                         {% for p in market_products %}
-                        <option value="{{ p.id }}">{{ p.name }} ({{ p.product_type }})</option>
+                        {% set p_costs = p.calculate_costs() %}
+                        <option value="{{ p.id }}" data-vk="{{ p_costs.selling_price }}">{{ p.name }} ({{ p.product_type }})</option>
                         {% endfor %}
                     </optgroup>
                     {% endif %}
@@ -149,15 +181,20 @@
                     {% if non_market %}
                     <optgroup label="🔒 Einmalprodukte / Nur Kalkulation">
                         {% for p in non_market %}
-                        <option value="{{ p.id }}">{{ p.name }} ({{ p.product_type }})</option>
+                        {% set p_costs = p.calculate_costs() %}
+                        <option value="{{ p.id }}" data-vk="{{ p_costs.selling_price }}">{{ p.name }} ({{ p.product_type }})</option>
                         {% endfor %}
                     </optgroup>
                     {% endif %}
                 </select>
             </div>
-            <div style="width: 110px;">
+            <div style="width: 95px;">
                 <label style="font-size: 0.85rem;">Soll-Menge *</label>
                 <input type="number" name="target_quantity" value="5" min="1" required style="width: 100%;">
+            </div>
+            <div style="width: 130px;">
+                <label style="font-size: 0.85rem;">Flohmarkt-VK (€)</label>
+                <input type="text" id="eventCustomVkInput" name="custom_vk" placeholder="z. B. 4,50" style="width: 100%;" title="Wird bei Produktauswahl automatisch mit Standard-VK gefüllt und kann überschrieben werden">
             </div>
             <div style="flex: 1; min-width: 150px;">
                 <label style="font-size: 0.85rem;">Notiz (Farbe / Variante)</label>
@@ -178,8 +215,9 @@
                     <th>Produkt</th>
                     <th>Typ</th>
                     <th style="text-align: center;">Gefertigt / Soll</th>
-                    <th style="min-width: 140px;">Fortschritt</th>
+                    <th style="min-width: 130px;">Fortschritt</th>
                     <th style="text-align: right;">EK gesamt</th>
+                    <th style="text-align: right;">VK / Stk.</th>
                     <th style="text-align: right;">VK gesamt</th>
                     <th>Notiz</th>
                     <th style="text-align: right;">Aktion</th>
@@ -240,10 +278,24 @@
                         </div>
                     </td>
                     <td style="text-align: right; font-size: 0.9rem;">
-                        {{ costs.ek_total }} €
+                        <span class="streamer-mask streamer-mask-compact">{{ costs.ek_total }} €</span>
+                    </td>
+                    <td style="text-align: right; white-space: nowrap;">
+                        <form method="POST" action="/events/{{ event.id }}/items/{{ item.id }}/update-vk" style="display: inline-flex; align-items: center; justify-content: flex-end; gap: 3px; margin: 0;">
+                            <span class="streamer-mask">
+                                <input type="text" name="custom_vk" value="{{ costs.vk_unit }}" style="width: 58px; padding: 2px 4px; font-size: 0.85rem; text-align: right; border: 1px solid var(--color-border); border-radius: 4px;" title="Flohmarkt-VK ändern (Standard: {{ costs.default_vk }} €)">
+                                €
+                            </span>
+                            <button type="submit" class="btn btn-secondary" style="padding: 2px 5px; font-size: 0.72rem;" title="VK-Preis speichern">💾</button>
+                        </form>
+                        {% if costs.is_custom_vk %}
+                        <div style="font-size: 0.72rem; color: #b45309; margin-top: 2px;" title="Abweichender Flohmarkt-Preis">
+                            ⭐ (Std: <span class="streamer-mask">{{ costs.default_vk }} €</span>)
+                        </div>
+                        {% endif %}
                     </td>
                     <td style="text-align: right; font-weight: bold; font-size: 0.95rem;">
-                        {{ costs.vk_total }} €
+                        <span class="streamer-mask streamer-mask-compact">{{ costs.vk_total }} €</span>
                     </td>
                     <td style="font-size: 0.85rem; color: var(--color-text-light);">
                         {{ item.notes or '-' }}
@@ -276,11 +328,27 @@
             </p>
         </div>
 
-        <form method="POST" action="/events/{{ event.id }}/todos/load-template" style="display: inline;">
-            <button type="submit" class="btn btn-secondary" style="font-size: 0.85rem;">
-                📋 Standard-Packliste laden
-            </button>
-        </form>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            {% if event.todos %}
+            <form method="POST" action="/events/{{ event.id }}/todos/bulk-toggle" style="display: inline; margin: 0;">
+                <input type="hidden" name="is_done" value="1">
+                <button type="submit" class="btn btn-secondary" style="font-size: 0.85rem;" title="Alle Aufgaben auf erledigt setzen">
+                    ✅ Alle abhaken
+                </button>
+            </form>
+            <form method="POST" action="/events/{{ event.id }}/todos/bulk-toggle" style="display: inline; margin: 0;">
+                <input type="hidden" name="is_done" value="0">
+                <button type="submit" class="btn btn-secondary" style="font-size: 0.85rem;" title="Alle Aufgaben zurücksetzen">
+                    🔄 Alle zurücksetzen
+                </button>
+            </form>
+            {% endif %}
+            <form method="POST" action="/events/{{ event.id }}/todos/load-template" style="display: inline; margin: 0;">
+                <button type="submit" class="btn btn-secondary" style="font-size: 0.85rem;">
+                    📋 Standard-Packliste laden
+                </button>
+            </form>
+        </div>
     </div>
 
     <!-- Neues ToDo hinzufügen -->
@@ -310,9 +378,23 @@
     <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px;">
         {% for cat_name, todos in todos_by_category.items() %}
         <div style="background: white; border: 1px solid var(--color-border); border-radius: 6px; padding: 15px;">
-            <h4 style="color: var(--color-primary-dark); margin-bottom: 10px; border-bottom: 1px solid var(--color-border); padding-bottom: 6px;">
-                {{ cat_name }}
-            </h4>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid var(--color-border); padding-bottom: 6px;">
+                <h4 style="color: var(--color-primary-dark); margin: 0;">
+                    {{ cat_name }}
+                </h4>
+                <div style="display: flex; gap: 4px;">
+                    <form method="POST" action="/events/{{ event.id }}/todos/bulk-toggle" style="display: inline; margin: 0;">
+                        <input type="hidden" name="category" value="{{ cat_name }}">
+                        <input type="hidden" name="is_done" value="1">
+                        <button type="submit" class="btn btn-secondary" style="padding: 2px 6px; font-size: 0.72rem; line-height: 1;" title="Alle in dieser Kategorie als erledigt markieren">✓ Alle</button>
+                    </form>
+                    <form method="POST" action="/events/{{ event.id }}/todos/bulk-toggle" style="display: inline; margin: 0;">
+                        <input type="hidden" name="category" value="{{ cat_name }}">
+                        <input type="hidden" name="is_done" value="0">
+                        <button type="submit" class="btn btn-secondary" style="padding: 2px 6px; font-size: 0.72rem; line-height: 1;" title="Alle in dieser Kategorie zurücksetzen">↺</button>
+                    </form>
+                </div>
+            </div>
             <div style="display: flex; flex-direction: column; gap: 8px;">
                 {% for todo in todos %}
                 <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 4px; {% if todo.is_done %}background: #f8f9fa; opacity: 0.65; text-decoration: line-through;{% endif %}">
@@ -340,5 +422,15 @@
 <div style="margin-top: 25px;">
     <a href="/events" class="btn btn-secondary">← Zurück zur Übersicht</a>
 </div>
+
+<script>
+function onProductSelectChange(select) {
+    const opt = select.selectedOptions[0];
+    const vkInput = document.getElementById('eventCustomVkInput');
+    if (opt && opt.dataset.vk && vkInput) {
+        vkInput.value = opt.dataset.vk;
+    }
+}
+</script>
 
 {% endblock %}

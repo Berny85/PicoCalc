@@ -5,6 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Picobellu Kalkulator{% endblock %}</title>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script>
+        // Streamer Mode Initialization: Standard ist immer AKTIV (geschützt), außer in der aktuellen Session explizit deaktiviert
+        (function() {
+            var isStreamerOff = sessionStorage.getItem('streamer_mode') === 'disabled';
+            if (!isStreamerOff) {
+                document.documentElement.classList.add('streamer-mode');
+            }
+        })();
+    </script>
     <style>
         /* ========================================
            SAKURA PINK THEME - CSS VARIABLES
@@ -591,9 +600,148 @@
             }
         }
         
+        /* Streamer Mode / Privacy Shield */
+        .streamer-mask {
+            transition: all 0.2s ease;
+        }
+
+        .streamer-mode .streamer-mask {
+            position: relative;
+            display: inline-block;
+            color: transparent !important;
+            user-select: none !important;
+            -webkit-user-select: none !important;
+            background: #eef2ff !important;
+            border-radius: 4px;
+            padding: 0 4px;
+            min-width: 32px;
+            text-align: center;
+            border: 1px dashed #667eea;
+        }
+
+        .streamer-mode .streamer-mask input {
+            color: transparent !important;
+            background: transparent !important;
+            user-select: none !important;
+        }
+
+        .streamer-mode .streamer-mask::after {
+            content: "***";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #4338ca;
+            font-size: 0.85em;
+            font-weight: 700;
+            letter-spacing: 1px;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        .streamer-mode .streamer-mask-compact {
+            min-width: 28px;
+            padding: 0 2px;
+        }
+
+        .streamer-mode .streamer-mask-compact::after {
+            content: "***";
+            font-size: 0.85em;
+            letter-spacing: 1px;
+        }
+
+        .streamer-mode .streamer-hide {
+            display: none !important;
+        }
+
+        /* Streamer Mode Toggle Buttons in Nav */
+        .streamer-toggle-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            cursor: pointer;
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            transition: all 0.2s ease;
+            text-decoration: none;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+        }
+
+        .streamer-toggle-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        .streamer-mode .streamer-toggle-active {
+            display: inline-flex !important;
+            background: #10b981;
+            border-color: #059669;
+            color: white;
+        }
+
+        .streamer-mode .streamer-toggle-inactive {
+            display: none !important;
+        }
+
+        html:not(.streamer-mode) .streamer-toggle-active {
+            display: none !important;
+        }
+
+        html:not(.streamer-mode) .streamer-toggle-inactive {
+            display: inline-flex !important;
+            background: #f59e0b;
+            border-color: #d97706;
+            color: white;
+            animation: pulseWarning 2s infinite;
+        }
+
+        @keyframes pulseWarning {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.5); }
+            50% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); }
+        }
+
+        /* Streamer Mode Security Modal */
+        .streamer-modal-backdrop {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(3px);
+            z-index: 99999;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .streamer-modal-backdrop.show {
+            display: flex;
+            animation: modalFadeIn 0.2s ease;
+        }
+
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: scale(0.96); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .streamer-modal-content {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            max-width: 480px;
+            width: 100%;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            border-top: 5px solid #dc3545;
+        }
+
         /* Print Styles */
         @media print {
-            header, .mobile-menu-toggle, .actions {
+            header, .mobile-menu-toggle, .actions, .streamer-modal-backdrop {
                 display: none !important;
             }
             
@@ -606,10 +754,25 @@
     </style>
     {% block extra_css %}{% endblock %}
 </head>
-<body>
+<body class="streamer-mode">
     <header>
         <div class="container" style="position: relative;">
-            <h1>Picobellu Design</h1>
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 5px;">
+                <h1 style="margin: 0; text-align: left; font-size: 1.8rem;">
+                    <a href="/" style="color: white; text-decoration: none;">Picobellu Design</a>
+                </h1>
+                
+                <!-- Streamer Mode Toggle Button -->
+                <div>
+                    <button id="streamer-btn-active" class="streamer-toggle-btn streamer-toggle-active" onclick="promptDisableStreamerMode()" title="Streamer-Schutz ist AKTIV (Klicken zum Deaktivieren)">
+                        🎥 Streamer-Modus: AN 🔒
+                    </button>
+                    <button id="streamer-btn-inactive" class="streamer-toggle-btn streamer-toggle-inactive" onclick="enableStreamerMode()" title="Preise sind sichtbar (Klicken zum sofortigen Aktivieren)">
+                        🔓 Streamer-Modus: AUS ⚠️
+                    </button>
+                </div>
+            </div>
+            
             <button class="mobile-menu-toggle" onclick="toggleMobileMenu()" aria-label="Menü öffnen">
                 ☰
             </button>
@@ -635,6 +798,29 @@
             </nav>
         </div>
     </header>
+
+    <!-- Streamer Mode Deactivation Security Modal -->
+    <div id="streamerModal" class="streamer-modal-backdrop" onclick="if(event.target === this) closeStreamerModal()">
+        <div class="streamer-modal-content">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 15px;">
+                <span style="font-size: 2rem;">⚠️</span>
+                <h3 style="margin: 0; color: #721c24; font-size: 1.3rem;">Streamer-Modus deaktivieren?</h3>
+            </div>
+            <p style="color: #495057; font-size: 0.95rem; line-height: 1.5; margin-bottom: 20px;">
+                Bist du sicher, dass du den Streamer-Schutz deaktivieren möchtest?
+                <br><br>
+                <strong style="color: #dc3545;">Achtung:</strong> Dadurch werden sofort alle <strong>Einkaufspreise (EK), Verkaufspreise (VK), Gewinnmargen und Maschinenkosten</strong> auf dem Bildschirm sichtbar!
+            </p>
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn btn-secondary" onclick="closeStreamerModal()" style="padding: 8px 16px;">
+                    Abbrechen (Geschützt bleiben)
+                </button>
+                <button type="button" class="btn btn-danger" onclick="confirmDisableStreamerMode()" style="padding: 8px 18px; font-weight: bold;">
+                    🔓 Ja, Preise anzeigen
+                </button>
+            </div>
+        </div>
+    </div>
     
     <script>
         function toggleMobileMenu() {
@@ -653,10 +839,62 @@
         document.addEventListener('click', (e) => {
             const nav = document.getElementById('main-nav');
             const toggle = document.querySelector('.mobile-menu-toggle');
-            if (!nav.contains(e.target) && !toggle.contains(e.target)) {
+            if (nav && toggle && !nav.contains(e.target) && !toggle.contains(e.target)) {
                 nav.classList.remove('active');
             }
         });
+
+        // ========================================
+        // STREAMER MODE LOGIC
+        // ========================================
+        function isStreamerModeActive() {
+            return sessionStorage.getItem('streamer_mode') !== 'disabled';
+        }
+
+        function updateStreamerModeUI() {
+            if (isStreamerModeActive()) {
+                document.documentElement.classList.add('streamer-mode');
+                document.body.classList.add('streamer-mode');
+            } else {
+                document.documentElement.classList.remove('streamer-mode');
+                document.body.classList.remove('streamer-mode');
+            }
+        }
+
+        function promptDisableStreamerMode() {
+            const modal = document.getElementById('streamerModal');
+            if (modal) {
+                modal.classList.add('show');
+            }
+        }
+
+        function closeStreamerModal() {
+            const modal = document.getElementById('streamerModal');
+            if (modal) {
+                modal.classList.remove('show');
+            }
+        }
+
+        function confirmDisableStreamerMode() {
+            sessionStorage.setItem('streamer_mode', 'disabled');
+            updateStreamerModeUI();
+            closeStreamerModal();
+        }
+
+        function enableStreamerMode() {
+            sessionStorage.removeItem('streamer_mode');
+            updateStreamerModeUI();
+        }
+
+        // Close modal on Escape
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeStreamerModal();
+            }
+        });
+
+        // Update UI initially on DOMContentLoaded
+        document.addEventListener('DOMContentLoaded', updateStreamerModeUI);
     </script>
 
     <div class="container">

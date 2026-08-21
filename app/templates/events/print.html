@@ -4,6 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Druckansicht: {{ event.name }} - Picobellu</title>
+    <script>
+        (function() {
+            var isStreamerOff = sessionStorage.getItem('streamer_mode') === 'disabled';
+            if (!isStreamerOff) {
+                document.documentElement.classList.add('streamer-mode');
+            }
+        })();
+    </script>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -13,6 +21,34 @@
             padding: 20px;
             font-size: 13px;
             line-height: 1.4;
+        }
+
+        /* Streamer Mode */
+        .streamer-mask {
+            transition: all 0.2s ease;
+        }
+        .streamer-mode .streamer-mask {
+            position: relative;
+            display: inline-block;
+            color: transparent !important;
+            user-select: none !important;
+            background: #eef2ff !important;
+            border-radius: 4px;
+            padding: 0 4px;
+            border: 1px dashed #667eea;
+        }
+        .streamer-mode .streamer-mask::after {
+            content: "***";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #4338ca;
+            font-size: 0.85em;
+            font-weight: bold;
+            letter-spacing: 1px;
+            pointer-events: none;
+            white-space: nowrap;
         }
 
         .no-print {
@@ -186,7 +222,7 @@
         <div class="lbl">Stück gefertigt ({{ totals.progress_percent }}%)</div>
     </div>
     <div class="summary-box">
-        <div class="val">{{ totals.total_vk }} €</div>
+        <div class="val"><span class="streamer-mask">{{ totals.total_vk }} €</span></div>
         <div class="lbl">Stand-Verkaufswert (VK)</div>
     </div>
     <div class="summary-box">
@@ -229,8 +265,8 @@
             <td>{{ item.get_product_type() }}</td>
             <td style="text-align: center; font-weight: bold;">{{ item.target_quantity }}</td>
             <td style="text-align: center;">{{ item.produced_quantity }}</td>
-            <td style="text-align: right;">{{ costs.vk_unit }} €</td>
-            <td style="text-align: right; font-weight: bold;">{{ costs.vk_total }} €</td>
+            <td style="text-align: right;"><span class="streamer-mask">{{ costs.vk_unit }} €</span></td>
+            <td style="text-align: right; font-weight: bold;"><span class="streamer-mask">{{ costs.vk_total }} €</span></td>
             <td>{{ item.notes or '' }}</td>
         </tr>
         {% endfor %}
@@ -280,6 +316,12 @@
     </div>
     {% endfor %}
 </div>
+
+<!-- Produkt-Ideen / Brainstorming Notizen -->
+{% if event.product_ideas %}
+<h2>💡 Notierte Produkt-Ideen & Wünsche</h2>
+<div style="border: 1px solid #ccc; border-radius: 4px; padding: 12px; background: #fafafa; white-space: pre-wrap; font-size: 0.95rem; margin-bottom: 20px;">{{ event.product_ideas }}</div>
+{% endif %}
 
 <div style="margin-top: 30px; border-top: 1px dashed #aaa; padding-top: 10px; font-size: 0.8rem; color: #666; text-align: center;">
     Gedruckt am {{ now.strftime('%d.%m.%Y um %H:%M') }} mit Picobellu Kalkulator
