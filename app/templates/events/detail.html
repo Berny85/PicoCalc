@@ -167,13 +167,12 @@
         <form method="POST" action="/events/{{ event.id }}/items/add" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
             <div style="flex: 2; min-width: 220px;">
                 <label style="font-size: 0.85rem;">Produkt auswählen *</label>
-                <select name="product_id" id="eventProductSelect" onchange="onProductSelectChange(this)" required style="width: 100%;">
+                <select name="product_id" required style="width: 100%;">
                     <option value="">-- Produkt auswählen --</option>
                     {% if market_products %}
                     <optgroup label="🎪 Flohmarkt-Produkte">
                         {% for p in market_products %}
-                        {% set p_costs = p.calculate_costs() %}
-                        <option value="{{ p.id }}" data-vk="{{ p_costs.selling_price }}">{{ p.name }} ({{ p.product_type }})</option>
+                        <option value="{{ p.id }}">{{ p.name }} ({{ p.product_type }})</option>
                         {% endfor %}
                     </optgroup>
                     {% endif %}
@@ -181,8 +180,7 @@
                     {% if non_market %}
                     <optgroup label="🔒 Einmalprodukte / Nur Kalkulation">
                         {% for p in non_market %}
-                        {% set p_costs = p.calculate_costs() %}
-                        <option value="{{ p.id }}" data-vk="{{ p_costs.selling_price }}">{{ p.name }} ({{ p.product_type }})</option>
+                        <option value="{{ p.id }}">{{ p.name }} ({{ p.product_type }})</option>
                         {% endfor %}
                     </optgroup>
                     {% endif %}
@@ -192,9 +190,9 @@
                 <label style="font-size: 0.85rem;">Soll-Menge *</label>
                 <input type="number" name="target_quantity" value="5" min="1" required style="width: 100%;">
             </div>
-            <div style="width: 130px;">
+            <div style="width: 140px;">
                 <label style="font-size: 0.85rem;">Flohmarkt-VK (€)</label>
-                <input type="text" id="eventCustomVkInput" name="custom_vk" placeholder="z. B. 4,50" style="width: 100%;" title="Wird bei Produktauswahl automatisch mit Standard-VK gefüllt und kann überschrieben werden">
+                <input type="text" name="custom_vk" placeholder="Optional (z. B. 5,00)" style="width: 100%;" title="Optional: Eigener Flohmarkt-VK pro Stück (leer lassen für Standard-VK aus der Kalkulation)">
             </div>
             <div style="flex: 1; min-width: 150px;">
                 <label style="font-size: 0.85rem;">Notiz (Farbe / Variante)</label>
@@ -422,15 +420,5 @@
 <div style="margin-top: 25px;">
     <a href="/events" class="btn btn-secondary">← Zurück zur Übersicht</a>
 </div>
-
-<script>
-function onProductSelectChange(select) {
-    const opt = select.selectedOptions[0];
-    const vkInput = document.getElementById('eventCustomVkInput');
-    if (opt && opt.dataset.vk && vkInput) {
-        vkInput.value = opt.dataset.vk;
-    }
-}
-</script>
 
 {% endblock %}
