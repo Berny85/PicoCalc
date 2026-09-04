@@ -72,13 +72,27 @@
                     <td><strong><span class="streamer-mask streamer-mask-compact">{{ "%.4f"|format(m.depreciation_per_page or 0) }} €/Seite</span></strong></td>
                     <td><strong>{{ m.lifespan_pages|int if m.lifespan_pages else '-' }} Seiten</strong></td>
                     <td><strong>-</strong></td>
-                    <td><strong><span class="streamer-mask streamer-mask-compact">{{ "%.4f"|format(m.calculate_cost_per_page()) }} €/Seite</span></strong></td>
+                    <td>
+                        <strong><span class="streamer-mask streamer-mask-compact">{{ "%.4f"|format(m.calculate_cost_per_page()) }} €/Seite</span></strong>
+                        {% if m.cost_per_sheet %}
+                        <small style="display: block; color: var(--color-primary-dark); font-weight: 600; margin-top: 2px;">
+                            Bogen: <span class="streamer-mask streamer-mask-compact">{{ "%.3f"|format(m.cost_per_sheet) }} €</span>
+                        </small>
+                        {% endif %}
+                    </td>
                 {% else %}
                     {# Andere Maschinen: Zeitbasierte Anzeige #}
                     <td><strong><span class="streamer-mask streamer-mask-compact">{{ m.depreciation_euro }} €</span></strong></td>
                     <td><strong>{{ m.lifespan_hours }} h</strong></td>
                     <td><strong>{{ m.power_kw }} kW</strong></td>
-                    <td><strong><span class="streamer-mask streamer-mask-compact">{{ "%.3f"|format(m.calculate_cost_per_hour()) }} €/h</span></strong></td>
+                    <td>
+                        <strong><span class="streamer-mask streamer-mask-compact">{{ "%.3f"|format(m.calculate_cost_per_hour()) }} €/h</span></strong>
+                        {% if m.cost_per_sheet %}
+                        <small style="display: block; color: var(--color-primary-dark); font-weight: 600; margin-top: 2px;">
+                            Bogen: <span class="streamer-mask streamer-mask-compact">{{ "%.3f"|format(m.cost_per_sheet) }} €</span>
+                        </small>
+                        {% endif %}
+                    </td>
                 {% endif %}
                 
                 <td>

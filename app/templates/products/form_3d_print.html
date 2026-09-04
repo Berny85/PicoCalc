@@ -111,31 +111,36 @@
                     <label for="labor_rate_per_hour">Stundensatz (€/h)</label>
                     <input type="number" id="labor_rate_per_hour" name="labor_rate_per_hour" 
                            step="0.01" min="0"
-                           value="{{ product.labor_rate_per_hour if product else '20.00' }}">
+                           value="{{ product.labor_rate_per_hour if product else default_labor_rate|default('20.00') }}">
                 </div>
             </div>
             
             <div>
                 <div class="form-group">
-                    <label for="packaging_cost">Verpackungskosten (€)</label>
+                    <label for="packaging_cost">Produktverpackung (€)</label>
                     <input type="number" id="packaging_cost" name="packaging_cost" 
                            step="0.01" min="0"
-                           value="{{ product.packaging_cost if product else '0' }}">
+                           value="{{ product.packaging_cost if product else '0' }}"
+                           placeholder="0.00" oninput="calculateTotalCost()">
+                    <small style="color: var(--color-text-light);">Direkte Einzelverpackung (Beutel, Kärtchen etc. - wird 1:1 weitergereicht)</small>
                 </div>
                 
                 <div class="form-group">
-                    <label for="shipping_cost">Versandkosten (€)</label>
-                    <input type="number" id="shipping_cost" name="shipping_cost" 
+                    <label for="selling_price">Tatsächlicher VK (€) <span style="font-weight: normal; color: var(--color-text-light);">(optional)</span></label>
+                    <input type="number" id="selling_price" name="selling_price" 
                            step="0.01" min="0"
-                           value="{{ product.shipping_cost if product else '0' }}">
+                           value="{{ product.selling_price if (product and product.selling_price) else '' }}"
+                           placeholder="Automatisch aus Richtwert" oninput="calculateTotalCost()">
+                    <small style="color: var(--color-text-light);">Leer lassen für Richtwert-VK (<span id="recommended-vk-hint">0.00 €</span>), oder Wunschpreis eintragen.</small>
                 </div>
+                <input type="hidden" id="shipping_cost" name="shipping_cost" value="0">
             </div>
         </div>
         
         <!-- KOMPONENTEN -->
         <h3 style="margin-top: 30px; color: var(--color-primary-dark);">🧩 Komponenten</h3>
         <p style="color: var(--color-text-light); margin-bottom: 15px;">
-            Zusätzliche Teile wie Metall-Ringe, Anhänger, etc.
+            Zusätzliche Teile wie Metall-Ringe, Magnete, Schrauben, etc.
         </p>
         
         <div id="components-container">
@@ -144,7 +149,7 @@
                 <div class="component-row" style="display: grid; grid-template-columns: 2fr 1fr 1fr 2fr auto; gap: 10px; margin-bottom: 10px; align-items: end;">
                     <div class="form-group" style="margin-bottom: 0;">
                         <label>Name</label>
-                        <input type="text" name="component_name" value="{{ comp.name }}" placeholder="z.B. Metall-Ring" class="form-control">
+                        <input type="text" name="component_name" value="{{ comp.name }}" placeholder="z.B. Metall-Ring">
                     </div>
                     <div class="form-group" style="margin-bottom: 0;">
                         <label>Menge</label>
@@ -201,14 +206,16 @@
             <div class="calculation-box">
                 <div class="price-grid">
                     <div class="price-item">
-                        <div class="label">Einkaufspreis (EK)</div>
+                        <div class="label">Gesamt-EK (Selbstkosten)</div>
                         <div class="value"><span id="live-purchase-price" class="streamer-mask">0.00 €</span></div>
-                        <div style="font-size: 0.8rem; opacity: 0.8; margin-top: 5px;">Selbstkosten</div>
+                        <div style="font-size: 0.8rem; opacity: 0.8; margin-top: 5px;">Produktion: <span id="live-production-cost">0.00</span> € + Pack: <span id="live-packaging-cost">0.00</span> €</div>
                     </div>
                     <div class="price-item" style="background: rgba(255,255,255,0.3);">
                         <div class="label">Verkaufspreis (VK)</div>
-                        <div class="value" style="font-size: 2rem;"><span id="live-selling-price" class="streamer-mask">0.00 €</span></div>
-                        <div style="font-size: 0.8rem; opacity: 0.8; margin-top: 5px;">100% Aufschlag (2× EK)</div>
+                        <div class="value" style="font-size: 2rem;"><span id="live-selling-price">0.00 €</span></div>
+                        <div id="live-vk-type" style="font-size: 0.8rem; opacity: 0.8; margin-top: 5px;">
+                            <span id="live-vk-badge"></span>Richtwert-VK (<span id="live-recommended-price">0.00 €</span>)
+                        </div>
                     </div>
                 </div>
                 <div style="margin: 20px 0; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 4px;">
@@ -217,7 +224,7 @@
                     Maschine: <span class="streamer-mask"><span id="live-machine-cost">0.00</span> €</span> |
                     Arbeit: <span class="streamer-mask"><span id="live-labor-cost">0.00</span> €</span> |
                     Komponenten: <span class="streamer-mask"><span id="live-components-cost">0.00</span> €</span> |
-                    Verpackung/Versand: <span class="streamer-mask"><span id="live-packaging-shipping">0.00</span> €</span>
+                    Produktverpackung: <span class="streamer-mask"><span id="live-packaging-shipping">0.00</span> €</span>
                 </div>
             </div>
         </div>
@@ -299,6 +306,8 @@ function updateMachineCost() {
     calculateTotalCost();
 }
 
+const marginMultiplier = {{ margin_multiplier or 2.0 }};
+
 function calculateTotalCost() {
     // Material
     const filamentSelect = document.getElementById('filament_material_id');
@@ -316,11 +325,6 @@ function calculateTotalCost() {
     const laborRate = parseFloat(document.getElementById('labor_rate_per_hour').value) || 0;
     const laborCost = (laborMinutes / 60) * laborRate;
     
-    // Verpackung / Versand
-    const packagingCost = parseFloat(document.getElementById('packaging_cost').value) || 0;
-    const shippingCost = parseFloat(document.getElementById('shipping_cost').value) || 0;
-    const packagingShipping = packagingCost + shippingCost;
-    
     // Komponenten
     let componentsCost = 0;
     document.querySelectorAll('.component-row').forEach(row => {
@@ -329,16 +333,54 @@ function calculateTotalCost() {
         componentsCost += qty * unitCost;
     });
     
-    const purchasePrice = materialCost + machineCost + laborCost + componentsCost + packagingShipping;
-    const sellingPrice = purchasePrice * 2;
+    // Herstellkosten (Produktions-EK)
+    const productionCost = Math.round((materialCost + machineCost + laborCost + componentsCost) * 100) / 100;
     
-    document.getElementById('live-material-cost').textContent = materialCost.toFixed(3);
-    document.getElementById('live-machine-cost').textContent = machineCost.toFixed(3);
-    document.getElementById('live-labor-cost').textContent = laborCost.toFixed(3);
-    document.getElementById('live-components-cost').textContent = componentsCost.toFixed(3);
-    document.getElementById('live-packaging-shipping').textContent = packagingShipping.toFixed(3);
-    document.getElementById('live-purchase-price').textContent = purchasePrice.toFixed(3) + ' €';
-    document.getElementById('live-selling-price').textContent = sellingPrice.toFixed(3) + ' €';
+    // Produktverpackung (1:1 ohne Marge)
+    const packagingCost = parseFloat(document.getElementById('packaging_cost').value.replace(',', '.')) || 0;
+    
+    // Gesamt-EK (Selbstkosten)
+    const purchasePrice = Math.round((productionCost + packagingCost) * 100) / 100;
+    
+    // Richtwert-VK = (Produktion * Marge) + Verpackung
+    const recommendedSellingPrice = Math.round(((productionCost * marginMultiplier) + packagingCost) * 100) / 100;
+    
+    // Tatsächlicher VK (falls manuell eingetragen)
+    const sellingPriceInput = document.getElementById('selling_price');
+    const customVk = parseFloat(sellingPriceInput.value.replace(',', '.')) || 0;
+    const finalSellingPrice = customVk > 0 ? customVk : recommendedSellingPrice;
+    
+    // Update Hint & Labels
+    const hintEl = document.getElementById('recommended-vk-hint');
+    if (hintEl) hintEl.textContent = recommendedSellingPrice.toFixed(2) + ' €';
+    
+    const recPriceEl = document.getElementById('live-recommended-price');
+    if (recPriceEl) recPriceEl.textContent = recommendedSellingPrice.toFixed(2) + ' €';
+
+    const vkBadgeEl = document.getElementById('live-vk-badge');
+    if (vkBadgeEl) {
+        if (customVk > 0) {
+            vkBadgeEl.innerHTML = '<span style="background: #28a745; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-right: 5px;">Manuell</span> ';
+        } else {
+            vkBadgeEl.innerHTML = '';
+        }
+    }
+    
+    // Live Anzeige sicher aktualisieren
+    const setSafeText = (id, text) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = text;
+    };
+
+    setSafeText('live-material-cost', materialCost.toFixed(2));
+    setSafeText('live-machine-cost', machineCost.toFixed(2));
+    setSafeText('live-labor-cost', laborCost.toFixed(2));
+    setSafeText('live-components-cost', componentsCost.toFixed(2));
+    setSafeText('live-production-cost', productionCost.toFixed(2));
+    setSafeText('live-packaging-cost', packagingCost.toFixed(2));
+    setSafeText('live-packaging-shipping', packagingCost.toFixed(2));
+    setSafeText('live-purchase-price', purchasePrice.toFixed(2) + ' €');
+    setSafeText('live-selling-price', finalSellingPrice.toFixed(2) + ' €');
 }
 
 if (machineSelect) {
@@ -347,13 +389,17 @@ if (machineSelect) {
 }
 
 // Event-Listener für Live-Berechnung
-document.getElementById('filament_material_id').addEventListener('change', calculateTotalCost);
-document.getElementById('filament_weight_g').addEventListener('input', calculateTotalCost);
-document.getElementById('print_time_hours').addEventListener('input', calculateTotalCost);
-document.getElementById('labor_minutes').addEventListener('input', calculateTotalCost);
-document.getElementById('labor_rate_per_hour').addEventListener('input', calculateTotalCost);
-document.getElementById('packaging_cost').addEventListener('input', calculateTotalCost);
-document.getElementById('shipping_cost').addEventListener('input', calculateTotalCost);
+const inputIds = [
+    'filament_material_id', 'filament_weight_g', 'print_time_hours',
+    'labor_minutes', 'labor_rate_per_hour', 'packaging_cost', 'selling_price'
+];
+inputIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+        el.addEventListener('input', calculateTotalCost);
+        el.addEventListener('change', calculateTotalCost);
+    }
+});
 
 document.addEventListener('DOMContentLoaded', function() {
     calculateTotalCost();

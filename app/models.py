@@ -1,10 +1,10 @@
 from sqlalchemy import Column, Integer, String, Numeric, Text, DateTime, ForeignKey
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, object_session
 from database import Base
 from datetime import datetime
 
-# Konstanten
-STROM_PREIS_KWH = 0.22  # €/kWh
+# Konstanten (Fallback)
+STROM_PREIS_KWH = 0.22  # €/kWh Default
 
 
 class Machine(Base):
@@ -35,11 +35,25 @@ class Machine(Base):
     def __repr__(self):
         return f"{self.name} ({self.machine_type})"
     
-    def calculate_cost_per_hour(self):
+    def calculate_cost_per_hour(self, electricity_price=None):
         """Berechnet Maschinenkosten pro Stunde (für zeitbasierte Maschinen)"""
         if self.machine_type == 'inkjet_printer':
             return 0.0  # Tintenstrahl-Drucker rechnen pro Seite, nicht pro Stunde
-        strom_kosten = STROM_PREIS_KWH * float(self.power_kw)
+        
+        strom_preis = STROM_PREIS_KWH
+        if electricity_price is not None:
+            strom_preis = float(electricity_price)
+        else:
+            session = object_session(self)
+            if session:
+                try:
+                    cfg = session.query(Config).filter(Config.key == "electricity_price_kwh").first()
+                    if cfg and cfg.value:
+                        strom_preis = float(str(cfg.value).replace(",", "."))
+                except Exception:
+                    pass
+        
+        strom_kosten = strom_preis * float(self.power_kw)
         abschreibung = float(self.depreciation_euro) / float(self.lifespan_hours)
         return strom_kosten + abschreibung
     
@@ -53,9 +67,11 @@ class Machine(Base):
         """Berechnet Maschinenkosten pro Bogen (für Plotter/Drucker bei Sticker-Produktion)"""
         if self.cost_per_sheet:
             return float(self.cost_per_sheet)
+        if self.machine_type == 'inkjet_printer' and self.depreciation_per_page:
+            return float(self.depreciation_per_page)
         return 0.0
     
-    def calculate_cost_per_unit(self, production_hours=0, pages=0, sheets=0):
+    def calculate_cost_per_unit(self, production_hours=0, pages=0, sheets=0, electricity_price=None):
         """Berechnet Gesamtkosten für Produktion (zeitbasiert, seitenbasiert oder bogenbasiert)"""
         if self.machine_type == 'inkjet_printer':
             return pages * self.calculate_cost_per_page()
@@ -63,7 +79,7 @@ class Machine(Base):
             # Bogenbasierte Berechnung (für Plotter/Drucker)
             return sheets * self.calculate_cost_per_sheet()
         # Zeitbasierte Berechnung (Standard)
-        return production_hours * self.calculate_cost_per_hour()
+        return production_hours * self.calculate_cost_per_hour(electricity_price=electricity_price)
 
 
 class MaterialType(Base):
@@ -158,6 +174,9 @@ class Product(Base):
     packaging_cost = Column(Numeric(10, 2), default=0)
     shipping_cost = Column(Numeric(10, 2), default=0)
     
+    # === VERKAUFSPREIS (MANUELL) ===
+    selling_price = Column(Numeric(10, 2), nullable=True)  # Manuell festgelegter VK (falls abweichend von Richtwert)
+    
     # === BERECHNUNGSMODUS ===
     calculation_mode = Column(String(20), default="per_unit")
     units_per_batch = Column(Integer, default=1)
@@ -178,20 +197,20 @@ class Product(Base):
     laser_material = relationship("Material", foreign_keys=[laser_material_id])
     machine = relationship("Machine", backref="products")
     
-    def get_machine_cost_per_hour(self):
+    def get_machine_cost_per_hour(self, electricity_price=None):
         """Maschinenkosten pro Stunde"""
         if self.machine:
-            return self.machine.calculate_cost_per_hour()
+            return self.machine.calculate_cost_per_hour(electricity_price=electricity_price)
         return 0.0
     
-    def calculate_3d_print_costs(self):
+    def calculate_3d_print_costs(self, electricity_price=None):
         """Kalkulation für 3D-Druck"""
         costs = {'type': '3d_print'}
         
         # Filamentkosten
         if self.filament_material_id and self.filament_material:
             filament_price_per_kg = float(self.filament_material.price_per_unit)
-            filament_cost = (float(self.filament_weight_g) / 1000) * filament_price_per_kg
+            filament_cost = (float(self.filament_weight_g or 0) / 1000) * filament_price_per_kg
             costs['filament_info'] = f"{self.filament_material.name}"
         else:
             filament_cost = 0
@@ -200,7 +219,7 @@ class Product(Base):
         costs['filament_cost'] = round(filament_cost, 2)
         
         # Druckkosten (Druckzeit)
-        machine_cost_per_h = self.get_machine_cost_per_hour()
+        machine_cost_per_h = self.get_machine_cost_per_hour(electricity_price=electricity_price)
         print_cost = float(self.print_time_hours or 0) * machine_cost_per_h
         costs['machine_cost'] = round(print_cost, 2)
         costs['machine_cost_per_hour'] = round(machine_cost_per_h, 3)
@@ -208,63 +227,75 @@ class Product(Base):
         
         return costs
     
-    def calculate_sticker_costs(self):
-        """Kalkulation für Sticker/Papier/DieCut"""
+    def calculate_sticker_costs(self, db_session=None):
+        """Kalkulation für Sticker/Papier/DieCut mit Multi-Maschinen-Unterstützung (Drucker + Plotter)"""
         costs = {'type': self.product_type}
         
-        # Materialkosten (Bögen)
+        # Materialkosten (1 Bogen Standard)
+        sheet_count = float(self.sheet_count or 1)
         if self.sheet_material_id and self.sheet_material:
             sheet_price = float(self.sheet_material.price_per_unit)
-            total_material_cost = float(self.sheet_count or 0) * sheet_price
+            total_material_cost = sheet_count * sheet_price
             costs['sheet_info'] = f"{self.sheet_material.name}"
         else:
-            total_material_cost = 0
+            sheet_price = 0.0
+            total_material_cost = 0.0
             costs['sheet_info'] = "Kein Material"
         
-        # Maschinenkosten (Plotter/Drucker - pro Bogen)
-        total_machine_cost = 0.0
-        if self.machine_id and self.machine:
-            total_machine_cost = self.machine.calculate_cost_per_unit(sheets=float(self.sheet_count or 0))
-            costs['machine_info'] = f"{self.machine.name}"
-            costs['cost_per_sheet'] = self.machine.calculate_cost_per_sheet()
-        else:
-            costs['machine_info'] = "Keine Maschine"
-            costs['cost_per_sheet'] = 0.0
+        # Maschinen sammeln (primäre Maschine + additional_machine_ids)
+        machines_list = []
+        if self.machine:
+            machines_list.append(self.machine)
         
+        session = db_session or object_session(self)
+        if self.additional_machine_ids and session:
+            try:
+                mid_list = [int(mid.strip()) for mid in str(self.additional_machine_ids).split(",") if mid.strip()]
+                if mid_list:
+                    add_machines = session.query(Machine).filter(Machine.id.in_(mid_list)).all()
+                    for m in add_machines:
+                        if m not in machines_list:
+                            machines_list.append(m)
+            except Exception:
+                pass
+        
+        # Kosten pro Bogen aller beteiligten Maschinen summieren
+        cost_per_sheet_total = sum(m.calculate_cost_per_sheet() for m in machines_list)
+        total_machine_cost = cost_per_sheet_total * sheet_count
+        
+        costs['machines_list'] = [
+            {
+                'id': m.id,
+                'name': m.name,
+                'machine_type': m.machine_type,
+                'cost_per_sheet': m.calculate_cost_per_sheet()
+            }
+            for m in machines_list
+        ]
+        costs['machine_info'] = ", ".join(m.name for m in machines_list) if machines_list else "Keine Maschine"
+        costs['cost_per_sheet'] = round(cost_per_sheet_total, 4)
         costs['total_machine_cost'] = round(total_machine_cost, 2)
-        costs['sheet_count'] = float(self.sheet_count or 0)
+        costs['sheet_count'] = sheet_count
         
-        # Berechnung basierend auf calculation_mode
-        if self.calculation_mode == 'per_batch':
-            batch_material_cost = total_material_cost
-            batch_machine_cost = total_machine_cost
-            batch_size = self.units_per_batch if self.units_per_batch > 0 else 1
-            
-            material_cost_per_unit = batch_material_cost / batch_size
-            machine_cost_per_unit = batch_machine_cost / batch_size
-            
+        # Ausbeute pro Bogen (units_per_sheet)
+        units_per_sheet = float(self.units_per_sheet or 1)
+        if units_per_sheet <= 0:
+            units_per_sheet = 1.0
+        
+        if self.calculation_mode == 'per_batch' and (self.units_per_batch or 1) > 0:
+            batch_size = float(self.units_per_batch)
+            material_cost_per_unit = total_material_cost / batch_size
+            machine_cost_per_unit = total_machine_cost / batch_size
             costs['calculation_mode'] = 'per_batch'
-            costs['units_per_batch'] = batch_size
-            costs['batch_material_cost'] = round(batch_material_cost, 2)
-            costs['batch_machine_cost'] = round(batch_machine_cost, 2)
+            costs['units_per_batch'] = int(batch_size)
+            costs['batch_material_cost'] = round(total_material_cost, 2)
+            costs['batch_machine_cost'] = round(total_machine_cost, 2)
         else:
-            units_per_sheet = float(self.units_per_sheet or 1)
-            sheet_count_val = float(self.sheet_count or 1)
-            total_units = sheet_count_val * units_per_sheet
-            
-            if total_units > 0:
-                material_cost_per_unit = total_material_cost / total_units
-            else:
-                material_cost_per_unit = total_material_cost
-            
-            if total_units > 0:
-                machine_cost_per_unit = total_machine_cost / total_units
-            else:
-                machine_cost_per_unit = total_machine_cost
-            
+            total_units = sheet_count * units_per_sheet
+            material_cost_per_unit = total_material_cost / total_units
+            machine_cost_per_unit = total_machine_cost / total_units
             costs['calculation_mode'] = 'per_unit'
             costs['units_per_sheet'] = units_per_sheet
-            costs['sheet_count'] = sheet_count_val
             costs['total_units'] = total_units
         
         costs['material_cost'] = round(material_cost_per_unit, 2)
@@ -314,15 +345,29 @@ class Product(Base):
         
         return costs
     
-    def calculate_costs(self):
-        """Hauptkalkulation je nach Produkttyp - mit Komponenten-Unterstützung für alle Typen"""
+    def calculate_costs(self, db_session=None, electricity_price=None, margin_multiplier=None):
+        """Hauptkalkulation je nach Produkttyp - mit Komponenten-Unterstützung und 1:1 Verpackung"""
+        session = db_session or object_session(self)
+        if session:
+            try:
+                if electricity_price is None:
+                    cfg_strom = session.query(Config).filter(Config.key == "electricity_price_kwh").first()
+                    if cfg_strom and cfg_strom.value:
+                        electricity_price = float(str(cfg_strom.value).replace(",", "."))
+                if margin_multiplier is None:
+                    cfg_margin = session.query(Config).filter(Config.key == "margin_multiplier").first()
+                    if cfg_margin and cfg_margin.value:
+                        margin_multiplier = float(str(cfg_margin.value).replace(",", "."))
+            except Exception:
+                pass
+        
         # Typ-spezifische Kosten
         if self.product_type == '3d_print':
-            type_costs = self.calculate_3d_print_costs()
+            type_costs = self.calculate_3d_print_costs(electricity_price=electricity_price)
             material_cost = type_costs['filament_cost']
             machine_cost = type_costs['machine_cost']
         elif self.product_type in ['sticker', 'sticker_sheet', 'diecut_sticker', 'stationery', 'paper']:
-            type_costs = self.calculate_sticker_costs()
+            type_costs = self.calculate_sticker_costs(db_session=db_session)
             material_cost = type_costs['material_cost']
             machine_cost = type_costs['machine_cost']
         elif self.product_type == 'laser_engraving':
@@ -336,7 +381,7 @@ class Product(Base):
         else:
             type_costs = {'type': 'generic', 'material_cost': 0, 'machine_cost': 0}
             material_cost = 0
-            machine_cost = float(self.print_time_hours or 0) * self.get_machine_cost_per_hour()
+            machine_cost = float(self.print_time_hours or 0) * self.get_machine_cost_per_hour(electricity_price=electricity_price)
         
         # Komponenten-Kosten (für alle Produkttypen außer assembly, wo sie bereits in material_cost enthalten sind)
         components_cost = 0.0
@@ -355,49 +400,65 @@ class Product(Base):
                 })
         
         # Arbeitskosten (labor_minutes ist in Minuten, daher / 60 für Stunden)
-        labor_hours = float(self.labor_minutes) / 60.0
-        labor_cost = labor_hours * float(self.labor_rate_per_hour)
+        labor_hours = float(self.labor_minutes or 0) / 60.0
+        labor_cost = labor_hours * float(self.labor_rate_per_hour or 20.0)
         labor_cost_batch = None
         
-        # Bei per_batch: Arbeitskosten auf Einheit umrechnen
-        if self.calculation_mode == 'per_batch' and self.units_per_batch > 0:
-            labor_cost_per_unit = labor_cost / self.units_per_batch
-            labor_cost_batch = labor_cost
-            labor_cost = labor_cost_per_unit
-        elif self.product_type in ['sticker', 'sticker_sheet', 'diecut_sticker', 'stationery', 'paper'] and self.calculation_mode == 'per_unit':
-            # Für Bogen-basierte Produkte: Arbeitskosten pro Bogen auf Einheit umrechnen
+        # Bei Stickern im per_unit Modus: Arbeitskosten pro Bogen auf Ausbeute pro Bogen aufteilen
+        if self.product_type in ['sticker', 'sticker_sheet', 'diecut_sticker', 'stationery', 'paper'] and (self.calculation_mode or 'per_unit') == 'per_unit':
             total_units = float(self.sheet_count or 1) * float(self.units_per_sheet or 1)
             if total_units > 0:
                 labor_cost = labor_cost / total_units
+        elif self.calculation_mode == 'per_batch' and (self.units_per_batch or 1) > 0:
+            labor_cost_per_unit = labor_cost / float(self.units_per_batch)
+            labor_cost_batch = labor_cost
+            labor_cost = labor_cost_per_unit
         
-        # Verpackung/Versand
-        packaging_cost = float(self.packaging_cost)
-        shipping_cost = float(self.shipping_cost)
+        # Produktions-EK (Reine Herstellkosten vor Verpackung)
+        production_cost = round(material_cost + machine_cost + labor_cost + components_cost, 2)
         
-        # Gesamtkosten (Einkaufspreis / Selbstkosten)
-        total_cost = material_cost + machine_cost + labor_cost + components_cost + packaging_cost + shipping_cost
+        # Produktverpackung (wird 1:1 durchgereicht, ohne Marge)
+        packaging_cost = round(float(self.packaging_cost or 0), 2)
+        shipping_cost = round(float(self.shipping_cost or 0), 2)  # Bleibt für Datenbestand erhalten
         
-        # Verkaufspreis (100% Aufschlag = doppelter EK)
-        selling_price = total_cost * 2.0
+        # Gesamtkosten (Einkaufspreis / Selbstkosten inkl. Produktverpackung)
+        total_cost = round(production_cost + packaging_cost, 2)
+        
+        # Richtwert-VK: (Produktions-EK × Marge) + Produktverpackung 1:1
+        multiplier = float(margin_multiplier) if margin_multiplier is not None else 2.0
+        recommended_selling_price = round((production_cost * multiplier) + packaging_cost, 2)
+        
+        # Endgültiger VK: Manueller selling_price falls eingetragen (> 0), ansonsten Richtwert-VK
+        if self.selling_price is not None and float(self.selling_price) > 0:
+            final_selling_price = float(self.selling_price)
+            has_custom_selling_price = True
+        else:
+            final_selling_price = recommended_selling_price
+            has_custom_selling_price = False
         
         result = {
             'material_cost': round(material_cost, 2),
             'machine_cost': round(machine_cost, 2),
-            'machine_cost_per_hour': round(self.get_machine_cost_per_hour(), 3),
+            'machine_cost_per_hour': round(self.get_machine_cost_per_hour(electricity_price=electricity_price), 3),
             'labor_cost': round(labor_cost, 2),
             'labor_hours': labor_hours,
-            'labor_minutes': float(self.labor_minutes),
+            'labor_minutes': float(self.labor_minutes or 0),
             'labor_cost_batch': round(labor_cost_batch, 2) if self.calculation_mode == 'per_batch' else None,
             'components_cost': round(components_cost, 2),
             'components': components_details,
             'components_count': len(components_details),
-            'packaging_cost': packaging_cost,
-            'shipping_cost': shipping_cost,
-            'packaging_shipping': round(packaging_cost + shipping_cost, 2),
+            'production_cost': round(production_cost, 2),
+            'packaging_cost': round(packaging_cost, 2),
+            'shipping_cost': round(shipping_cost, 2),
+            'packaging_shipping': round(packaging_cost, 2),
             'total_cost': round(total_cost, 2),
             'purchase_price': round(total_cost, 2),
-            'selling_price': round(selling_price, 2),
-            'calculation_mode': self.calculation_mode,
+            'recommended_selling_price': round(recommended_selling_price, 2),
+            'recommended_vk': round(recommended_selling_price, 2),
+            'selling_price': round(final_selling_price, 2),
+            'custom_selling_price': float(self.selling_price) if self.selling_price is not None else None,
+            'has_custom_selling_price': has_custom_selling_price,
+            'calculation_mode': self.calculation_mode or 'per_unit',
             'units_per_batch': self.units_per_batch if self.calculation_mode == 'per_batch' else None,
         }
         
@@ -699,4 +760,21 @@ class EventTodo(Base):
     
     def __repr__(self):
         return f"EventTodo({'[x]' if self.is_done else '[ ]'} {self.title})"
+
+
+class Config(Base):
+    """Konfigurations-Tabelle für globale Einstellungen (Key-Value Store)"""
+    __tablename__ = "config"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String(100), nullable=False, unique=True)  # z.B. 'electricity_price_kwh'
+    value = Column(Text, nullable=True)  # Der Wert als Text
+    description = Column(String(255), nullable=True)  # Beschreibung für UI
+    category = Column(String(50), default="general")  # 'general', 'pricing', etc.
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def __repr__(self):
+        return f"Config({self.key}={self.value[:30] if self.value else 'None'}...)"
 

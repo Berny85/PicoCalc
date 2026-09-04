@@ -404,10 +404,14 @@ Aktuell hat das Projekt keine automatisierten Tests. Testing erfolgt manuell:
 - Beispiel: Schlüsselanhänger = 3D-Druck Teil + Metall-Ring + Metall-Anhänger
 
 ### Preiskalkulation
-- **Einkaufspreis (EK)**: Summe aus Material + Maschine + Arbeit + Komponenten + Verpackung/Versand
-- **Verkaufspreis (VK)**: Automatisch 2× EK (100% Aufschlag)
-- Live-Kostenberechnung im Sticker-Formular
-- Detailansicht zeigt EK/VK prominent an
+- **Produktions-EK**: Summe aus Material + Maschine + Arbeit + Komponenten
+- **Produktverpackung**: 1:1 Durchreichung ohne Marge (z.B. Schutzhülle, Kartonversteifung)
+- **Gesamt-EK (Selbstkosten)**: Produktions-EK + Produktverpackung
+- **Richtwert-VK**: (Produktions-EK × Margenfaktor) + Produktverpackung (Standard 2× Marge)
+- **Verkaufspreis (VK)**: Entweder manuell gesetzter VK (`selling_price`) oder automatisch Richtwert-VK
+- **Einstellungen**: Strompreis (€/kWh), Standard-Stundensatz, Marge und Firmendaten unter `/settings` konfigurierbar
+- Live-Kostenberechnung in den 3D-Druck- und Sticker-Formularen
+- Detailansicht zeigt EK/VK, Aufschlüsselung und Maschinen prominent an
 
 ## Database Migrations (Alembic)
 
@@ -545,12 +549,11 @@ docker-compose up -d    # Erstellt neu
    - Siehe Abschnitt "Database Migrations (Alembic)"
 
 3. **Cost Calculation Logic**: Die zentrale Business-Logik ist in `models.py`:
-   - `Machine.calculate_cost_per_hour()` - Inkludiert Abschreibung + Strom
-   - `Machine.calculate_cost_per_page()` - Für Tintenstrahl-Drucker
-   - `Product.calculate_costs()` - Aggregiert Material + Maschine + Arbeit + Komponenten + Verpackung/Versand
-   - Verkaufspreis (VK) = 2 × Einkaufspreis (EK) / Selbstkosten
+   - `Machine.calculate_cost_per_hour()` - Inkludiert Abschreibung + Strom (dynamischer Strompreis aus `Config` mit Fallback auf 0.22 €/kWh)
+   - `Machine.calculate_cost_per_page()` & `calculate_cost_per_sheet()` - Für Tintenstrahl-Drucker & Schneideplotter
+   - `Product.calculate_costs()` - Berechnet Produktions-EK (Material + Maschine + Arbeit + Komponenten) sowie 1:1 Produktverpackung, Richtwert-VK = (Produktions-EK × Marge) + Verpackung, und optionalen manuellen VK (`selling_price`)
 
-4. **Static Electricity Price**: `STROM_PREIS_KWH = 0.22` (€/kWh) ist hardcoded in models.py
+4. **Konfigurierbare Einstellungen**: Strompreis (€/kWh), Standard-Stundensatz, Marge und Firmendaten werden in der Tabelle `config` gespeichert und über `/settings` gepflegt (Fallback: `STROM_PREIS_KWH = 0.22`).
 
 5. **Template Inheritance**: Alle Templates erben von `base.html` welches HTMX und gemeinsames Styling inkludiert
 

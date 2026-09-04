@@ -18,7 +18,7 @@ from models import Base
 IGNORED_TABLES = {
     'feedback', 'ideas', 'converted_files', 'product_images',
     'sales_orders', 'sales_order_items', 'articles', 'article_categories',
-    'article_components', 'customers', 'invoices', 'invoice_items', 'config'
+    'article_components', 'customers', 'invoices', 'invoice_items'
 }
 
 def include_object(object, name, type_, reflected, compare_to):

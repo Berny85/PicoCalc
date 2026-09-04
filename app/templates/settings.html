@@ -1,0 +1,76 @@
+﻿{% extends "base.html" %}
+
+{% block title %}Einstellungen - Picobellu Kalkulator{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2>⚙️ Globale Einstellungen</h2>
+    </div>
+
+    {% if success %}
+    <div class="alert alert-success" style="background: #d4edda; color: #155724; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #28a745;">
+        ✅ Einstellungen wurden erfolgreich gespeichert!
+    </div>
+    {% endif %}
+
+    <form method="POST" action="/settings">
+        <h3 style="color: var(--color-primary-dark); margin-bottom: 15px;">⚡ Energie & Kalkulationsparameter</h3>
+        <div class="grid">
+            <div>
+                <div class="form-group">
+                    <label for="electricity_price_kwh">Strompreis (€ / kWh) *</label>
+                    <input type="number" id="electricity_price_kwh" name="electricity_price_kwh" 
+                           step="0.001" min="0" required
+                           value="{{ electricity_price_kwh }}"
+                           placeholder="0.22">
+                    <small style="color: var(--color-text-light);">
+                        Wird direkt für alle 3D-Drucker und zeitbasierten Maschinenberechnungen verwendet.
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label for="labor_rate_per_hour">Standard-Stundensatz Arbeit (€ / h) *</label>
+                    <input type="number" id="labor_rate_per_hour" name="labor_rate_per_hour" 
+                           step="0.01" min="0" required
+                           value="{{ labor_rate_per_hour }}"
+                           placeholder="20.00">
+                    <small style="color: var(--color-text-light);">
+                        Standard-Vorauswahl für die Arbeitszeit bei neuen Produkten.
+                    </small>
+                </div>
+            </div>
+
+            <div>
+                <div class="form-group">
+                    <label for="margin_multiplier">Standard-Marge (Aufschlagsfaktor) *</label>
+                    <input type="number" id="margin_multiplier" name="margin_multiplier" 
+                           step="0.05" min="1.0" required
+                           value="{{ margin_multiplier }}"
+                           placeholder="2.0">
+                    <small style="color: var(--color-text-light);">
+                        Faktor für den Richtwert-VK auf den Produktions-EK (z. B. 2.0 = 100% Aufschlag). Verpackung wird danach 1:1 addiert.
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label for="company_name">Shop- / Unternehmensname</label>
+                    <input type="text" id="company_name" name="company_name" 
+                           value="{{ company_name }}"
+                           placeholder="Picobellu Design">
+                    <small style="color: var(--color-text-light);">
+                        Name für Anzeigen und Auswertungen.
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <div class="actions" style="margin-top: 30px;">
+            <button type="submit" class="btn btn-primary" style="padding: 10px 24px; font-weight: bold;">
+                💾 Einstellungen speichern
+            </button>
+            <a href="/" class="btn btn-secondary">Zurück zum Dashboard</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

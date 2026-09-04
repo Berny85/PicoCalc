@@ -43,7 +43,11 @@
             </div>
         </div>
         
-        <h3 style="margin-top: 30px; color: var(--color-primary-dark);">Kosten-Parameter</h3>
+        <!-- 1. DETAIL-RECHNUNG (Grundkosten der Maschine) -->
+        <h3 style="margin-top: 30px; color: var(--color-primary-dark);">1. Detail-Rechnung (Grundkosten der Maschine)</h3>
+        <p style="color: var(--color-text-light); margin-bottom: 15px; font-size: 0.9rem;">
+            Hier erfasst du die festen Gerätekosten. Daraus werden automatisch die Stromkosten und die zeitbasierte Geräteabschreibung berechnet.
+        </p>
         
         <!-- Zeitbasierte Felder (für 3D-Drucker, Cutter, etc.) -->
         <div id="time-based-fields" class="grid">
@@ -69,7 +73,7 @@
                     <input type="number" id="power_kw" name="power_kw" 
                            step="0.001" min="0"
                            value="{{ machine.power_kw if machine else '0,1' }}">
-                    <small style="color: var(--color-text-light);">z.B. 0,1 für 100W</small>
+                    <small style="color: var(--color-text-light);">z.B. 0,1 für 100W (Strompreis aktuell: {{ "%.2f"|format(STROM_PREIS_KWH) }} €/kWh)</small>
                 </div>
                 
                 <div class="form-group">
@@ -79,9 +83,10 @@
                         {% if machine %}
                         {% set power_kw_float = machine.power_kw | float %}
                         {% set depreciation_float = machine.depreciation_euro | float %}
-                        {% set lifespan_float = machine.lifespan_hours | float %}
+                        {% set lifespan_float = (machine.lifespan_hours | float) if (machine.lifespan_hours and (machine.lifespan_hours | float) > 0) else 1.0 %}
+                        {% set current_strompreis = STROM_PREIS_KWH if STROM_PREIS_KWH is defined else 0.22 %}
                         <small style="color: var(--color-text-light); display: block; margin-top: 5px;">
-                            (Strom: {{ "%.3f"|format(STROM_PREIS_KWH * power_kw_float) }} €/h + Abschreibung: {{ "%.3f"|format(depreciation_float/lifespan_float) }} €/h)
+                            (Strom: {{ "%.3f"|format(current_strompreis * power_kw_float) }} €/h + Abschreibung: {{ "%.3f"|format(depreciation_float / lifespan_float) }} €/h)
                         </small>
                         {% endif %}
                     </div>
@@ -107,7 +112,7 @@
                     <input type="number" id="depreciation_per_page" name="depreciation_per_page" 
                            step="0.0001" min="0"
                            value="{{ machine.depreciation_per_page if machine and machine.depreciation_per_page else '' }}">
-                    <small style="color: var(--color-text-light);">Z.B. 0,05 für 5 Cent pro Seite</small>
+                    <small style="color: var(--color-text-light);">Z.B. 0,05 für 5 Cent pro Seite (inkl. Tinte & Druckkopf)</small>
                 </div>
                 
                 <div class="form-group">
@@ -119,29 +124,83 @@
             </div>
         </div>
         
-        <!-- Bogenbasierte Felder (für Plotter/Drucker bei Sticker-Produktion) -->
-        <div id="sheet-based-fields" class="grid" style="margin-top: 20px;">
-            <div>
-                <div class="form-group">
-                    <label for="cost_per_sheet">Kosten pro Bogen (€)</label>
-                    <input type="number" id="cost_per_sheet" name="cost_per_sheet" 
-                           step="0.0001" min="0"
-                           value="{{ machine.cost_per_sheet if machine and machine.cost_per_sheet else '' }}">
-                    <small style="color: var(--color-text-light);">Für Plotter/Drucker: Kosten pro bearbeitetem Bogen</small>
+        <!-- 2. BOGEN-KALKULATION & DECKUNGSPRÜFUNG (für Plotter & Sticker) -->
+        <div id="sheet-based-section" style="margin-top: 35px;">
+            <h3 style="color: var(--color-primary-dark);">2. Bogen-Kalkulation & Deckungsprüfung (für Sticker)</h3>
+            <p style="color: var(--color-text-light); margin-bottom: 15px; font-size: 0.9rem;">
+                In der Sticker-Produktion wird die Maschine pauschal pro Bogen abgerechnet. Unten legst du den Bogenpreis fest, der die Kosten aus der obigen Detail-Rechnung sowie Verschleißteile auffangen muss.
+            </p>
+
+            <!-- Detail-Herleitung pro Bogen (für Schneideplotter & Sonstiges) -->
+            <div id="plotter-detail-box" style="background: var(--color-bg-hover); border-radius: 8px; padding: 15px; margin-bottom: 20px; border-left: 4px solid var(--color-primary);">
+                <h4 style="margin-bottom: 10px; color: var(--color-primary-dark); font-size: 1rem;">📐 Herleitung der Mindestkosten pro Bogen</h4>
+                
+                <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 15px; align-items: start;">
+                    <div>
+                        <div class="form-group" style="margin-bottom: 10px;">
+                            <label for="plotter_time_minutes" style="font-size: 0.85rem;">Geschätzte Laufzeit pro Bogen (Minuten)</label>
+                            <input type="number" id="plotter_time_minutes" value="2.5" step="0.1" min="0.5" max="30" oninput="updateSheetCoverageCheck()" style="max-width: 150px;">
+                            <small style="color: var(--color-text-light); display: block; margin-top: 2px;">
+                                Standard: 2,5 Min. (typisch für A4 Stickerbögen)
+                            </small>
+                        </div>
+                        
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="wear_cost_estimate" style="font-size: 0.85rem;">Klingen- & Mattenverschleiß pro Bogen (€)</label>
+                            <input type="number" id="wear_cost_estimate" value="0.07" step="0.01" min="0" oninput="updateSheetCoverageCheck()" style="max-width: 150px;">
+                            <small style="color: var(--color-text-light); display: block; margin-top: 2px;">
+                                Richtwert: 0,06 € – 0,08 € (Klinge + Schneidematte)
+                            </small>
+                        </div>
+                    </div>
+                    
+                    <div style="background: white; border-radius: 6px; padding: 12px; border: 1px solid var(--color-border); font-size: 0.9rem;">
+                        <strong>Rechnerische Kosten pro Bogen:</strong>
+                        <div style="margin-top: 8px; line-height: 1.6;">
+                            • Reine Maschinenkosten (Strom + Abschreibung): <span id="detail-sheet-machine-cost" style="font-weight: 600;">0.0000 €</span><br>
+                            • Verschleißteile (Messer + Matte): <span id="detail-sheet-wear-cost" style="font-weight: 600;">0.0700 €</span><br>
+                            <div style="border-top: 1px dashed var(--color-border); margin-top: 6px; padding-top: 6px;">
+                                <strong>= Rechnerische Mindestkosten:</strong> <span id="detail-sheet-total-min" style="font-weight: bold; color: var(--color-primary-dark); font-size: 1.05rem;">0.0750 €</span> / Bogen
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
-            
-            <div>
-                <div class="form-group">
-                    <label>Berechnete Kosten pro Bogen</label>
-                    <div id="calculated-cost-sheet" style="padding: 10px; background: var(--color-bg-hover); border-radius: 4px;">
-                        <strong>{% if machine and machine.cost_per_sheet %}{{ "%.4f"|format(machine.calculate_cost_per_sheet()) }} €{% else %}- €{% endif %}</strong>
+
+            <!-- UNTERM STRICH: Feste Kosten pro Bogen -->
+            <div style="background: white; border: 2px solid var(--color-primary); border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-top: 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 10px;">
+                    <h4 style="margin: 0; color: var(--color-primary-dark); font-size: 1.1rem;">
+                        🏁 Unterm Strich: Feste Kosten pro Bogen (€)
+                    </h4>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="applyRecommendedSheetCost()" id="btn-apply-recommended">
+                        💡 Empfehlung übernehmen
+                    </button>
+                </div>
+                
+                <p style="color: var(--color-text-light); font-size: 0.85rem; margin-bottom: 15px;">
+                    Dieser Wert fließt 1:1 in die Produktpreiskalkulation (Stickersheets & DieCut) ein und wird dort durch die Ausbeute geteilt. <strong>Er sollte mindestens das Ergebnis der obigen Detail-Rechnung abdecken!</strong>
+                </p>
+
+                <div class="grid" style="grid-template-columns: 1fr 1.5fr; gap: 20px; align-items: center;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label for="cost_per_sheet" style="font-weight: bold; font-size: 0.95rem;">Kosten pro Bogen (€) *</label>
+                        <input type="number" id="cost_per_sheet" name="cost_per_sheet" 
+                               step="0.0001" min="0"
+                               placeholder="z.B. 0.10"
+                               value="{{ machine.cost_per_sheet if machine and machine.cost_per_sheet else '' }}"
+                               oninput="updateSheetCoverageCheck()" style="font-size: 1.15rem; font-weight: bold; color: var(--color-primary-dark);">
+                    </div>
+
+                    <!-- Live-Deckungs-Ampel -->
+                    <div id="sheet-coverage-status" style="padding: 12px 15px; border-radius: 6px; font-size: 0.9rem; line-height: 1.4; transition: all 0.3s ease;">
+                        <!-- Dynamischer Status via JS -->
                     </div>
                 </div>
             </div>
         </div>
         
-        <div class="actions">
+        <div class="actions" style="margin-top: 30px;">
             <button type="submit" class="btn btn-primary">
                 {% if machine %}Aktualisieren{% else %}Maschine speichern{% endif %}
             </button>
@@ -151,7 +210,7 @@
 </div>
 
 <script>
-const STROM_PREIS_KWH = {{ STROM_PREIS_KWH }};
+const STROM_PREIS_KWH = {{ STROM_PREIS_KWH if STROM_PREIS_KWH is defined else 0.22 }};
 const depreciationInput = document.getElementById('depreciation_euro');
 const lifespanInput = document.getElementById('lifespan_hours');
 const powerKwInput = document.getElementById('power_kw');
@@ -164,26 +223,40 @@ const costPerSheetInput = document.getElementById('cost_per_sheet');
 
 function updateFormFields() {
     const selectedType = machineTypeSelect.value;
+    const sheetSection = document.getElementById('sheet-based-section');
+    const plotterDetailBox = document.getElementById('plotter-detail-box');
     
     if (selectedType === 'inkjet_printer') {
-        // Zeige seitenbasierte Felder, verstecke zeitbasierte
         timeBasedFields.style.display = 'none';
         pageBasedFields.style.display = 'grid';
+        if (sheetSection) sheetSection.style.display = 'block';
+        if (plotterDetailBox) plotterDetailBox.style.display = 'none';
         
-        // Mache zeitbasierte Felder optional
         depreciationInput.required = false;
         lifespanInput.required = false;
         powerKwInput.required = false;
-    } else {
-        // Zeige zeitbasierte Felder, verstecke seitenbasierte
+    } else if (selectedType === '3d_printer') {
         timeBasedFields.style.display = 'grid';
         pageBasedFields.style.display = 'none';
+        if (sheetSection) sheetSection.style.display = 'none';
         
-        // Mache zeitbasierte Felder required
+        depreciationInput.required = true;
+        lifespanInput.required = true;
+        powerKwInput.required = true;
+    } else { // cutter_plotter or other
+        timeBasedFields.style.display = 'grid';
+        pageBasedFields.style.display = 'none';
+        if (sheetSection) sheetSection.style.display = 'block';
+        if (plotterDetailBox) plotterDetailBox.style.display = 'block';
+        
         depreciationInput.required = true;
         lifespanInput.required = true;
         powerKwInput.required = true;
     }
+
+    updateCalculatedCostHourly();
+    updateCalculatedCostPerPage();
+    updateSheetCoverageCheck();
 }
 
 function updateCalculatedCostHourly() {
@@ -192,39 +265,131 @@ function updateCalculatedCostHourly() {
     const power = parseFloat(powerKwInput.value) || 0;
     
     const stromKosten = STROM_PREIS_KWH * power;
-    const abschreibung = depreciation / lifespan;
+    const abschreibung = depreciation / (lifespan > 0 ? lifespan : 1);
     const costPerHour = stromKosten + abschreibung;
     
     const costElement = document.getElementById('calculated-cost-hourly');
-    costElement.innerHTML = '<strong>' + costPerHour.toFixed(4) + ' €</strong>';
-    costElement.innerHTML += '<small style="color: var(--color-text-light); display: block; margin-top: 5px;">';
-    costElement.innerHTML += '(Strom: ' + stromKosten.toFixed(3) + ' €/h + Abschreibung: ' + abschreibung.toFixed(3) + ' €/h)';
-    costElement.innerHTML += '</small>';
+    if (costElement) {
+        costElement.innerHTML = '<strong>' + costPerHour.toFixed(4) + ' €/h</strong>';
+        costElement.innerHTML += '<small style="color: var(--color-text-light); display: block; margin-top: 5px;">';
+        costElement.innerHTML += '(Strom: ' + stromKosten.toFixed(3) + ' €/h + Abschreibung: ' + abschreibung.toFixed(3) + ' €/h)';
+        costElement.innerHTML += '</small>';
+    }
 }
 
 function updateCalculatedCostPerPage() {
     const costPerPage = parseFloat(depreciationPerPageInput.value) || 0;
-    
     const costElement = document.getElementById('calculated-cost-page');
-    costElement.innerHTML = '<strong>' + costPerPage.toFixed(4) + ' €</strong>';
+    if (costElement) {
+        costElement.innerHTML = '<strong>' + costPerPage.toFixed(4) + ' €</strong>';
+    }
 }
 
-function updateCalculatedCostPerSheet() {
+function updateSheetCoverageCheck() {
+    const selectedType = machineTypeSelect.value;
     const costPerSheet = parseFloat(costPerSheetInput.value) || 0;
-    
-    const costElement = document.getElementById('calculated-cost-sheet');
-    costElement.innerHTML = '<strong>' + costPerSheet.toFixed(4) + ' €</strong>';
+    const statusBox = document.getElementById('sheet-coverage-status');
+    if (!statusBox) return;
+
+    if (selectedType === 'inkjet_printer') {
+        const pageCost = parseFloat(depreciationPerPageInput.value) || 0;
+        if (!costPerSheetInput.value || costPerSheet <= 0) {
+            statusBox.style.background = 'var(--color-bg-hover)';
+            statusBox.style.border = '1px solid var(--color-border)';
+            statusBox.style.color = 'var(--color-text)';
+            statusBox.innerHTML = `ℹ️ <strong>Standard aktiv:</strong> Wenn dieses Feld frei bleibt, wird automatisch die berechnete Abschreibung pro Seite (<strong>${pageCost.toFixed(4)} €</strong>) als Bogenpreis verwendet.`;
+        } else if (costPerSheet < pageCost) {
+            statusBox.style.background = '#f8d7da';
+            statusBox.style.border = '1px solid #f5c6cb';
+            statusBox.style.color = '#721c24';
+            statusBox.innerHTML = `🔴 <strong>Achtung - Unterdeckt:</strong> Dein Bogenpreis (${costPerSheet.toFixed(4)} €) liegt unter den Druckkosten pro Seite (${pageCost.toFixed(4)} €)!`;
+        } else {
+            statusBox.style.background = '#d4edda';
+            statusBox.style.border = '1px solid #c3e6cb';
+            statusBox.style.color = '#155724';
+            statusBox.innerHTML = `🟢 <strong>Kostendeckend:</strong> Der Bogenpreis (${costPerSheet.toFixed(4)} €) deckt die Druckkosten (${pageCost.toFixed(4)} €) vollständig ab. (Puffer: <strong>+${(costPerSheet - pageCost).toFixed(4)} €/Bogen</strong>)`;
+        }
+        return;
+    }
+
+    // Für Schneideplotter & Sonstiges
+    const depreciation = parseFloat(depreciationInput.value) || 0;
+    const lifespan = parseFloat(lifespanInput.value) || 1;
+    const power = parseFloat(powerKwInput.value) || 0;
+    const stromKosten = STROM_PREIS_KWH * power;
+    const abschreibung = depreciation / (lifespan > 0 ? lifespan : 1);
+    const costPerHour = stromKosten + abschreibung;
+
+    const timeMinutes = parseFloat(document.getElementById('plotter_time_minutes')?.value) || 2.5;
+    const wearCost = parseFloat(document.getElementById('wear_cost_estimate')?.value) || 0.07;
+
+    const machineCostPerSheet = (costPerHour / 60) * timeMinutes;
+    const totalMinCost = machineCostPerSheet + wearCost;
+
+    const elMach = document.getElementById('detail-sheet-machine-cost');
+    if (elMach) elMach.textContent = machineCostPerSheet.toFixed(4) + ' €';
+
+    const elWear = document.getElementById('detail-sheet-wear-cost');
+    if (elWear) elWear.textContent = wearCost.toFixed(4) + ' €';
+
+    const elTotal = document.getElementById('detail-sheet-total-min');
+    if (elTotal) elTotal.textContent = totalMinCost.toFixed(4) + ' €';
+
+    if (!costPerSheetInput.value || costPerSheet <= 0) {
+        statusBox.style.background = 'var(--color-bg-hover)';
+        statusBox.style.border = '1px solid var(--color-border)';
+        statusBox.style.color = 'var(--color-text)';
+        statusBox.innerHTML = `ℹ️ <strong>Bogenpreis festlegen:</strong> Bitte trage den Preis pro Bogen ein. Empfohlener Mindestwert: <strong>${totalMinCost.toFixed(4)} €</strong> (z.B. 0,10 €).`;
+    } else if (costPerSheet < machineCostPerSheet) {
+        statusBox.style.background = '#f8d7da';
+        statusBox.style.border = '1px solid #f5c6cb';
+        statusBox.style.color = '#721c24';
+        statusBox.innerHTML = `🔴 <strong>Achtung - Stark unterdeckt:</strong> Der Bogenpreis (${costPerSheet.toFixed(4)} €) deckt nicht einmal die reinen Grundkosten für Strom & Abschreibung (${machineCostPerSheet.toFixed(4)} €) ab! Das Gerät arbeitet mit Verlust.`;
+    } else if (costPerSheet < totalMinCost) {
+        statusBox.style.background = '#fff3cd';
+        statusBox.style.border = '1px solid #ffeeba';
+        statusBox.style.color = '#856404';
+        const remainingWear = costPerSheet - machineCostPerSheet;
+        statusBox.innerHTML = `🟡 <strong>Verschleiß nicht voll gedeckt:</strong> Strom & Abschreibung (${machineCostPerSheet.toFixed(4)} €) sind gedeckt, aber für Klinge & Schneidematte verbleiben nur <strong>+${remainingWear.toFixed(4)} €</strong> (empfohlen: mindestens ${wearCost.toFixed(4)} €).`;
+    } else {
+        statusBox.style.background = '#d4edda';
+        statusBox.style.border = '1px solid #c3e6cb';
+        statusBox.style.color = '#155724';
+        const buffer = costPerSheet - totalMinCost;
+        statusBox.innerHTML = `🟢 <strong>Voll kostendeckend:</strong> Strom & Abschreibung (${machineCostPerSheet.toFixed(4)} €) sowie Klingen- & Schneidemattenverschleiß (${wearCost.toFixed(4)} €) sind sicher abgedeckt! (Puffer: <strong>+${buffer.toFixed(4)} €/Bogen</strong>)`;
+    }
+}
+
+function applyRecommendedSheetCost() {
+    const selectedType = machineTypeSelect.value;
+    if (selectedType === 'inkjet_printer') {
+        const pageCost = parseFloat(depreciationPerPageInput.value) || 0;
+        costPerSheetInput.value = pageCost.toFixed(4);
+    } else {
+        const depreciation = parseFloat(depreciationInput.value) || 0;
+        const lifespan = parseFloat(lifespanInput.value) || 1;
+        const power = parseFloat(powerKwInput.value) || 0;
+        const costPerHour = (STROM_PREIS_KWH * power) + (depreciation / (lifespan > 0 ? lifespan : 1));
+        const timeMinutes = parseFloat(document.getElementById('plotter_time_minutes')?.value) || 2.5;
+        const wearCost = parseFloat(document.getElementById('wear_cost_estimate')?.value) || 0.07;
+        const totalMinCost = ((costPerHour / 60) * timeMinutes) + wearCost;
+        
+        // Runde auf sinnvolle nächste 2 Dezimalstellen auf (mindestens 0.08 oder 0.10)
+        let rounded = Math.ceil(totalMinCost * 100) / 100;
+        if (rounded < 0.08) rounded = 0.08;
+        costPerSheetInput.value = rounded.toFixed(4);
+    }
+    updateSheetCoverageCheck();
 }
 
 // Event Listener
-depreciationInput.addEventListener('input', updateCalculatedCostHourly);
-lifespanInput.addEventListener('input', updateCalculatedCostHourly);
-powerKwInput.addEventListener('input', updateCalculatedCostHourly);
-depreciationPerPageInput.addEventListener('input', updateCalculatedCostPerPage);
-costPerSheetInput.addEventListener('input', updateCalculatedCostPerSheet);
+depreciationInput.addEventListener('input', () => { updateCalculatedCostHourly(); updateSheetCoverageCheck(); });
+lifespanInput.addEventListener('input', () => { updateCalculatedCostHourly(); updateSheetCoverageCheck(); });
+powerKwInput.addEventListener('input', () => { updateCalculatedCostHourly(); updateSheetCoverageCheck(); });
+depreciationPerPageInput.addEventListener('input', () => { updateCalculatedCostPerPage(); updateSheetCoverageCheck(); });
+costPerSheetInput.addEventListener('input', updateSheetCoverageCheck);
 
 // Initialisierung
 updateFormFields();
-updateCalculatedCostPerSheet();
 </script>
 {% endblock %}

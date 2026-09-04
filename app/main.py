@@ -7,7 +7,7 @@ from sqlalchemy.exc import OperationalError
 from database import engine, get_db, SessionLocal
 from models import (
     Base, Product, Material, MaterialType, Machine, ProductComponent,
-    FeedbackIdea, ConvertedFile, MarketEvent, EventItem, EventTodo, STROM_PREIS_KWH
+    FeedbackIdea, ConvertedFile, MarketEvent, EventItem, EventTodo, Config, STROM_PREIS_KWH
 )
 from datetime import datetime
 from pathlib import Path
@@ -23,6 +23,41 @@ def parse_decimal(value: str) -> float:
     if value is None or str(value).strip() == '':
         return 0.0
     return float(str(value).replace(',', '.'))
+
+
+def get_config_value(db: Session, key: str, default: str = None) -> str:
+    """Holt einen Konfigurationswert aus der DB oder gibt den Default zurück"""
+    cfg = db.query(Config).filter(Config.key == key).first()
+    if cfg and cfg.value is not None:
+        return cfg.value
+    return default
+
+
+def get_config_float(db: Session, key: str, default: float = 0.0) -> float:
+    """Holt einen Konfigurationswert als float"""
+    val = get_config_value(db, key, None)
+    if val is None:
+        return default
+    try:
+        return parse_decimal(val)
+    except (ValueError, TypeError):
+        return default
+
+
+def set_config_value(db: Session, key: str, value: str, description: str = None, category: str = "general"):
+    """Setzt oder aktualisiert einen Konfigurationswert"""
+    cfg = db.query(Config).filter(Config.key == key).first()
+    if not cfg:
+        cfg = Config(key=key, value=value, description=description, category=category)
+        db.add(cfg)
+    else:
+        cfg.value = value
+        if description:
+            cfg.description = description
+        if category:
+            cfg.category = category
+        cfg.updated_at = datetime.utcnow()
+    db.commit()
 
 
 def seed_material_types(db: Session):
@@ -466,11 +501,13 @@ async def list_machines(
 
 
 @app.get("/machines/new", response_class=HTMLResponse)
-async def new_machine_form(request: Request):
+async def new_machine_form(request: Request, db: Session = Depends(get_db)):
     """Formular für neue Maschine"""
+    electricity_price = get_config_float(db, "electricity_price_kwh", STROM_PREIS_KWH)
     return templates.TemplateResponse("machines/form.html", {
         "request": request,
         "machine": None,
+        "STROM_PREIS_KWH": electricity_price,
         "title": "Neue Maschine"
     })
 
@@ -514,9 +551,11 @@ async def edit_machine_form(machine_id: int, request: Request, db: Session = Dep
     if not machine:
         raise HTTPException(status_code=404, detail="Maschine nicht gefunden")
     
+    electricity_price = get_config_float(db, "electricity_price_kwh", STROM_PREIS_KWH)
     return templates.TemplateResponse("machines/form.html", {
         "request": request,
         "machine": machine,
+        "STROM_PREIS_KWH": electricity_price,
         "title": "Maschine bearbeiten"
     })
 
@@ -701,6 +740,8 @@ async def new_3d_print_form(request: Request, db: Session = Depends(get_db)):
     filaments = db.query(Material).filter(Material.material_type == "filament").order_by(Material.name).all()
     machines = db.query(Machine).filter(Machine.machine_type == "3d_printer").order_by(Machine.name).all()
     all_products = db.query(Product).order_by(Product.name).all()
+    default_labor_rate = get_config_value(db, "labor_rate_per_hour", "20.00")
+    margin_multiplier = get_config_float(db, "margin_multiplier", 2.0)
     
     return templates.TemplateResponse("products/form_3d_print.html", {
         "request": request,
@@ -709,6 +750,8 @@ async def new_3d_print_form(request: Request, db: Session = Depends(get_db)):
         "filaments": filaments,
         "machines": machines,
         "all_products": all_products,
+        "default_labor_rate": default_labor_rate,
+        "margin_multiplier": margin_multiplier,
         "title": "Neuer 3D-Druck"
     })
 
@@ -722,6 +765,7 @@ async def create_3d_print(
     filament_weight_g: str = Form(...),
     print_time_hours: str = Form("0"),
     machine_id: int = Form(...),
+    selling_price: str = Form(None),
     labor_minutes: str = Form("0"),
     labor_rate_per_hour: str = Form("20.00"),
     packaging_cost: str = Form("0"),
@@ -745,6 +789,7 @@ async def create_3d_print(
         filament_weight_g=parse_decimal(filament_weight_g),
         print_time_hours=parse_decimal(print_time_hours),
         machine_id=machine_id,
+        selling_price=parse_decimal(selling_price) if (selling_price and parse_decimal(selling_price) > 0) else None,
         labor_minutes=parse_decimal(labor_minutes),
         labor_rate_per_hour=parse_decimal(labor_rate_per_hour),
         packaging_cost=parse_decimal(packaging_cost),
@@ -795,7 +840,16 @@ async def new_sticker_form(request: Request, db: Session = Depends(get_db)):
     """Formular für neues Sticker Produkt"""
     materials = db.query(Material).order_by(Material.name).all()
     machines = db.query(Machine).order_by(Machine.name).all()
+    printers = db.query(Machine).filter(Machine.machine_type.in_(["inkjet_printer", "other"])).order_by(Machine.name).all()
+    cutters = db.query(Machine).filter(Machine.machine_type.in_(["cutter_plotter", "other"])).order_by(Machine.name).all()
     all_products = db.query(Product).order_by(Product.name).all()
+    default_labor_rate = get_config_value(db, "labor_rate_per_hour", "20.00")
+    margin_multiplier = get_config_float(db, "margin_multiplier", 2.0)
+    
+    default_printer = next((m for m in printers if m.machine_type == "inkjet_printer"), printers[0] if printers else None)
+    default_cutter = next((m for m in cutters if m.machine_type == "cutter_plotter"), cutters[0] if cutters else None)
+    selected_printer_id = default_printer.id if default_printer else None
+    selected_cutter_id = default_cutter.id if default_cutter else None
     
     return templates.TemplateResponse("products/form_sticker.html", {
         "request": request,
@@ -804,7 +858,14 @@ async def new_sticker_form(request: Request, db: Session = Depends(get_db)):
         "sticker_categories": STICKER_CATEGORIES,
         "materials": materials,
         "machines": machines,
+        "printers": printers,
+        "cutters": cutters,
+        "selected_printer_id": selected_printer_id,
+        "selected_cutter_id": selected_cutter_id,
+        "other_machine_ids": [],
         "all_products": all_products,
+        "default_labor_rate": default_labor_rate,
+        "margin_multiplier": margin_multiplier,
         "title": "Neues Sticker-Produkt"
     })
 
@@ -819,7 +880,10 @@ async def create_sticker(
     units_per_sheet: str = Form("3"),
     units_per_batch: str = Form("3"),
     calculation_mode: str = Form("per_unit"),
+    printer_machine_id: str = Form(None),
+    cutter_machine_id: str = Form(None),
     machine_ids: list[int] = Form([]),
+    selling_price: str = Form(None),
     labor_minutes: str = Form("0"),
     labor_rate_per_hour: str = Form("20.00"),
     packaging_cost: str = Form("0"),
@@ -834,21 +898,39 @@ async def create_sticker(
     component_linked_product_id: list[str] = Form([]),
     db: Session = Depends(get_db)
 ):
-    """Neues Sticker Produkt erstellen"""
-    primary_machine_id = machine_ids[0] if machine_ids else None
-    additional_ids = ",".join(str(mid) for mid in machine_ids[1:]) if len(machine_ids) > 1 else None
+    """Neues Sticker Produkt erstellen mit Multi-Maschine (Drucker + Plotter)"""
+    all_mids = []
+    if printer_machine_id and str(printer_machine_id).strip():
+        try:
+            all_mids.append(int(str(printer_machine_id).strip()))
+        except ValueError:
+            pass
+    if cutter_machine_id and str(cutter_machine_id).strip():
+        try:
+            cid = int(str(cutter_machine_id).strip())
+            if cid not in all_mids:
+                all_mids.append(cid)
+        except ValueError:
+            pass
+    for mid in machine_ids:
+        if mid not in all_mids:
+            all_mids.append(mid)
+    
+    primary_machine_id = all_mids[0] if all_mids else None
+    additional_ids = ",".join(str(mid) for mid in all_mids[1:]) if len(all_mids) > 1 else None
     
     product = Product(
         name=name,
         product_type="sticker",
         category=category,
         sheet_material_id=sheet_material_id,
-        sheet_count=parse_decimal(sheet_count) if sheet_count else 1,
-        units_per_sheet=parse_decimal(units_per_sheet) if calculation_mode == "per_unit" else 1,
+        sheet_count=parse_decimal(sheet_count) if sheet_count else 1.0,
+        units_per_sheet=parse_decimal(units_per_sheet) if calculation_mode == "per_unit" else 1.0,
         units_per_batch=int(units_per_batch) if calculation_mode == "per_batch" else 1,
         calculation_mode=calculation_mode,
         machine_id=primary_machine_id,
         additional_machine_ids=additional_ids,
+        selling_price=parse_decimal(selling_price) if (selling_price and parse_decimal(selling_price) > 0) else None,
         labor_minutes=parse_decimal(labor_minutes),
         labor_rate_per_hour=parse_decimal(labor_rate_per_hour),
         packaging_cost=parse_decimal(packaging_cost),
@@ -914,7 +996,7 @@ async def view_product(
     sticker_sheets = []
     if product.product_type == "3d_print":
         filaments = db.query(Material).filter(Material.material_type == "filament").order_by(Material.name).all()
-    elif product.product_type == "sticker":
+    elif product.product_type in ["sticker", "sticker_sheet", "diecut_sticker", "stationery", "paper"]:
         sticker_sheets = db.query(Material).filter(Material.material_type == "sticker_sheet").order_by(Material.name).all()
     
     return templates.TemplateResponse("products/detail.html", {
@@ -937,7 +1019,11 @@ async def edit_product_form(product_id: int, request: Request, db: Session = Dep
     
     all_materials = db.query(Material).order_by(Material.name).all()
     machines = db.query(Machine).order_by(Machine.name).all()
+    printers = db.query(Machine).filter(Machine.machine_type.in_(["inkjet_printer", "other"])).order_by(Machine.name).all()
+    cutters = db.query(Machine).filter(Machine.machine_type.in_(["cutter_plotter", "other"])).order_by(Machine.name).all()
     all_products = db.query(Product).filter(Product.id != product_id).order_by(Product.name).all()
+    default_labor_rate = get_config_value(db, "labor_rate_per_hour", "20.00")
+    margin_multiplier = get_config_float(db, "margin_multiplier", 2.0)
     
     if product.product_type == "3d_print":
         filaments = db.query(Material).filter(Material.material_type == "filament").order_by(Material.name).all()
@@ -949,10 +1035,44 @@ async def edit_product_form(product_id: int, request: Request, db: Session = Dep
             "filaments": filaments,
             "machines": machines,
             "all_products": all_products,
+            "default_labor_rate": default_labor_rate,
+            "margin_multiplier": margin_multiplier,
             "title": "Produkt bearbeiten"
         })
-    elif product.product_type == "sticker":
+    elif product.product_type in ["sticker", "sticker_sheet", "diecut_sticker", "stationery", "paper"]:
         template = "products/form_sticker.html"
+        
+        # Bestimme Drucker, Plotter und weitere Maschinen
+        current_mids = []
+        if product.machine_id:
+            current_mids.append(product.machine_id)
+        if product.additional_machine_ids:
+            for s in str(product.additional_machine_ids).split(","):
+                if s.strip().isdigit():
+                    current_mids.append(int(s.strip()))
+        
+        selected_printer_id = None
+        selected_cutter_id = None
+        other_machine_ids = []
+        
+        for mid in current_mids:
+            m = next((mach for mach in machines if mach.id == mid), None)
+            if m:
+                if m.machine_type == 'inkjet_printer' and selected_printer_id is None:
+                    selected_printer_id = m.id
+                elif m.machine_type == 'cutter_plotter' and selected_cutter_id is None:
+                    selected_cutter_id = m.id
+                elif 'druck' in m.name.lower() and selected_printer_id is None:
+                    selected_printer_id = m.id
+                elif ('plotter' in m.name.lower() or 'cutter' in m.name.lower()) and selected_cutter_id is None:
+                    selected_cutter_id = m.id
+                elif selected_printer_id is None:
+                    selected_printer_id = m.id
+                elif selected_cutter_id is None:
+                    selected_cutter_id = m.id
+                else:
+                    other_machine_ids.append(m.id)
+                    
         return templates.TemplateResponse(template, {
             "request": request,
             "product": product,
@@ -960,7 +1080,14 @@ async def edit_product_form(product_id: int, request: Request, db: Session = Dep
             "sticker_categories": STICKER_CATEGORIES,
             "materials": all_materials,
             "machines": machines,
+            "printers": printers,
+            "cutters": cutters,
+            "selected_printer_id": selected_printer_id,
+            "selected_cutter_id": selected_cutter_id,
+            "other_machine_ids": other_machine_ids,
             "all_products": all_products,
+            "default_labor_rate": default_labor_rate,
+            "margin_multiplier": margin_multiplier,
             "title": "Sticker-Produkt bearbeiten"
         })
     else:
@@ -973,6 +1100,8 @@ async def edit_product_form(product_id: int, request: Request, db: Session = Dep
             "filaments": all_materials,
             "machines": machines,
             "all_products": all_products,
+            "default_labor_rate": default_labor_rate,
+            "margin_multiplier": margin_multiplier,
             "title": "Produkt bearbeiten"
         })
 
@@ -993,9 +1122,12 @@ async def update_product(
     units_per_sheet: str = Form("1"),
     units_per_batch: str = Form("1"),
     calculation_mode: str = Form("per_unit"),
+    printer_machine_id: str = Form(None),
+    cutter_machine_id: str = Form(None),
     cut_time_hours: str = Form("0"),
     # Gemeinsame Felder
     machine_id: int = Form(None),
+    selling_price: str = Form(None),
     labor_minutes: str = Form("0"),
     labor_rate_per_hour: str = Form("20.00"),
     packaging_cost: str = Form("0"),
@@ -1028,20 +1160,39 @@ async def update_product(
         product.filament_weight_g = parse_decimal(filament_weight_g) if filament_weight_g else None
         product.print_time_hours = parse_decimal(print_time_hours)
         product.machine_id = machine_id
-    elif product.product_type == "sticker":
+    elif product.product_type in ["sticker", "sticker_sheet", "diecut_sticker", "stationery", "paper"]:
         product.sheet_material_id = sheet_material_id
-        product.sheet_count = parse_decimal(sheet_count) if sheet_count else 1
+        product.sheet_count = parse_decimal(sheet_count) if sheet_count else 1.0
         product.calculation_mode = calculation_mode
         if calculation_mode == "per_unit":
-            product.units_per_sheet = parse_decimal(units_per_sheet)
+            product.units_per_sheet = parse_decimal(units_per_sheet) if units_per_sheet else 1.0
             product.units_per_batch = 1
         else:
-            product.units_per_batch = int(units_per_batch)
-            product.units_per_sheet = 1
-        product.machine_id = machine_ids[0] if machine_ids else None
-        product.additional_machine_ids = ",".join(str(mid) for mid in machine_ids[1:]) if len(machine_ids) > 1 else None
+            product.units_per_batch = int(units_per_batch) if units_per_batch else 1
+            product.units_per_sheet = 1.0
+        
+        all_mids = []
+        if printer_machine_id and str(printer_machine_id).strip():
+            try:
+                all_mids.append(int(str(printer_machine_id).strip()))
+            except ValueError:
+                pass
+        if cutter_machine_id and str(cutter_machine_id).strip():
+            try:
+                cid = int(str(cutter_machine_id).strip())
+                if cid not in all_mids:
+                    all_mids.append(cid)
+            except ValueError:
+                pass
+        for mid in machine_ids:
+            if mid not in all_mids:
+                all_mids.append(mid)
+        
+        product.machine_id = all_mids[0] if all_mids else None
+        product.additional_machine_ids = ",".join(str(mid) for mid in all_mids[1:]) if len(all_mids) > 1 else None
     
     # Gemeinsame Felder
+    product.selling_price = parse_decimal(selling_price) if (selling_price and parse_decimal(selling_price) > 0) else None
     product.labor_minutes = parse_decimal(labor_minutes)
     product.labor_rate_per_hour = parse_decimal(labor_rate_per_hour)
     product.packaging_cost = parse_decimal(packaging_cost)
@@ -2077,3 +2228,48 @@ async def delete_converted_file(file_id: int, db: Session = Depends(get_db)):
     db.commit()
     
     return RedirectResponse(url="/tools/converted-files", status_code=303)
+
+
+# =============================================================================
+# EINSTELLUNGEN ROUTES
+# =============================================================================
+
+@app.get("/settings", response_class=HTMLResponse)
+async def view_settings(
+    request: Request,
+    success: str = "",
+    db: Session = Depends(get_db)
+):
+    """Globale Einstellungen anzeigen"""
+    electricity_price = get_config_value(db, "electricity_price_kwh", str(STROM_PREIS_KWH))
+    labor_rate = get_config_value(db, "labor_rate_per_hour", "20.00")
+    margin_multiplier = get_config_value(db, "margin_multiplier", "2.0")
+    company_name = get_config_value(db, "company_name", "Picobellu Design")
+    
+    return templates.TemplateResponse("settings.html", {
+        "request": request,
+        "electricity_price_kwh": electricity_price,
+        "labor_rate_per_hour": labor_rate,
+        "margin_multiplier": margin_multiplier,
+        "company_name": company_name,
+        "success": bool(success)
+    })
+
+
+@app.post("/settings")
+async def save_settings(
+    request: Request,
+    electricity_price_kwh: str = Form("0.22"),
+    labor_rate_per_hour: str = Form("20.00"),
+    margin_multiplier: str = Form("2.0"),
+    company_name: str = Form("Picobellu Design"),
+    db: Session = Depends(get_db)
+):
+    """Globale Einstellungen speichern"""
+    set_config_value(db, "electricity_price_kwh", electricity_price_kwh.replace(',', '.').strip(), "Strompreis in €/kWh", "pricing")
+    set_config_value(db, "labor_rate_per_hour", labor_rate_per_hour.replace(',', '.').strip(), "Standard-Stundensatz Arbeit in €/h", "pricing")
+    set_config_value(db, "margin_multiplier", margin_multiplier.replace(',', '.').strip(), "Standard-Marge (Aufschlagsfaktor)", "pricing")
+    set_config_value(db, "company_name", company_name.strip(), "Name des Unternehmens/Shops", "general")
+    
+    return RedirectResponse(url="/settings?success=1", status_code=303)
+
