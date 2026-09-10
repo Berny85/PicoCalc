@@ -364,8 +364,16 @@ class Product(Base):
         # Typ-spezifische Kosten
         if self.product_type == '3d_print':
             type_costs = self.calculate_3d_print_costs(electricity_price=electricity_price)
-            material_cost = type_costs['filament_cost']
-            machine_cost = type_costs['machine_cost']
+            if self.calculation_mode == 'per_batch' and (self.units_per_batch or 1) > 1:
+                batch_size = float(self.units_per_batch)
+                material_cost = type_costs['filament_cost'] / batch_size
+                machine_cost = type_costs['machine_cost'] / batch_size
+                type_costs['batch_filament_cost'] = type_costs['filament_cost']
+                type_costs['batch_machine_cost'] = type_costs['machine_cost']
+                type_costs['units_per_batch'] = int(batch_size)
+            else:
+                material_cost = type_costs['filament_cost']
+                machine_cost = type_costs['machine_cost']
         elif self.product_type in ['sticker', 'sticker_sheet', 'diecut_sticker', 'stationery', 'paper']:
             type_costs = self.calculate_sticker_costs(db_session=db_session)
             material_cost = type_costs['material_cost']

@@ -1,0 +1,607 @@
+{% extends "base.html" %}
+
+{% block title %}Neues Produkt kalkulieren - Picobellu Kalkulator{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; flex-wrap: wrap; gap: 15px;">
+    <div>
+        <h2>✨ Neues Produkt kalkulieren</h2>
+        <p style="color: var(--color-text-light); margin: 5px 0 0 0;">
+            Universelle Produktkalkulation nach dem Rezept- und Ausbeute-Prinzip
+        </p>
+    </div>
+    <div style="display: flex; gap: 10px; align-items: center;">
+        <a href="/products/classic-new" class="btn btn-secondary" style="font-size: 0.85rem; padding: 7px 12px;">
+            ⚙️ Klassische Typ-Auswahl
+        </a>
+        <a href="/products" class="btn btn-secondary">Abbrechen</a>
+        <button type="submit" form="universalProductForm" class="btn btn-primary" style="padding: 10px 20px; font-weight: bold;">
+            💾 Produkt speichern
+        </button>
+    </div>
+</div>
+
+<form id="universalProductForm" method="POST" action="/products/create-universal">
+    <div class="calc-layout">
+        <!-- LINKE SPALTE: REZEPT & EINGABEN -->
+        <div class="calc-inputs">
+            
+            <!-- 1. BASISDATEN -->
+            <div class="card" style="margin-bottom: 20px;">
+                <h3 style="color: var(--color-primary-dark); margin-bottom: 15px;">1. Basisdaten</h3>
+                <div class="grid">
+                    <div class="form-group" style="grid-column: span 2;">
+                        <label for="name">Produktname *</label>
+                        <input type="text" id="name" name="name" required placeholder="z.B. Dino Schlüsselanhänger, Stickerbogen Safari...">
+                    </div>
+                </div>
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="category">Kategorie</label>
+                        <select id="category" name="category">
+                            {% for cat in categories %}
+                            <option value="{{ cat }}">{{ cat }}</option>
+                            {% endfor %}
+                            <option value="Sonstiges" selected>Sonstiges</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="notes">Notizen / Beschreibung</label>
+                        <input type="text" id="notes" name="notes" placeholder="z.B. Druckparameter, Materialfarbe, Besonderheiten">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. MATERIALIEN -->
+            <div class="card" style="margin-bottom: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h3 style="color: var(--color-primary-dark); margin: 0;">2. Verwendete Materialien</h3>
+                    <button type="button" class="btn btn-secondary" style="font-size: 0.85rem; padding: 5px 12px;" onclick="addMaterialRow()">
+                        + Material hinzufügen
+                    </button>
+                </div>
+                <p style="color: var(--color-text-light); font-size: 0.85rem; margin-bottom: 15px;">
+                    Filamente, Papier, Stickerbögen oder Kleinteile für die gesamte Charge. Die Mengeneinheit passt sich automatisch an.
+                    <a href="/materials/new" target="_blank" style="margin-left: 8px;">Neues Material anlegen ↗</a>
+                </p>
+
+                <div id="materialsContainer">
+                    <!-- Dynamische Material-Zeilen -->
+                </div>
+            </div>
+
+            <!-- 3. MASCHINEN & FERTIGUNG -->
+            <div class="card" style="margin-bottom: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h3 style="color: var(--color-primary-dark); margin: 0;">3. Maschinen & Fertigung</h3>
+                    <button type="button" class="btn btn-secondary" style="font-size: 0.85rem; padding: 5px 12px;" onclick="addMachineRow()">
+                        + Maschine hinzufügen
+                    </button>
+                </div>
+                <p style="color: var(--color-text-light); font-size: 0.85rem; margin-bottom: 15px;">
+                    Genutzte Geräte (3D-Drucker mit Minuten/Stunden, Plotter oder Tintenstrahler mit Bögen). 
+                    Der Produkttyp wird hieraus automatisch abgeleitet.
+                    <a href="/machines" target="_blank" style="margin-left: 8px;">Maschinen verwalten ↗</a>
+                </p>
+
+                <div id="machinesContainer">
+                    <!-- Dynamische Maschinen-Zeilen -->
+                </div>
+            </div>
+
+            <!-- 4. ARBEITSZEIT -->
+            <div class="card" style="margin-bottom: 20px;">
+                <h3 style="color: var(--color-primary-dark); margin-bottom: 15px;">4. Arbeitszeit (Handarbeit)</h3>
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="labor_minutes">Arbeitszeit gesamt (Minuten)</label>
+                        <input type="number" id="labor_minutes" name="labor_minutes" value="0" min="0" step="1" oninput="calculateAll()">
+                        <small style="color: var(--color-text-light);">Vorbereitung, Stützen entfernen, Montage, Entgittern</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="labor_rate_per_hour">Stundensatz (€/h)</label>
+                        <input type="number" id="labor_rate_per_hour" name="labor_rate_per_hour" 
+                               value="{{ default_labor_rate or '20.00' }}" step="0.5" min="0" oninput="calculateAll()">
+                        <small style="color: var(--color-text-light);">Standardwert aus den Einstellungen</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 5. AUSBEUTE / CHARGENGRÖSSE -->
+            <div class="card" style="margin-bottom: 20px; border: 2px solid var(--color-primary); background: #faf8ff;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                    <span style="font-size: 1.3rem;">🎯</span>
+                    <h3 style="color: var(--color-primary-dark); margin: 0;">5. Ausbeute / Stückzahl der Charge</h3>
+                </div>
+                <p style="color: var(--color-text-light); font-size: 0.9rem; margin-bottom: 12px;">
+                    Wie viele fertige Verkaufseinheiten entstehen aus den oben eingegebenen Materialien, Maschinenzeiten und Arbeitsminuten?
+                </p>
+
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <div class="form-group" style="max-width: 200px; margin-bottom: 0;">
+                        <label for="batch_yield" style="font-weight: bold; font-size: 1rem;">Ausbeute (Stück) *</label>
+                        <input type="number" id="batch_yield" name="batch_yield" value="1" min="1" step="1" required 
+                               style="font-size: 1.3rem; font-weight: bold; text-align: center; color: var(--color-primary-dark);" oninput="calculateAll()">
+                    </div>
+                    <div style="flex: 1; background: white; padding: 10px 14px; border-radius: 6px; border: 1px solid #e0d5f5; font-size: 0.85rem; color: #555;">
+                        <strong>Beispiele:</strong><br>
+                        • <strong>1</strong> für 1 Unikat, Einzeldruck oder komplettes Set<br>
+                        • <strong>9</strong> für 9 DieCut-Sticker auf einem Bogen<br>
+                        • <strong>4</strong> für 4 gleiche Anhänger auf einer Druckplatte
+                    </div>
+                </div>
+            </div>
+
+            <!-- 6. VERPACKUNG & VERSAND (1:1) -->
+            <div class="card" style="margin-bottom: 20px;">
+                <h3 style="color: var(--color-primary-dark); margin-bottom: 15px;">6. Produktverpackung & Versand</h3>
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="packaging_cost">Produktverpackung (€/Stück)</label>
+                        <input type="number" id="packaging_cost" name="packaging_cost" value="0.00" min="0" step="0.01" oninput="calculateAll()">
+                        <small style="color: var(--color-text-light);">Wird <strong>1:1 ohne Marge</strong> durchgereicht (z.B. Schutzbeutel, Headercard, Karton)</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="shipping_cost">Versandkosten (€/Stück)</label>
+                        <input type="number" id="shipping_cost" name="shipping_cost" value="0.00" min="0" step="0.01">
+                        <small style="color: var(--color-text-light);">Optional (nur Richtwert)</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 7. EVENT-VERFÜGBARKEIT -->
+            <div class="card" style="margin-bottom: 20px; background: var(--color-bg-hover);">
+                <label style="display: flex; align-items: center; gap: 12px; cursor: pointer; margin-bottom: 0;">
+                    <input type="checkbox" name="is_for_market" value="1" checked style="width: 20px; height: 20px;">
+                    <div>
+                        <strong>🎪 Für Flohmärkte & Events verfügbar</strong><br>
+                        <small style="color: var(--color-text-light);">Haken entfernen, wenn es sich um einen einmaligen Kundenauftrag oder Testkalkulation handelt.</small>
+                    </div>
+                </label>
+            </div>
+
+        </div>
+
+        <!-- RECHTE SPALTE: STICKY LIVE-KALKULATION -->
+        <div class="calc-sidebar">
+            <div class="card sticky-panel" style="border-top: 5px solid var(--color-primary);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--color-border); padding-bottom: 10px;">
+                    <h3 style="margin: 0; color: var(--color-primary-dark);">📊 Kalkulation</h3>
+                    <span id="detected_type_badge" style="font-size: 0.8rem; padding: 4px 10px; border-radius: 12px; font-weight: bold; background: #e8eaf6; color: #3f51b5;">
+                        🏷️ 3D-Druck
+                    </span>
+                    <input type="hidden" id="detected_product_type" name="detected_product_type" value="3d_print">
+                </div>
+
+                <!-- CHARGEN-SUMME -->
+                <div style="background: #fdfdfd; padding: 12px; border-radius: 6px; border: 1px solid #eee; margin-bottom: 15px;">
+                    <div style="font-size: 0.85rem; font-weight: bold; color: var(--color-text-light); margin-bottom: 8px; text-transform: uppercase;">
+                        Kosten der gesamten Charge
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 4px;">
+                        <span>Materialien:</span>
+                        <span id="sum_materials">0,00 €</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 4px;">
+                        <span>Maschinenkosten:</span>
+                        <span id="sum_machines">0,00 €</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 4px;">
+                        <span>Arbeitszeit:</span>
+                        <span id="sum_labor">0,00 €</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.95rem; font-weight: bold; border-top: 1px dashed #ccc; padding-top: 6px; margin-top: 6px;">
+                        <span>Chargen-Gesamtkosten:</span>
+                        <span id="sum_batch_total">0,00 €</span>
+                    </div>
+                </div>
+
+                <!-- STÜCK-KALKULATION -->
+                <div style="background: #fdfdfd; padding: 12px; border-radius: 6px; border: 1px solid #eee; margin-bottom: 15px;">
+                    <div style="font-size: 0.85rem; font-weight: bold; color: var(--color-text-light); margin-bottom: 8px; text-transform: uppercase;">
+                        Stück-Kalkulation
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 4px;">
+                        <span>÷ Ausbeute:</span>
+                        <span id="display_yield" style="font-weight: bold;">1 Stk.</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 4px;">
+                        <span>= Herstellkosten (Produktions-EK):</span>
+                        <span id="cost_per_unit">0,00 €</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 4px;">
+                        <span>+ Verpackung (1:1):</span>
+                        <span id="display_packaging">0,00 €</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 1.05rem; font-weight: bold; border-top: 2px solid var(--color-primary); padding-top: 8px; margin-top: 6px; color: #b71c1c;">
+                        <span>GESAMT-EK (Selbstkosten):</span>
+                        <span id="total_ek">0,00 €</span>
+                    </div>
+                </div>
+
+                <!-- VERKAUFSPREIS -->
+                <div style="margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <span style="font-size: 0.9rem; color: var(--color-text-light);">
+                            Richtwert-VK (Marge {{ margin_multiplier or 2.0 }}×):
+                        </span>
+                        <strong id="suggested_vk" style="font-size: 1.15rem; color: #2e7d32;">0,00 €</strong>
+                    </div>
+
+                    <button type="button" class="btn btn-secondary" style="width: 100%; margin-bottom: 15px; font-size: 0.9rem; padding: 8px;" onclick="applySuggestedPrice()">
+                        ⚡ Richtwert-VK übernehmen
+                    </button>
+
+                    <div class="form-group" style="margin-bottom: 10px;">
+                        <label for="selling_price" style="font-weight: bold;">Tatsächlicher Verkaufspreis (VK) *</label>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <input type="number" id="selling_price" name="selling_price" step="0.05" min="0" required
+                                   style="font-size: 1.3rem; font-weight: bold; text-align: right;" oninput="updateProfitPreview()">
+                            <span style="font-size: 1.2rem; font-weight: bold;">€</span>
+                        </div>
+                        <small style="color: var(--color-text-light);">Frei anpassbar oder per Button oben übernehmen</small>
+                    </div>
+
+                    <!-- GEWINN-VORSCHAU -->
+                    <div id="profitBox" style="padding: 12px; border-radius: 6px; background: #e8f5e9; border: 1px solid #c8e6c9;">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 4px;">
+                            <span>Gewinn pro Stück:</span>
+                            <strong id="profit_euro" style="color: #2e7d32;">0,00 €</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 0.9rem;">
+                            <span>Gewinnmarge:</span>
+                            <strong id="profit_percent" style="color: #2e7d32;">0 %</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" form="universalProductForm" class="btn btn-primary" style="width: 100%; padding: 12px; font-size: 1.1rem; font-weight: bold;">
+                    💾 Produkt speichern
+                </button>
+            </div>
+        </div>
+    </div>
+</form>
+
+<script>
+    // Daten aus Backend
+    const MATERIALS = {{ materials_json | safe }};
+    const MACHINES = {{ machines_json | safe }};
+    const MARGIN_MULTIPLIER = {{ margin_multiplier or 2.0 }};
+
+    let materialCounter = 0;
+    let machineCounter = 0;
+
+    // --- MATERIAL ZEILEN ---
+    function addMaterialRow(preselectedId = null, defaultAmount = '') {
+        const container = document.getElementById('materialsContainer');
+        const rowId = 'mat_row_' + (++materialCounter);
+
+        let options = '<option value="">-- Material auswählen --</option>';
+        MATERIALS.forEach(m => {
+            const isSel = preselectedId && preselectedId == m.id ? 'selected' : '';
+            const brandStr = m.brand ? ` [${m.brand}]` : '';
+            options += `<option value="${m.id}" data-unit="${m.unit}" data-price="${m.price_per_unit}" ${isSel}>
+                ${m.name}${brandStr} (${m.price_per_unit.toFixed(2)} €/${m.unit})
+            </option>`;
+        });
+
+        const row = document.createElement('div');
+        row.id = rowId;
+        row.className = 'calc-row';
+        row.style.cssText = 'display: grid; grid-template-columns: 2fr 1fr 80px 100px 36px; gap: 10px; margin-bottom: 10px; align-items: center;';
+        row.innerHTML = `
+            <div>
+                <select name="used_material_id" class="mat-select" style="width: 100%;" onchange="onMaterialSelected('${rowId}')">
+                    ${options}
+                </select>
+            </div>
+            <div>
+                <input type="number" name="used_material_amount" class="mat-amount" step="any" min="0" placeholder="Menge" value="${defaultAmount}" oninput="calculateAll()" style="width: 100%;">
+            </div>
+            <div>
+                <span class="mat-unit-badge" style="display: inline-block; width: 100%; text-align: center; padding: 6px 4px; background: #eee; border-radius: 4px; font-size: 0.85rem; font-weight: 500;">
+                    Einheit
+                </span>
+            </div>
+            <div style="text-align: right;">
+                <span class="mat-cost-display" style="font-weight: 600; font-size: 0.95rem; color: #444;">0,00 €</span>
+            </div>
+            <div>
+                <button type="button" class="btn btn-danger" onclick="removeRow('${rowId}')" style="padding: 4px 8px; font-size: 0.9rem; line-height: 1;">✕</button>
+            </div>
+        `;
+        container.appendChild(row);
+        if (preselectedId) {
+            onMaterialSelected(rowId);
+        }
+    }
+
+    function onMaterialSelected(rowId) {
+        const row = document.getElementById(rowId);
+        if (!row) return;
+        const select = row.querySelector('.mat-select');
+        const unitBadge = row.querySelector('.mat-unit-badge');
+        const opt = select.options[select.selectedIndex];
+
+        if (!opt || !opt.value) {
+            unitBadge.innerText = 'Einheit';
+            calculateAll();
+            return;
+        }
+
+        const dbUnit = opt.getAttribute('data-unit');
+        if (dbUnit === 'kg') {
+            unitBadge.innerText = 'Gramm';
+            unitBadge.title = 'Eingabe in Gramm (wird durch 1000 geteilt)';
+        } else if (dbUnit === 'sheet') {
+            unitBadge.innerText = 'Bogen';
+        } else if (dbUnit === 'piece') {
+            unitBadge.innerText = 'Stück';
+        } else if (dbUnit === 'm') {
+            unitBadge.innerText = 'Meter';
+        } else {
+            unitBadge.innerText = dbUnit;
+        }
+        calculateAll();
+    }
+
+    // --- MASCHINEN ZEILEN ---
+    function addMachineRow(preselectedId = null, defaultValue = '') {
+        const container = document.getElementById('machinesContainer');
+        const rowId = 'mac_row_' + (++machineCounter);
+
+        let options = '<option value="">-- Maschine auswählen --</option>';
+        MACHINES.forEach(m => {
+            const isSel = preselectedId && preselectedId == m.id ? 'selected' : '';
+            options += `<option value="${m.id}" data-type="${m.machine_type}" data-cost-hour="${m.cost_per_hour}" data-cost-sheet="${m.cost_per_sheet}" ${isSel}>
+                ${m.name} (${m.machine_type_label})
+            </option>`;
+        });
+
+        const row = document.createElement('div');
+        row.id = rowId;
+        row.className = 'calc-row';
+        row.style.cssText = 'display: grid; grid-template-columns: 2fr 1fr 80px 100px 36px; gap: 10px; margin-bottom: 10px; align-items: center;';
+        row.innerHTML = `
+            <div>
+                <select name="used_machine_id" class="mac-select" style="width: 100%;" onchange="onMachineSelected('${rowId}')">
+                    ${options}
+                </select>
+            </div>
+            <div>
+                <input type="number" name="used_machine_value" class="mac-value" step="any" min="0" placeholder="Dauer / Bögen" value="${defaultValue}" oninput="calculateAll()" style="width: 100%;">
+            </div>
+            <div>
+                <span class="mac-unit-badge" style="display: inline-block; width: 100%; text-align: center; padding: 6px 4px; background: #eee; border-radius: 4px; font-size: 0.85rem; font-weight: 500;">
+                    Minuten
+                </span>
+            </div>
+            <div style="text-align: right;">
+                <span class="mac-cost-display" style="font-weight: 600; font-size: 0.95rem; color: #444;">0,00 €</span>
+            </div>
+            <div>
+                <button type="button" class="btn btn-danger" onclick="removeRow('${rowId}')" style="padding: 4px 8px; font-size: 0.9rem; line-height: 1;">✕</button>
+            </div>
+        `;
+        container.appendChild(row);
+        if (preselectedId) {
+            onMachineSelected(rowId);
+        }
+    }
+
+    function onMachineSelected(rowId) {
+        const row = document.getElementById(rowId);
+        if (!row) return;
+        const select = row.querySelector('.mac-select');
+        const unitBadge = row.querySelector('.mac-unit-badge');
+        const opt = select.options[select.selectedIndex];
+
+        if (!opt || !opt.value) {
+            unitBadge.innerText = 'Minuten';
+            calculateAll();
+            return;
+        }
+
+        const macType = opt.getAttribute('data-type');
+        if (macType === '3d_printer' || macType === 'other') {
+            unitBadge.innerText = 'Minuten';
+            unitBadge.title = 'Fertigungsdauer in Minuten';
+        } else {
+            unitBadge.innerText = 'Bögen';
+            unitBadge.title = 'Anzahl Bögen oder Durchläufe';
+        }
+        calculateAll();
+    }
+
+    function removeRow(rowId) {
+        const el = document.getElementById(rowId);
+        if (el) el.remove();
+        calculateAll();
+    }
+
+    // --- KALKULATIONS-ENGINE ---
+    function calculateAll() {
+        // 1. Materialien summieren
+        let sumMaterials = 0;
+        document.querySelectorAll('#materialsContainer .calc-row').forEach(row => {
+            const select = row.querySelector('.mat-select');
+            const amountInput = row.querySelector('.mat-amount');
+            const costSpan = row.querySelector('.mat-cost-display');
+            const opt = select.options[select.selectedIndex];
+
+            let cost = 0;
+            if (opt && opt.value && amountInput.value) {
+                const amount = parseFloat(amountInput.value) || 0;
+                const price = parseFloat(opt.getAttribute('data-price')) || 0;
+                const dbUnit = opt.getAttribute('data-unit');
+
+                if (dbUnit === 'kg') {
+                    cost = (amount / 1000) * price; // Gramm zu kg
+                } else {
+                    cost = amount * price;
+                }
+            }
+            costSpan.innerText = cost.toFixed(2).replace('.', ',') + ' €';
+            sumMaterials += cost;
+        });
+
+        // 2. Maschinen summieren & Typ erkennen
+        let sumMachines = 0;
+        let has3dPrinter = false;
+        let hasStickerMachine = false;
+
+        document.querySelectorAll('#machinesContainer .calc-row').forEach(row => {
+            const select = row.querySelector('.mac-select');
+            const valInput = row.querySelector('.mac-value');
+            const costSpan = row.querySelector('.mac-cost-display');
+            const opt = select.options[select.selectedIndex];
+
+            let cost = 0;
+            if (opt && opt.value && valInput.value) {
+                const val = parseFloat(valInput.value) || 0;
+                const macType = opt.getAttribute('data-type');
+
+                if (macType === '3d_printer' || macType === 'other') {
+                    has3dPrinter = true;
+                    const costPerHour = parseFloat(opt.getAttribute('data-cost-hour')) || 0;
+                    cost = (val / 60) * costPerHour; // Minuten in Stunden
+                } else {
+                    hasStickerMachine = true;
+                    const costPerSheet = parseFloat(opt.getAttribute('data-cost-sheet')) || 0;
+                    cost = val * costPerSheet;
+                }
+            }
+            costSpan.innerText = cost.toFixed(2).replace('.', ',') + ' €';
+            sumMachines += cost;
+        });
+
+        // 3. Typ-Erkennung & Badge
+        const typeBadge = document.getElementById('detected_type_badge');
+        const typeHidden = document.getElementById('detected_product_type');
+        if (has3dPrinter && hasStickerMachine) {
+            typeBadge.innerText = '🏷️ Hybrid-Produkt';
+            typeBadge.style.background = '#fff3cd';
+            typeBadge.style.color = '#856404';
+            typeHidden.value = 'sticker';
+        } else if (hasStickerMachine) {
+            typeBadge.innerText = '🏷️ Sticker-Produkt';
+            typeBadge.style.background = '#e1f5fe';
+            typeBadge.style.color = '#0277bd';
+            typeHidden.value = 'sticker';
+        } else if (has3dPrinter) {
+            typeBadge.innerText = '🖨️ 3D-Druck';
+            typeBadge.style.background = '#e8eaf6';
+            typeBadge.style.color = '#3f51b5';
+            typeHidden.value = '3d_print';
+        } else {
+            typeBadge.innerText = '✂️ Handarbeit / Montage';
+            typeBadge.style.background = '#f5f5f5';
+            typeBadge.style.color = '#616161';
+            typeHidden.value = 'other';
+        }
+
+        // 4. Arbeitskosten
+        const laborMin = parseFloat(document.getElementById('labor_minutes').value) || 0;
+        const laborRate = parseFloat(document.getElementById('labor_rate_per_hour').value) || 0;
+        const sumLabor = (laborMin / 60) * laborRate;
+
+        // 5. Chargen-Kosten gesamt
+        const batchTotal = sumMaterials + sumMachines + sumLabor;
+
+        // 6. Ausbeute & Produktions-EK
+        const batchYield = Math.max(1, parseInt(document.getElementById('batch_yield').value) || 1);
+        const prodEkPerUnit = batchTotal / batchYield;
+
+        // 7. Verpackung 1:1
+        const packaging = parseFloat(document.getElementById('packaging_cost').value) || 0;
+        const totalEk = prodEkPerUnit + packaging;
+
+        // 8. Richtwert-VK (Marge × Produktions-EK + Verpackung)
+        const suggestedVk = (prodEkPerUnit * MARGIN_MULTIPLIER) + packaging;
+
+        // DOM Aktualisierungen
+        document.getElementById('sum_materials').innerText = sumMaterials.toFixed(2).replace('.', ',') + ' €';
+        document.getElementById('sum_machines').innerText = sumMachines.toFixed(2).replace('.', ',') + ' €';
+        document.getElementById('sum_labor').innerText = sumLabor.toFixed(2).replace('.', ',') + ' €';
+        document.getElementById('sum_batch_total').innerText = batchTotal.toFixed(2).replace('.', ',') + ' €';
+
+        document.getElementById('display_yield').innerText = batchYield + ' Stk.';
+        document.getElementById('cost_per_unit').innerText = prodEkPerUnit.toFixed(2).replace('.', ',') + ' €';
+        document.getElementById('display_packaging').innerText = packaging.toFixed(2).replace('.', ',') + ' €';
+        document.getElementById('total_ek').innerText = totalEk.toFixed(2).replace('.', ',') + ' €';
+        document.getElementById('suggested_vk').innerText = suggestedVk.toFixed(2).replace('.', ',') + ' €';
+
+        updateProfitPreview(totalEk);
+    }
+
+    function applySuggestedPrice() {
+        const text = document.getElementById('suggested_vk').innerText;
+        const val = parseFloat(text.replace(' €', '').replace(',', '.'));
+        if (!isNaN(val)) {
+            document.getElementById('selling_price').value = val.toFixed(2);
+            calculateAll();
+        }
+    }
+
+    function updateProfitPreview(currentEk = null) {
+        if (currentEk === null) {
+            const ekText = document.getElementById('total_ek').innerText;
+            currentEk = parseFloat(ekText.replace(' €', '').replace(',', '.')) || 0;
+        }
+        const vk = parseFloat(document.getElementById('selling_price').value) || 0;
+        const profit = vk - currentEk;
+        const marginPct = vk > 0 ? (profit / vk) * 100 : 0;
+
+        const profitBox = document.getElementById('profitBox');
+        const euroSpan = document.getElementById('profit_euro');
+        const pctSpan = document.getElementById('profit_percent');
+
+        euroSpan.innerText = profit.toFixed(2).replace('.', ',') + ' €';
+        pctSpan.innerText = marginPct.toFixed(1).replace('.', ',') + ' %';
+
+        if (profit >= 0) {
+            profitBox.style.background = '#e8f5e9';
+            profitBox.style.borderColor = '#c8e6c9';
+            euroSpan.style.color = '#2e7d32';
+            pctSpan.style.color = '#2e7d32';
+        } else {
+            profitBox.style.background = '#ffebee';
+            profitBox.style.borderColor = '#ffcdd2';
+            euroSpan.style.color = '#c62828';
+            pctSpan.style.color = '#c62828';
+        }
+    }
+
+    // Beim Laden: Je 1 Zeile initial anlegen
+    document.addEventListener('DOMContentLoaded', () => {
+        addMaterialRow();
+        addMachineRow();
+        calculateAll();
+    });
+</script>
+
+<style>
+.calc-layout {
+    display: grid;
+    grid-template-columns: 1fr 390px;
+    gap: 25px;
+    align-items: start;
+}
+@media (max-width: 960px) {
+    .calc-layout {
+        grid-template-columns: 1fr;
+    }
+}
+.sticky-panel {
+    position: sticky;
+    top: 20px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+}
+@media (max-width: 600px) {
+    .calc-row {
+        grid-template-columns: 1fr 1fr !important;
+    }
+}
+</style>
+{% endblock %}
