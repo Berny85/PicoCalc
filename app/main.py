@@ -158,6 +158,81 @@ STICKER_CATEGORIES = [
     ("DieCut", "DieCut-Sticker (einzeln geschnitten)"),
 ]
 
+# Standard-Maschinentypen (Fallback)
+DEFAULT_MACHINE_TYPES = [
+    ("3d_printer", "3D-Drucker"),
+    ("cutter_plotter", "Schneideplotter"),
+    ("inkjet_printer", "Tintenstrahl-Drucker"),
+    ("laser", "Laser / Gravierer"),
+    ("heat_press", "Transferpresse / Heißpresse"),
+    ("other", "Sonstiges")
+]
+
+KNOWN_MACHINE_TYPE_KEYS = {
+    "3d-drucker": "3d_printer",
+    "3d drucker": "3d_printer",
+    "3d_drucker": "3d_printer",
+    "3d_printer": "3d_printer",
+    "schneideplotter": "cutter_plotter",
+    "plotter": "cutter_plotter",
+    "cutter_plotter": "cutter_plotter",
+    "tintenstrahl-drucker": "inkjet_printer",
+    "tintenstrahldrucker": "inkjet_printer",
+    "tintenstrahl": "inkjet_printer",
+    "inkjet_printer": "inkjet_printer",
+    "laser": "laser",
+    "laser / gravierer": "laser",
+    "laser_gravierer": "laser",
+    "gravierer": "laser",
+    "transferpresse": "heat_press",
+    "transferpresse / heißpresse": "heat_press",
+    "transferpresse / heisspresse": "heat_press",
+    "heißpresse": "heat_press",
+    "heisspresse": "heat_press",
+    "heat_press": "heat_press",
+    "sonstiges": "other",
+    "other": "other"
+}
+
+def parse_machine_type_line(line: str) -> tuple[str, str]:
+    """Wandelt eine Textzeile in (key, label) für Maschinentypen um"""
+    line = line.strip()
+    if not line:
+        return "", ""
+    if ":" in line:
+        k, l = line.split(":", 1)
+        return k.strip(), l.strip()
+    if "|" in line:
+        k, l = line.split("|", 1)
+        return k.strip(), l.strip()
+    
+    label = line
+    lower = label.lower().strip()
+    if lower in KNOWN_MACHINE_TYPE_KEYS:
+        key = KNOWN_MACHINE_TYPE_KEYS[lower]
+    else:
+        import re
+        clean_key = label.lower().replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
+        clean_key = re.sub(r'[^a-z0-9_]', '_', clean_key).strip('_')
+        key = clean_key or "machine"
+    return key, label
+
+def get_machine_types(db: Session) -> list[tuple[str, str]]:
+    """Lädt konfigurierte Maschinentypen aus der Config-Tabelle oder gibt Standard-Fallback zurück"""
+    cfg_val = get_config_value(db, "machine_types", None)
+    if cfg_val:
+        types = []
+        seen_keys = set()
+        for line in cfg_val.replace("\r", "").split("\n"):
+            k, l = parse_machine_type_line(line)
+            if k and l and k not in seen_keys:
+                types.append((k, l))
+                seen_keys.add(k)
+        if types:
+            return types
+    return list(DEFAULT_MACHINE_TYPES)
+
+
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request, db: Session = Depends(get_db)):
@@ -507,9 +582,12 @@ async def list_machines(
         query = query.order_by(sort_col.asc())
     
     machines = query.all()
+    machine_types = get_machine_types(db)
+    machine_type_labels = {k: v for k, v in machine_types}
     return templates.TemplateResponse("machines/list.html", {
         "request": request,
         "machines": machines,
+        "machine_type_labels": machine_type_labels,
         "search": search,
         "sort_by": sort_by,
         "sort_order": sort_order
@@ -520,9 +598,11 @@ async def list_machines(
 async def new_machine_form(request: Request, db: Session = Depends(get_db)):
     """Formular für neue Maschine"""
     electricity_price = get_config_float(db, "electricity_price_kwh", STROM_PREIS_KWH)
+    machine_types = get_machine_types(db)
     return templates.TemplateResponse("machines/form.html", {
         "request": request,
         "machine": None,
+        "machine_types": machine_types,
         "STROM_PREIS_KWH": electricity_price,
         "title": "Neue Maschine"
     })
@@ -568,9 +648,11 @@ async def edit_machine_form(machine_id: int, request: Request, db: Session = Dep
         raise HTTPException(status_code=404, detail="Maschine nicht gefunden")
     
     electricity_price = get_config_float(db, "electricity_price_kwh", STROM_PREIS_KWH)
+    machine_types = get_machine_types(db)
     return templates.TemplateResponse("machines/form.html", {
         "request": request,
         "machine": machine,
+        "machine_types": machine_types,
         "STROM_PREIS_KWH": electricity_price,
         "title": "Maschine bearbeiten"
     })
@@ -759,12 +841,13 @@ async def new_product_universal_form(request: Request, db: Session = Depends(get
         for m in materials
     ]
     
+    machine_type_labels = {k: v for k, v in get_machine_types(db)}
     machines_data = [
         {
             "id": m.id,
             "name": m.name,
             "machine_type": m.machine_type,
-            "machine_type_label": "3D-Drucker" if m.machine_type == "3d_printer" else ("Plotter" if m.machine_type == "cutter_plotter" else ("Tintenstrahl" if m.machine_type == "inkjet_printer" else "Maschine")),
+            "machine_type_label": machine_type_labels.get(m.machine_type, m.machine_type),
             "cost_per_hour": round(m.calculate_cost_per_hour(electricity_price=electricity_price), 4),
             "cost_per_sheet": round(m.calculate_cost_per_sheet() or 0.0, 4)
         }
@@ -1252,12 +1335,14 @@ async def view_product(
     elif product.product_type in ["sticker", "sticker_sheet", "diecut_sticker", "stationery", "paper"]:
         sticker_sheets = db.query(Material).filter(Material.material_type == "sticker_sheet").order_by(Material.name).all()
     
+    machine_type_labels = {k: v for k, v in get_machine_types(db)}
     return templates.TemplateResponse("products/detail.html", {
         "request": request,
         "product": product,
         "calc": calculations,
         "filaments": filaments,
         "sticker_sheets": sticker_sheets,
+        "machine_type_labels": machine_type_labels,
         "success_msg": success,
         "error_msg": error
     })
@@ -2500,6 +2585,8 @@ async def view_settings(
     company_name = get_config_value(db, "company_name", "Picobellu Design")
     categories = get_categories(db)
     product_categories_text = "\n".join(categories)
+    machine_types = get_machine_types(db)
+    machine_types_text = "\n".join(label for _, label in machine_types)
     
     return templates.TemplateResponse("settings.html", {
         "request": request,
@@ -2508,6 +2595,7 @@ async def view_settings(
         "margin_multiplier": margin_multiplier,
         "company_name": company_name,
         "product_categories_text": product_categories_text,
+        "machine_types_text": machine_types_text,
         "success": bool(success)
     })
 
@@ -2520,6 +2608,7 @@ async def save_settings(
     margin_multiplier: str = Form("2.0"),
     company_name: str = Form("Picobellu Design"),
     product_categories: str = Form(""),
+    machine_types: str = Form(""),
     db: Session = Depends(get_db)
 ):
     """Globale Einstellungen speichern"""
@@ -2538,6 +2627,21 @@ async def save_settings(
     
     if cats:
         set_config_value(db, "product_categories", "\n".join(cats), "Konfigurierte Produktkategorien", "products")
+    
+    # Maschinentypen speichern (bereinigen)
+    mtypes_to_save = []
+    seen_keys = set()
+    for line in machine_types.replace("\r", "").split("\n"):
+        line_clean = line.strip()
+        if not line_clean:
+            continue
+        k, l = parse_machine_type_line(line_clean)
+        if k and l and k not in seen_keys:
+            mtypes_to_save.append(f"{k}: {l}")
+            seen_keys.add(k)
+    
+    if mtypes_to_save:
+        set_config_value(db, "machine_types", "\n".join(mtypes_to_save), "Konfigurierte Maschinentypen", "machines")
     
     return RedirectResponse(url="/settings?success=1", status_code=303)
 

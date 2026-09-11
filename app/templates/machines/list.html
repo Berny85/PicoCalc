@@ -60,10 +60,7 @@
             <tr>
                 <td><strong>{{ m.name }}</strong></td>
                 <td>
-                    {% if m.machine_type == '3d_printer' %}3D-Drucker
-                    {% elif m.machine_type == 'cutter_plotter' %}Schneideplotter
-                    {% elif m.machine_type == 'inkjet_printer' %}Tintenstrahl-Drucker
-                    {% else %}Sonstiges{% endif %}
+                    {{ machine_type_labels.get(m.machine_type, m.machine_type) }}
                 </td>
                 <td>{{ m.description or '-' }}</td>
                 

@@ -177,7 +177,7 @@
             {% if calc.machines_list and calc.machines_list|length > 0 %}
             {% for m in calc.machines_list %}
             <tr>
-                <td>{{ m.name }} ({{ m.machine_type }}):</td>
+                <td>{{ m.name }} ({{ machine_type_labels.get(m.machine_type, m.machine_type) if machine_type_labels is defined else m.machine_type }}):</td>
                 <td><strong><span class="streamer-mask">{{ "%.3f"|format(m.cost_per_sheet) }} €/Bogen</span></strong></td>
             </tr>
             {% endfor %}

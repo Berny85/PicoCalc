@@ -19,19 +19,20 @@
                 <div class="form-group">
                     <label for="machine_type">Typ *</label>
                     <select id="machine_type" name="machine_type" required onchange="updateFormFields()">
-                        <option value="3d_printer" {% if machine and machine.machine_type == '3d_printer' %}selected{% endif %}>
-                            3D-Drucker
+                        {% for key, label in machine_types %}
+                        <option value="{{ key }}" {% if machine and machine.machine_type == key %}selected{% endif %}>
+                            {{ label }}
                         </option>
-                        <option value="cutter_plotter" {% if machine and machine.machine_type == 'cutter_plotter' %}selected{% endif %}>
-                            Schneideplotter
+                        {% endfor %}
+                        {% if machine and machine.machine_type not in machine_types|map(attribute=0)|list %}
+                        <option value="{{ machine.machine_type }}" selected>
+                            {{ machine.machine_type }}
                         </option>
-                        <option value="inkjet_printer" {% if machine and machine.machine_type == 'inkjet_printer' %}selected{% endif %}>
-                            Tintenstrahl-Drucker
-                        </option>
-                        <option value="other" {% if machine and machine.machine_type == 'other' %}selected{% endif %}>
-                            Sonstiges
-                        </option>
+                        {% endif %}
                     </select>
+                    <small style="color: var(--color-text-light); display: block; margin-top: 4px;">
+                        Typen können in den <a href="/settings" target="_blank" style="color: var(--color-primary);">Einstellungen ⚙️</a> angepasst werden.
+                    </small>
                 </div>
             </div>
             

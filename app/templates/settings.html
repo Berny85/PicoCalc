@@ -76,6 +76,17 @@
             </small>
         </div>
 
+        <h3 style="color: var(--color-primary-dark); margin-top: 35px; margin-bottom: 15px;">🛠️ Maschinen-Typen</h3>
+        <div class="form-group" style="max-width: 600px;">
+            <label for="machine_types">Verfügbare Maschinen-Typen (einer pro Zeile)</label>
+            <textarea id="machine_types" name="machine_types" rows="7" 
+                      style="width: 100%; font-family: monospace; font-size: 0.95rem; padding: 10px; line-height: 1.5; border-radius: 4px; border: 1px solid var(--color-border);" 
+                      placeholder="3D-Drucker&#10;Schneideplotter&#10;Tintenstrahl-Drucker&#10;Laser / Gravierer&#10;Transferpresse / Heißpresse&#10;Sonstiges">{{ machine_types_text }}</textarea>
+            <small style="color: var(--color-text-light);">
+                Tragen Sie hier die Maschinen-Typen ein, die bei Maschinen im Dropdown zur Auswahl stehen sollen (ein Typ pro Zeile, z. B. <code>3D-Drucker</code>, <code>Schneideplotter</code>, <code>Laser</code>, <code>Transferpresse</code>).
+            </small>
+        </div>
+
         <div class="actions" style="margin-top: 30px;">
             <button type="submit" class="btn btn-primary" style="padding: 10px 24px; font-weight: bold;">
                 💾 Einstellungen speichern
