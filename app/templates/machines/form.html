@@ -17,7 +17,17 @@
                 </div>
                 
                 <div class="form-group">
-                    <label for="machine_type">Typ *</label>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                        <label for="machine_type" style="margin-bottom: 0;">Typ *</label>
+                        <div style="display: flex; gap: 6px;">
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleQuickAddType()" style="padding: 2px 8px; font-size: 0.78rem;" title="Neuen Typ direkt anlegen">
+                                ➕ Neuer Typ
+                            </button>
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="reloadMachineTypes()" style="padding: 2px 7px; font-size: 0.78rem;" title="Typenliste neu laden">
+                                🔄
+                            </button>
+                        </div>
+                    </div>
                     <select id="machine_type" name="machine_type" required onchange="updateFormFields()">
                         {% for key, label in machine_types %}
                         <option value="{{ key }}" {% if machine and machine.machine_type == key %}selected{% endif %}>
@@ -30,8 +40,20 @@
                         </option>
                         {% endif %}
                     </select>
+
+                    <!-- Inline Quick-Add Box -->
+                    <div id="quick-add-type-box" style="display: none; margin-top: 8px; padding: 10px; background: var(--color-bg-hover); border-radius: 6px; border: 1px solid var(--color-border);">
+                        <label style="font-size: 0.82rem; font-weight: 600; margin-bottom: 5px; display: block;">Neuen Maschinen-Typ anlegen:</label>
+                        <div style="display: flex; gap: 6px;">
+                            <input type="text" id="new-type-input" placeholder="z. B. Stickmaschine" style="flex: 1; padding: 5px 8px; font-size: 0.88rem;" onkeydown="if(event.key==='Enter'){event.preventDefault();quickAddMachineType();}">
+                            <button type="button" class="btn btn-primary btn-sm" onclick="quickAddMachineType()" style="padding: 5px 12px; font-size: 0.85rem;">Speichern</button>
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleQuickAddType(false)" style="padding: 5px 10px; font-size: 0.85rem;">✕</button>
+                        </div>
+                        <small id="quick-add-type-msg" style="display: none; margin-top: 4px; font-size: 0.8rem;"></small>
+                    </div>
+
                     <small style="color: var(--color-text-light); display: block; margin-top: 4px;">
-                        Typen können in den <a href="/settings" target="_blank" style="color: var(--color-primary);">Einstellungen ⚙️</a> angepasst werden.
+                        Typen können auch in den <a href="/settings" target="_blank" style="color: var(--color-primary);">Einstellungen ⚙️</a> verwaltet werden.
                     </small>
                 </div>
             </div>
@@ -389,6 +411,125 @@ lifespanInput.addEventListener('input', () => { updateCalculatedCostHourly(); up
 powerKwInput.addEventListener('input', () => { updateCalculatedCostHourly(); updateSheetCoverageCheck(); });
 depreciationPerPageInput.addEventListener('input', () => { updateCalculatedCostPerPage(); updateSheetCoverageCheck(); });
 costPerSheetInput.addEventListener('input', updateSheetCoverageCheck);
+
+// Quick-Add und Reload für Maschinentypen
+function toggleQuickAddType(show = null) {
+    const box = document.getElementById('quick-add-type-box');
+    const input = document.getElementById('new-type-input');
+    const msg = document.getElementById('quick-add-type-msg');
+    if (!box) return;
+    
+    const isVisible = box.style.display !== 'none';
+    const shouldShow = show !== null ? show : !isVisible;
+    
+    box.style.display = shouldShow ? 'block' : 'none';
+    if (msg) msg.style.display = 'none';
+    if (shouldShow && input) {
+        input.focus();
+    }
+}
+
+function showTypeStatus(text, color) {
+    const msg = document.getElementById('quick-add-type-msg');
+    if (!msg) return;
+    msg.textContent = text;
+    msg.style.color = color;
+    msg.style.display = 'block';
+}
+
+async function quickAddMachineType() {
+    const input = document.getElementById('new-type-input');
+    const name = input ? input.value.trim() : '';
+    if (!name) {
+        showTypeStatus('Bitte einen Namen eingeben.', 'var(--color-danger)');
+        return;
+    }
+
+    try {
+        const formData = new FormData();
+        formData.append('name', name);
+        const resp = await fetch('/api/machine-types/quick-add', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!resp.ok) {
+            const err = await resp.json();
+            throw new Error(err.detail || 'Fehler beim Speichern');
+        }
+
+        const data = await resp.json();
+        
+        // Dropdown aktualisieren und den neuen Typ auswählen
+        const select = document.getElementById('machine_type');
+        select.innerHTML = '';
+        data.machine_types.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t.key;
+            opt.textContent = t.label;
+            if (t.key === data.key) {
+                opt.selected = true;
+            }
+            select.appendChild(opt);
+        });
+
+        select.value = data.key;
+        updateFormFields();
+
+        // Input leeren und Box schließen
+        input.value = '';
+        toggleQuickAddType(false);
+    } catch (err) {
+        showTypeStatus(err.message, 'var(--color-danger)');
+    }
+}
+
+async function reloadMachineTypes(selectedKeyToSet = null, showNotification = true) {
+    const select = document.getElementById('machine_type');
+    const currentVal = selectedKeyToSet || select.value;
+    
+    try {
+        const resp = await fetch('/api/machine-types');
+        if (!resp.ok) return;
+        const types = await resp.json();
+        
+        const currentOptions = Array.from(select.options).map(o => o.value);
+        const newOptions = types.map(t => t.key);
+        const hasChanged = currentOptions.length !== newOptions.length || !newOptions.every((v, i) => v === currentOptions[i]);
+        
+        if (!hasChanged && !selectedKeyToSet) {
+            return;
+        }
+
+        select.innerHTML = '';
+        types.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t.key;
+            opt.textContent = t.label;
+            if (t.key === currentVal) {
+                opt.selected = true;
+            }
+            select.appendChild(opt);
+        });
+
+        if (selectedKeyToSet) {
+            select.value = selectedKeyToSet;
+        } else if (!types.some(t => t.key === currentVal) && types.length > 0) {
+            select.value = types[0].key;
+        } else {
+            select.value = currentVal;
+        }
+
+        updateFormFields();
+    } catch (e) {
+        console.error('Fehler beim Neuladen der Maschinentypen:', e);
+    }
+}
+
+// Wenn Benutzer aus dem Einstellungen-Tab zurückkehrt, Dropdown automatisch synchronisieren
+window.addEventListener('focus', () => {
+    reloadMachineTypes(null, false);
+});
 
 // Initialisierung
 updateFormFields();

@@ -233,6 +233,69 @@ def get_machine_types(db: Session) -> list[tuple[str, str]]:
     return list(DEFAULT_MACHINE_TYPES)
 
 
+# =============================================================================
+# API-ENDPOINTS FÜR DYNAMISCHE TYPEN & KATEGORIEN
+# =============================================================================
+
+@app.get("/api/machine-types")
+async def api_get_machine_types(db: Session = Depends(get_db)):
+    """Gibt alle konfigurierten Maschinentypen als JSON zurück"""
+    types = get_machine_types(db)
+    return [{"key": k, "label": l} for k, l in types]
+
+
+@app.post("/api/machine-types/quick-add")
+async def api_quick_add_machine_type(name: str = Form(...), db: Session = Depends(get_db)):
+    """Fügt einen neuen Maschinentyp schnell zur Konfiguration hinzu"""
+    name_clean = name.strip()
+    if not name_clean:
+        raise HTTPException(status_code=400, detail="Name darf nicht leer sein")
+    
+    k, l = parse_machine_type_line(name_clean)
+    if not k or not l:
+        raise HTTPException(status_code=400, detail="Ungültiger Maschinentyp")
+    
+    current_types = get_machine_types(db)
+    exists = any(curr_k == k for curr_k, _ in current_types)
+    if not exists:
+        saved_lines = [f"{curr_k}: {curr_l}" for curr_k, curr_l in current_types]
+        saved_lines.append(f"{k}: {l}")
+        set_config_value(db, "machine_types", "\n".join(saved_lines), "Konfigurierte Maschinentypen", "machines")
+        current_types.append((k, l))
+        
+    return {
+        "success": True,
+        "key": k,
+        "label": l,
+        "machine_types": [{"key": key, "label": label} for key, label in current_types]
+    }
+
+
+@app.get("/api/categories")
+async def api_get_categories(db: Session = Depends(get_db)):
+    """Gibt alle Produkt-Kategorien als JSON zurück"""
+    return get_categories(db)
+
+
+@app.post("/api/categories/quick-add")
+async def api_quick_add_category(name: str = Form(...), db: Session = Depends(get_db)):
+    """Fügt eine neue Produkt-Kategorie schnell hinzu"""
+    name_clean = name.strip()
+    if not name_clean:
+        raise HTTPException(status_code=400, detail="Name darf nicht leer sein")
+    
+    cats = get_categories(db)
+    if name_clean not in cats:
+        cats.append(name_clean)
+        set_config_value(db, "product_categories", "\n".join(cats), "Konfigurierte Produktkategorien", "products")
+        
+    return {
+        "success": True,
+        "category": name_clean,
+        "categories": cats
+    }
+
+
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request, db: Session = Depends(get_db)):
