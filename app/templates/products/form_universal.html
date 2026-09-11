@@ -40,10 +40,15 @@
                         <label for="category">Kategorie</label>
                         <select id="category" name="category">
                             {% for cat in categories %}
-                            <option value="{{ cat }}">{{ cat }}</option>
+                            <option value="{{ cat }}" {% if cat == 'Sonstiges' %}selected{% endif %}>{{ cat }}</option>
                             {% endfor %}
+                            {% if 'Sonstiges' not in categories and categories %}
                             <option value="Sonstiges" selected>Sonstiges</option>
+                            {% endif %}
                         </select>
+                        <small style="color: var(--color-text-light);">
+                            <a href="/settings" target="_blank">Kategorien verwalten ⚙️</a>
+                        </small>
                     </div>
                     <div class="form-group">
                         <label for="notes">Notizen / Beschreibung</label>

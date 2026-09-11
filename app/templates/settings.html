@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block title %}Einstellungen - Picobellu Kalkulator{% endblock %}
 
@@ -63,6 +63,17 @@
                     </small>
                 </div>
             </div>
+        </div>
+
+        <h3 style="color: var(--color-primary-dark); margin-top: 35px; margin-bottom: 15px;">📦 Produkt-Kategorien</h3>
+        <div class="form-group" style="max-width: 600px;">
+            <label for="product_categories">Verfügbare Kategorien (eine pro Zeile)</label>
+            <textarea id="product_categories" name="product_categories" rows="7" 
+                      style="width: 100%; font-family: monospace; font-size: 0.95rem; padding: 10px; line-height: 1.5; border-radius: 4px; border: 1px solid var(--color-border);" 
+                      placeholder="Dekoration&#10;Technik&#10;Ersatzteile&#10;Spielzeug&#10;Werkzeuge&#10;Sticker&#10;Papierprodukte&#10;Sonstiges">{{ product_categories_text }}</textarea>
+            <small style="color: var(--color-text-light);">
+                Tragen Sie hier die Kategorien ein, die bei neuen Produkten im Dropdown zur Auswahl stehen sollen (eine Kategorie pro Zeile).
+            </small>
         </div>
 
         <div class="actions" style="margin-top: 30px;">

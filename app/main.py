@@ -111,7 +111,7 @@ app.mount("/static", StaticFiles(directory="assets"), name="static")
 # Templates
 templates = Jinja2Templates(directory="templates")
 
-# Categories
+# Categories (Standard-Fallback)
 CATEGORIES = [
     "Dekoration",
     "Technik",
@@ -122,6 +122,21 @@ CATEGORIES = [
     "Papierprodukte",
     "Sonstiges"
 ]
+
+def get_categories(db: Session) -> list[str]:
+    """Lädt Produktkategorien aus der Config-Tabelle oder gibt Standard-Fallback zurück"""
+    cfg_val = get_config_value(db, "product_categories", None)
+    if cfg_val:
+        cats = []
+        for line in cfg_val.replace("\r", "").split("\n"):
+            for part in line.split(","):
+                part_clean = part.strip()
+                if part_clean and part_clean not in cats:
+                    cats.append(part_clean)
+        if cats:
+            return cats
+    return list(CATEGORIES)
+
 
 # Materialtypen werden jetzt aus der DB geladen
 def get_material_types(db: Session, only_active: bool = True):
@@ -758,7 +773,7 @@ async def new_product_universal_form(request: Request, db: Session = Depends(get
     
     return templates.TemplateResponse("products/form_universal.html", {
         "request": request,
-        "categories": CATEGORIES,
+        "categories": get_categories(db),
         "materials": materials,
         "machines": machines,
         "materials_json": json.dumps(materials_data),
@@ -984,7 +999,7 @@ async def new_3d_print_form(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse("products/form_3d_print.html", {
         "request": request,
         "product": None,
-        "categories": CATEGORIES,
+        "categories": get_categories(db),
         "filaments": filaments,
         "machines": machines,
         "all_products": all_products,
@@ -1092,7 +1107,7 @@ async def new_sticker_form(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse("products/form_sticker.html", {
         "request": request,
         "product": None,
-        "categories": CATEGORIES,
+        "categories": get_categories(db),
         "sticker_categories": STICKER_CATEGORIES,
         "materials": materials,
         "machines": machines,
@@ -1269,7 +1284,7 @@ async def edit_product_form(product_id: int, request: Request, db: Session = Dep
         return templates.TemplateResponse(template, {
             "request": request,
             "product": product,
-            "categories": CATEGORIES,
+            "categories": get_categories(db),
             "filaments": filaments,
             "machines": machines,
             "all_products": all_products,
@@ -1314,7 +1329,7 @@ async def edit_product_form(product_id: int, request: Request, db: Session = Dep
         return templates.TemplateResponse(template, {
             "request": request,
             "product": product,
-            "categories": CATEGORIES,
+            "categories": get_categories(db),
             "sticker_categories": STICKER_CATEGORIES,
             "materials": all_materials,
             "machines": machines,
@@ -1334,7 +1349,7 @@ async def edit_product_form(product_id: int, request: Request, db: Session = Dep
         return templates.TemplateResponse(template, {
             "request": request,
             "product": product,
-            "categories": CATEGORIES,
+            "categories": get_categories(db),
             "filaments": all_materials,
             "machines": machines,
             "all_products": all_products,
@@ -2483,6 +2498,8 @@ async def view_settings(
     labor_rate = get_config_value(db, "labor_rate_per_hour", "20.00")
     margin_multiplier = get_config_value(db, "margin_multiplier", "2.0")
     company_name = get_config_value(db, "company_name", "Picobellu Design")
+    categories = get_categories(db)
+    product_categories_text = "\n".join(categories)
     
     return templates.TemplateResponse("settings.html", {
         "request": request,
@@ -2490,6 +2507,7 @@ async def view_settings(
         "labor_rate_per_hour": labor_rate,
         "margin_multiplier": margin_multiplier,
         "company_name": company_name,
+        "product_categories_text": product_categories_text,
         "success": bool(success)
     })
 
@@ -2501,6 +2519,7 @@ async def save_settings(
     labor_rate_per_hour: str = Form("20.00"),
     margin_multiplier: str = Form("2.0"),
     company_name: str = Form("Picobellu Design"),
+    product_categories: str = Form(""),
     db: Session = Depends(get_db)
 ):
     """Globale Einstellungen speichern"""
@@ -2508,6 +2527,17 @@ async def save_settings(
     set_config_value(db, "labor_rate_per_hour", labor_rate_per_hour.replace(',', '.').strip(), "Standard-Stundensatz Arbeit in €/h", "pricing")
     set_config_value(db, "margin_multiplier", margin_multiplier.replace(',', '.').strip(), "Standard-Marge (Aufschlagsfaktor)", "pricing")
     set_config_value(db, "company_name", company_name.strip(), "Name des Unternehmens/Shops", "general")
+    
+    # Kategorien speichern (bereinigen)
+    cats = []
+    for line in product_categories.replace("\r", "").split("\n"):
+        for part in line.split(","):
+            part_clean = part.strip()
+            if part_clean and part_clean not in cats:
+                cats.append(part_clean)
+    
+    if cats:
+        set_config_value(db, "product_categories", "\n".join(cats), "Konfigurierte Produktkategorien", "products")
     
     return RedirectResponse(url="/settings?success=1", status_code=303)
 
