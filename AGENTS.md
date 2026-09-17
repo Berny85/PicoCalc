@@ -647,3 +647,8 @@ docker-compose up -d    # Erstellt neu
     - Orga- & Pack-Checkliste (Aufgaben, Standard-Packliste importieren, abhaken)
     - `GET /events/{id}/print` - DIN-A4 Druckansicht
 
+22. **Commit & Push Policy**:
+    - **WICHTIG**: Git `commit` und `push` werden **ausschließlich nach ausdrücklicher Aufforderung** durch den Benutzer ausgeführt.
+    - Codeänderungen werden lokal umgesetzt und getestet, aber niemals eigenmächtig committet oder gepusht.
+
+
