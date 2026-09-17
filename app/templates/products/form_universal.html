@@ -1,16 +1,25 @@
 {% extends "base.html" %}
 
-{% block title %}Neues Produkt kalkulieren - Picobellu Kalkulator{% endblock %}
+{% block title %}{% if product %}Produkt bearbeiten: {{ product.name }}{% else %}Neues Produkt kalkulieren{% endif %} - Picobellu Kalkulator{% endblock %}
 
 {% block content %}
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; flex-wrap: wrap; gap: 15px;">
     <div>
-        <h2>✨ Neues Produkt kalkulieren</h2>
+        <h2>{% if product %}✏️ Produkt bearbeiten: {{ product.name }}{% else %}✨ Neues Produkt kalkulieren{% endif %}</h2>
         <p style="color: var(--color-text-light); margin: 5px 0 0 0;">
-            Universelle Produktkalkulation nach dem Rezept- und Ausbeute-Prinzip
+            {% if product %}Produktdaten, Rezeptur und Ausbeute anpassen{% else %}Universelle Produktkalkulation nach dem Rezept- und Ausbeute-Prinzip{% endif %}
         </p>
     </div>
-    <div style="display: flex; gap: 10px; align-items: center;">
+    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        {% if product %}
+        <a href="/products/{{ product.id }}" class="btn btn-secondary">Abbrechen</a>
+        <button type="button" class="btn btn-danger" onclick="if(confirm('Möchtest du das Produkt \'{{ product.name }}\' wirklich unwiderruflich löschen?')) document.getElementById('deleteProductForm').submit();">
+            🗑️ Produkt löschen
+        </button>
+        <button type="submit" form="universalProductForm" class="btn btn-primary" style="padding: 10px 20px; font-weight: bold;">
+            💾 Änderungen speichern
+        </button>
+        {% else %}
         <a href="/products/classic-new" class="btn btn-secondary" style="font-size: 0.85rem; padding: 7px 12px;">
             ⚙️ Klassische Typ-Auswahl
         </a>
@@ -18,10 +27,15 @@
         <button type="submit" form="universalProductForm" class="btn btn-primary" style="padding: 10px 20px; font-weight: bold;">
             💾 Produkt speichern
         </button>
+        {% endif %}
     </div>
 </div>
 
-<form id="universalProductForm" method="POST" action="/products/create-universal">
+{% if product %}
+<form id="deleteProductForm" method="POST" action="/products/{{ product.id }}/delete" style="display: none;"></form>
+{% endif %}
+
+<form id="universalProductForm" method="POST" action="{% if product %}/products/{{ product.id }}/update{% else %}/products/create-universal{% endif %}">
     <div class="calc-layout">
         <!-- LINKE SPALTE: REZEPT & EINGABEN -->
         <div class="calc-inputs">
@@ -32,7 +46,8 @@
                 <div class="grid">
                     <div class="form-group" style="grid-column: span 2;">
                         <label for="name">Produktname *</label>
-                        <input type="text" id="name" name="name" required placeholder="z.B. Dino Schlüsselanhänger, Stickerbogen Safari...">
+                        <input type="text" id="name" name="name" required placeholder="z.B. Dino Schlüsselanhänger, Stickerbogen Safari..."
+                               value="{{ product.name if product else '' }}">
                     </div>
                 </div>
                 <div class="grid">
@@ -40,10 +55,10 @@
                         <label for="category">Kategorie</label>
                         <select id="category" name="category">
                             {% for cat in categories %}
-                            <option value="{{ cat }}" {% if cat == 'Sonstiges' %}selected{% endif %}>{{ cat }}</option>
+                            <option value="{{ cat }}" {% if product and product.category == cat %}selected{% elif not product and cat == 'Sonstiges' %}selected{% endif %}>{{ cat }}</option>
                             {% endfor %}
                             {% if 'Sonstiges' not in categories and categories %}
-                            <option value="Sonstiges" selected>Sonstiges</option>
+                            <option value="Sonstiges" {% if not product or product.category == 'Sonstiges' %}selected{% endif %}>Sonstiges</option>
                             {% endif %}
                         </select>
                         <small style="color: var(--color-text-light);">
@@ -52,7 +67,8 @@
                     </div>
                     <div class="form-group">
                         <label for="notes">Notizen / Beschreibung</label>
-                        <input type="text" id="notes" name="notes" placeholder="z.B. Druckparameter, Materialfarbe, Besonderheiten">
+                        <input type="text" id="notes" name="notes" placeholder="z.B. Druckparameter, Materialfarbe, Besonderheiten"
+                               value="{{ product.notes if product and product.notes else '' }}">
                     </div>
                 </div>
             </div>
@@ -100,13 +116,13 @@
                 <div class="grid">
                     <div class="form-group">
                         <label for="labor_minutes">Arbeitszeit gesamt (Minuten)</label>
-                        <input type="number" id="labor_minutes" name="labor_minutes" value="0" min="0" step="1" oninput="calculateAll()">
+                        <input type="number" id="labor_minutes" name="labor_minutes" value="{{ product.labor_minutes if product else 0 }}" min="0" step="1" oninput="calculateAll()">
                         <small style="color: var(--color-text-light);">Vorbereitung, Stützen entfernen, Montage, Entgittern</small>
                     </div>
                     <div class="form-group">
                         <label for="labor_rate_per_hour">Stundensatz (€/h)</label>
                         <input type="number" id="labor_rate_per_hour" name="labor_rate_per_hour" 
-                               value="{{ default_labor_rate or '20.00' }}" step="0.5" min="0" oninput="calculateAll()">
+                               value="{{ product.labor_rate_per_hour if product else (default_labor_rate or '20.00') }}" step="0.5" min="0" oninput="calculateAll()">
                         <small style="color: var(--color-text-light);">Standardwert aus den Einstellungen</small>
                     </div>
                 </div>
@@ -125,7 +141,7 @@
                 <div style="display: flex; align-items: center; gap: 15px;">
                     <div class="form-group" style="max-width: 200px; margin-bottom: 0;">
                         <label for="batch_yield" style="font-weight: bold; font-size: 1rem;">Ausbeute (Stück) *</label>
-                        <input type="number" id="batch_yield" name="batch_yield" value="1" min="1" step="1" required 
+                        <input type="number" id="batch_yield" name="batch_yield" value="{{ (product.units_per_batch or product.units_per_sheet or 1)|int if product else 1 }}" min="1" step="1" required 
                                style="font-size: 1.3rem; font-weight: bold; text-align: center; color: var(--color-primary-dark);" oninput="calculateAll()">
                     </div>
                     <div style="flex: 1; background: white; padding: 10px 14px; border-radius: 6px; border: 1px solid #e0d5f5; font-size: 0.85rem; color: #555;">
@@ -143,12 +159,12 @@
                 <div class="grid">
                     <div class="form-group">
                         <label for="packaging_cost">Produktverpackung (€/Stück)</label>
-                        <input type="number" id="packaging_cost" name="packaging_cost" value="0.00" min="0" step="0.01" oninput="calculateAll()">
+                        <input type="number" id="packaging_cost" name="packaging_cost" value="{{ '%.2f'|format(product.packaging_cost) if product and product.packaging_cost is not none else '0.00' }}" min="0" step="0.01" oninput="calculateAll()">
                         <small style="color: var(--color-text-light);">Wird <strong>1:1 ohne Marge</strong> durchgereicht (z.B. Schutzbeutel, Headercard, Karton)</small>
                     </div>
                     <div class="form-group">
                         <label for="shipping_cost">Versandkosten (€/Stück)</label>
-                        <input type="number" id="shipping_cost" name="shipping_cost" value="0.00" min="0" step="0.01">
+                        <input type="number" id="shipping_cost" name="shipping_cost" value="{{ '%.2f'|format(product.shipping_cost) if product and product.shipping_cost is not none else '0.00' }}" min="0" step="0.01">
                         <small style="color: var(--color-text-light);">Optional (nur Richtwert)</small>
                     </div>
                 </div>
@@ -157,7 +173,7 @@
             <!-- 7. EVENT-VERFÜGBARKEIT -->
             <div class="card" style="margin-bottom: 20px; background: var(--color-bg-hover);">
                 <label style="display: flex; align-items: center; gap: 12px; cursor: pointer; margin-bottom: 0;">
-                    <input type="checkbox" name="is_for_market" value="1" checked style="width: 20px; height: 20px;">
+                    <input type="checkbox" name="is_for_market" value="1" {% if not product or product.is_for_market == 1 %}checked{% endif %} style="width: 20px; height: 20px;">
                     <div>
                         <strong>🎪 Für Flohmärkte & Events verfügbar</strong><br>
                         <small style="color: var(--color-text-light);">Haken entfernen, wenn es sich um einen einmaligen Kundenauftrag oder Testkalkulation handelt.</small>
@@ -175,7 +191,7 @@
                     <span id="detected_type_badge" style="font-size: 0.8rem; padding: 4px 10px; border-radius: 12px; font-weight: bold; background: #e8eaf6; color: #3f51b5;">
                         🏷️ 3D-Druck
                     </span>
-                    <input type="hidden" id="detected_product_type" name="detected_product_type" value="3d_print">
+                    <input type="hidden" id="detected_product_type" name="detected_product_type" value="{{ product.product_type if product else '3d_print' }}">
                 </div>
 
                 <!-- CHARGEN-SUMME -->
@@ -241,6 +257,7 @@
                         <label for="selling_price" style="font-weight: bold;">Tatsächlicher Verkaufspreis (VK) *</label>
                         <div style="display: flex; align-items: center; gap: 8px;">
                             <input type="number" id="selling_price" name="selling_price" step="0.05" min="0" required
+                                   value="{{ '%.2f'|format(product.selling_price) if product and product.selling_price is not none else '' }}"
                                    style="font-size: 1.3rem; font-weight: bold; text-align: right;" oninput="updateProfitPreview()">
                             <span style="font-size: 1.2rem; font-weight: bold;">€</span>
                         </div>
@@ -261,7 +278,7 @@
                 </div>
 
                 <button type="submit" form="universalProductForm" class="btn btn-primary" style="width: 100%; padding: 12px; font-size: 1.1rem; font-weight: bold;">
-                    💾 Produkt speichern
+                    {% if product %}💾 Änderungen speichern{% else %}💾 Produkt speichern{% endif %}
                 </button>
             </div>
         </div>
@@ -273,9 +290,16 @@
     const MATERIALS = {{ materials_json | safe }};
     const MACHINES = {{ machines_json | safe }};
     const MARGIN_MULTIPLIER = {{ margin_multiplier or 2.0 }};
+    const INITIAL_MATERIALS = {{ initial_materials_json | safe if initial_materials_json else '[]' }};
+    const INITIAL_MACHINES = {{ initial_machines_json | safe if initial_machines_json else '[]' }};
 
     let materialCounter = 0;
     let machineCounter = 0;
+
+    function onAmountInput(input) {
+        input.dataset.userEdited = 'true';
+        calculateAll();
+    }
 
     // --- MATERIAL ZEILEN ---
     function addMaterialRow(preselectedId = null, defaultAmount = '') {
@@ -302,7 +326,7 @@
                 </select>
             </div>
             <div>
-                <input type="number" name="used_material_amount" class="mat-amount" step="any" min="0" placeholder="Menge" value="${defaultAmount}" oninput="calculateAll()" style="width: 100%;">
+                <input type="number" name="used_material_amount" class="mat-amount" step="any" min="0" placeholder="Menge" value="${defaultAmount !== '' && defaultAmount !== null && defaultAmount !== undefined ? defaultAmount : ''}" oninput="onAmountInput(this)" style="width: 100%;">
             </div>
             <div>
                 <span class="mat-unit-badge" style="display: inline-block; width: 100%; text-align: center; padding: 6px 4px; background: #eee; border-radius: 4px; font-size: 0.85rem; font-weight: 500;">
@@ -317,6 +341,10 @@
             </div>
         `;
         container.appendChild(row);
+        const amountInput = row.querySelector('.mat-amount');
+        if (defaultAmount !== '' && defaultAmount !== null && defaultAmount !== undefined) {
+            amountInput.dataset.userEdited = 'true';
+        }
         if (preselectedId) {
             onMaterialSelected(rowId);
         }
@@ -327,6 +355,7 @@
         if (!row) return;
         const select = row.querySelector('.mat-select');
         const unitBadge = row.querySelector('.mat-unit-badge');
+        const amountInput = row.querySelector('.mat-amount');
         const opt = select.options[select.selectedIndex];
 
         if (!opt || !opt.value) {
@@ -335,19 +364,38 @@
             return;
         }
 
-        const dbUnit = opt.getAttribute('data-unit');
+        const dbUnit = (opt.getAttribute('data-unit') || '').toLowerCase();
+        const isPiece = (dbUnit === 'piece' || dbUnit === 'stk' || dbUnit === 'stück' || dbUnit === 'stueck');
+        const isGram = (dbUnit === 'kg' || dbUnit === 'g' || dbUnit === 'gramm');
+
         if (dbUnit === 'kg') {
             unitBadge.innerText = 'Gramm';
             unitBadge.title = 'Eingabe in Gramm (wird durch 1000 geteilt)';
-        } else if (dbUnit === 'sheet') {
+        } else if (dbUnit === 'g' || dbUnit === 'gramm') {
+            unitBadge.innerText = 'Gramm';
+            unitBadge.title = 'Eingabe in Gramm';
+        } else if (dbUnit === 'sheet' || dbUnit === 'bogen') {
             unitBadge.innerText = 'Bogen';
-        } else if (dbUnit === 'piece') {
+        } else if (isPiece) {
             unitBadge.innerText = 'Stück';
-        } else if (dbUnit === 'm') {
+        } else if (dbUnit === 'm' || dbUnit === 'meter') {
             unitBadge.innerText = 'Meter';
         } else {
             unitBadge.innerText = dbUnit;
         }
+
+        // Mengen-Standardbelegung:
+        // Bei Stück immer standardmäßig 1 eintragen, bei Gramm leer lassen
+        if (isPiece) {
+            if (!amountInput.value || !amountInput.dataset.userEdited) {
+                amountInput.value = '1';
+            }
+        } else if (isGram) {
+            if (!amountInput.dataset.userEdited) {
+                amountInput.value = '';
+            }
+        }
+
         calculateAll();
     }
 
@@ -578,11 +626,30 @@
         }
     }
 
-    // Beim Laden: Je 1 Zeile initial anlegen
+    // Beim Laden: Vorhandene Zeilen oder je 1 leere Zeile anlegen
     document.addEventListener('DOMContentLoaded', () => {
-        addMaterialRow();
-        addMachineRow();
+        if (INITIAL_MATERIALS && INITIAL_MATERIALS.length > 0) {
+            INITIAL_MATERIALS.forEach(item => {
+                addMaterialRow(item.id, item.amount !== undefined && item.amount !== null ? item.amount : '');
+            });
+        } else {
+            addMaterialRow();
+        }
+
+        if (INITIAL_MACHINES && INITIAL_MACHINES.length > 0) {
+            INITIAL_MACHINES.forEach(item => {
+                addMachineRow(item.id, item.value !== undefined && item.value !== null ? item.value : '');
+            });
+        } else {
+            addMachineRow();
+        }
+
         calculateAll();
+
+        const sellingPriceInput = document.getElementById('selling_price');
+        if (sellingPriceInput && sellingPriceInput.value && parseFloat(sellingPriceInput.value) > 0) {
+            updateProfitPreview();
+        }
     });
 </script>
 

@@ -145,8 +145,12 @@
                     </td>
                     <td style="text-align: center;">
                         <div style="display: flex; gap: 5px; justify-content: center; flex-wrap: wrap;">
-                            <a href="/products/{{ item.product.id }}" class="btn btn-primary" style="padding: 5px 10px; font-size: 0.85rem;">👁️</a>
-                            <a href="/products/{{ item.product.id }}/edit" class="btn btn-secondary" style="padding: 5px 10px; font-size: 0.85rem;">✏️</a>
+                            <a href="/products/{{ item.product.id }}" class="btn btn-primary" style="padding: 5px 10px; font-size: 0.85rem;" title="Details ansehen">👁️</a>
+                            <a href="/products/{{ item.product.id }}/edit" class="btn btn-secondary" style="padding: 5px 10px; font-size: 0.85rem;" title="Bearbeiten">✏️</a>
+                            <form method="POST" action="/products/{{ item.product.id }}/delete" style="display: inline; margin: 0;"
+                                  onsubmit="return confirm('Möchtest du das Produkt \'{{ item.product.name }}\' wirklich löschen?');">
+                                <button type="submit" class="btn btn-danger" style="padding: 5px 10px; font-size: 0.85rem;" title="Produkt löschen">🗑️</button>
+                            </form>
                         </div>
                     </td>
                 </tr>

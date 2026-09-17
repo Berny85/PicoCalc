@@ -40,13 +40,31 @@
 </div>
 
 <script>
+const qtyInput = document.getElementById('quantity');
+qtyInput.addEventListener('input', function() {
+    this.dataset.userEdited = 'true';
+});
+
 document.getElementById('material_id').addEventListener('change', function() {
     const selectedOption = this.options[this.selectedIndex];
-    const unit = selectedOption.getAttribute('data-unit');
+    const unit = (selectedOption.getAttribute('data-unit') || '').toLowerCase();
+    const isPiece = (unit === 'piece' || unit === 'stk' || unit === 'stück' || unit === 'stueck');
+    const isGram = (unit === 'kg' || unit === 'g' || unit === 'gramm');
+
     if (unit) {
-        document.getElementById('unit-hint').textContent = 'Einheit: ' + unit;
+        document.getElementById('unit-hint').textContent = 'Einheit: ' + (isPiece ? 'Stück' : (isGram ? 'Gramm (bzw. kg)' : unit));
     } else {
         document.getElementById('unit-hint').textContent = 'Einheit wird nach Materialauswahl angezeigt';
+    }
+
+    if (isPiece) {
+        if (!qtyInput.value || !qtyInput.dataset.userEdited) {
+            qtyInput.value = '1';
+        }
+    } else if (isGram) {
+        if (!qtyInput.dataset.userEdited) {
+            qtyInput.value = '';
+        }
     }
 });
 </script>

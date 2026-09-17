@@ -1413,98 +1413,115 @@ async def view_product(
 
 @app.get("/products/{product_id}/edit", response_class=HTMLResponse)
 async def edit_product_form(product_id: int, request: Request, db: Session = Depends(get_db)):
-    """Produkt bearbeiten - typ-spezifisches Formular"""
+    """Produkt bearbeiten - Universelles Kalkulator-Formular"""
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Produkt nicht gefunden")
     
     all_materials = db.query(Material).order_by(Material.name).all()
     machines = db.query(Machine).order_by(Machine.name).all()
-    printers = db.query(Machine).filter(Machine.machine_type.in_(["inkjet_printer", "other"])).order_by(Machine.name).all()
-    cutters = db.query(Machine).filter(Machine.machine_type.in_(["cutter_plotter", "other"])).order_by(Machine.name).all()
-    all_products = db.query(Product).filter(Product.id != product_id).order_by(Product.name).all()
     default_labor_rate = get_config_value(db, "labor_rate_per_hour", "20.00")
     margin_multiplier = get_config_float(db, "margin_multiplier", 2.0)
+    electricity_price = get_config_float(db, "electricity_price_kwh", STROM_PREIS_KWH)
     
-    if product.product_type == "3d_print":
-        filaments = db.query(Material).filter(Material.material_type == "filament").order_by(Material.name).all()
-        template = "products/form_3d_print.html"
-        return templates.TemplateResponse(template, {
-            "request": request,
-            "product": product,
-            "categories": get_categories(db),
-            "filaments": filaments,
-            "machines": machines,
-            "all_products": all_products,
-            "default_labor_rate": default_labor_rate,
-            "margin_multiplier": margin_multiplier,
-            "title": "Produkt bearbeiten"
+    materials_data = [
+        {
+            "id": m.id,
+            "name": m.name,
+            "material_type": m.material_type,
+            "brand": m.brand or "",
+            "unit": m.unit,
+            "price_per_unit": float(m.price_per_unit)
+        }
+        for m in all_materials
+    ]
+    
+    machine_type_labels = {k: v for k, v in get_machine_types(db)}
+    machines_data = [
+        {
+            "id": m.id,
+            "name": m.name,
+            "machine_type": m.machine_type,
+            "machine_type_label": machine_type_labels.get(m.machine_type, m.machine_type),
+            "cost_per_hour": round(m.calculate_cost_per_hour(electricity_price=electricity_price), 4),
+            "cost_per_sheet": round(m.calculate_cost_per_sheet() or 0.0, 4)
+        }
+        for m in machines
+    ]
+
+    # Initial-Materialien für bestehendes Produkt zusammenstellen
+    initial_materials = []
+    yield_val = float(product.units_per_batch or product.units_per_sheet or 1)
+    if yield_val <= 0:
+        yield_val = 1.0
+
+    if product.filament_material_id:
+        amt = float(product.filament_weight_g or 0)
+        initial_materials.append({
+            "id": product.filament_material_id,
+            "amount": amt if amt > 0 else ""
         })
-    elif product.product_type in ["sticker", "sticker_sheet", "diecut_sticker", "stationery", "paper"]:
-        template = "products/form_sticker.html"
-        
-        # Bestimme Drucker, Plotter und weitere Maschinen
-        current_mids = []
-        if product.machine_id:
-            current_mids.append(product.machine_id)
-        if product.additional_machine_ids:
-            for s in str(product.additional_machine_ids).split(","):
-                if s.strip().isdigit():
-                    current_mids.append(int(s.strip()))
-        
-        selected_printer_id = None
-        selected_cutter_id = None
-        other_machine_ids = []
-        
-        for mid in current_mids:
-            m = next((mach for mach in machines if mach.id == mid), None)
-            if m:
-                if m.machine_type == 'inkjet_printer' and selected_printer_id is None:
-                    selected_printer_id = m.id
-                elif m.machine_type == 'cutter_plotter' and selected_cutter_id is None:
-                    selected_cutter_id = m.id
-                elif 'druck' in m.name.lower() and selected_printer_id is None:
-                    selected_printer_id = m.id
-                elif ('plotter' in m.name.lower() or 'cutter' in m.name.lower()) and selected_cutter_id is None:
-                    selected_cutter_id = m.id
-                elif selected_printer_id is None:
-                    selected_printer_id = m.id
-                elif selected_cutter_id is None:
-                    selected_cutter_id = m.id
-                else:
-                    other_machine_ids.append(m.id)
-                    
-        return templates.TemplateResponse(template, {
-            "request": request,
-            "product": product,
-            "categories": get_categories(db),
-            "sticker_categories": STICKER_CATEGORIES,
-            "materials": all_materials,
-            "machines": machines,
-            "printers": printers,
-            "cutters": cutters,
-            "selected_printer_id": selected_printer_id,
-            "selected_cutter_id": selected_cutter_id,
-            "other_machine_ids": other_machine_ids,
-            "all_products": all_products,
-            "default_labor_rate": default_labor_rate,
-            "margin_multiplier": margin_multiplier,
-            "title": "Sticker-Produkt bearbeiten"
+    elif product.sheet_material_id:
+        amt = float(product.sheet_count or 1)
+        initial_materials.append({
+            "id": product.sheet_material_id,
+            "amount": amt if amt > 0 else ""
         })
-    else:
-        # Fallback für alte Produkttypen
-        template = "products/form_3d_print.html"
-        return templates.TemplateResponse(template, {
-            "request": request,
-            "product": product,
-            "categories": get_categories(db),
-            "filaments": all_materials,
-            "machines": machines,
-            "all_products": all_products,
-            "default_labor_rate": default_labor_rate,
-            "margin_multiplier": margin_multiplier,
-            "title": "Produkt bearbeiten"
-        })
+
+    # Komponenten prüfen
+    for comp in product.components:
+        matching_mat = next((m for m in all_materials if m.name.strip().lower() == comp.name.strip().lower()), None)
+        if matching_mat:
+            amt = round(float(comp.quantity) * yield_val, 2)
+            initial_materials.append({
+                "id": matching_mat.id,
+                "amount": amt if amt > 0 else ""
+            })
+
+    # Initial-Maschinen für bestehendes Produkt zusammenstellen
+    initial_machines = []
+    if product.machine_id:
+        primary_mach = next((m for m in machines if m.id == product.machine_id), None)
+        if primary_mach:
+            if primary_mach.machine_type in ["3d_printer", "other"]:
+                val = round(float(product.print_time_hours or 0) * 60)
+            else:
+                val = float(product.sheet_count or 1)
+            initial_machines.append({
+                "id": product.machine_id,
+                "value": val if val > 0 else ""
+            })
+
+    if product.additional_machine_ids:
+        for mid_str in str(product.additional_machine_ids).split(","):
+            mid_str = mid_str.strip()
+            if mid_str.isdigit():
+                mid = int(mid_str)
+                add_mach = next((m for m in machines if m.id == mid), None)
+                if add_mach:
+                    if add_mach.machine_type in ["3d_printer", "other"]:
+                        val = round(float(product.print_time_hours or 0) * 60)
+                    else:
+                        val = float(product.sheet_count or 1)
+                    initial_machines.append({
+                        "id": mid,
+                        "value": val if val > 0 else ""
+                    })
+
+    return templates.TemplateResponse("products/form_universal.html", {
+        "request": request,
+        "product": product,
+        "categories": get_categories(db),
+        "materials": all_materials,
+        "machines": machines,
+        "materials_json": json.dumps(materials_data),
+        "machines_json": json.dumps(machines_data),
+        "initial_materials_json": json.dumps(initial_materials),
+        "initial_machines_json": json.dumps(initial_machines),
+        "default_labor_rate": default_labor_rate,
+        "margin_multiplier": margin_multiplier,
+        "title": f"Produkt bearbeiten: {product.name}"
+    })
 
 
 @app.post("/products/{product_id}/update")
@@ -1513,31 +1530,33 @@ async def update_product(
     request: Request,
     name: str = Form(...),
     category: str = Form("Sonstiges"),
-    # 3D-Druck Felder
-    filament_material_id: int = Form(None),
-    filament_weight_g: str = Form(None),
-    print_time_hours: str = Form("0"),
-    # Sticker Felder
-    sheet_material_id: int = Form(None),
-    sheet_count: str = Form("1"),
-    units_per_sheet: str = Form("1"),
-    units_per_batch: str = Form("1"),
-    calculation_mode: str = Form("per_unit"),
-    printer_machine_id: str = Form(None),
-    cutter_machine_id: str = Form(None),
-    cut_time_hours: str = Form("0"),
-    # Gemeinsame Felder
-    machine_id: int = Form(None),
-    selling_price: str = Form(None),
+    notes: str = Form(""),
+    batch_yield: str = Form(None),
     labor_minutes: str = Form("0"),
     labor_rate_per_hour: str = Form("20.00"),
     packaging_cost: str = Form("0"),
     shipping_cost: str = Form("0"),
+    selling_price: str = Form(None),
     is_for_market: str = Form(None),
-    notes: str = Form(""),
-    # Mehrere Maschinen (für Sticker)
+    detected_product_type: str = Form(None),
+    used_material_id: list[str] = Form([]),
+    used_material_amount: list[str] = Form([]),
+    used_machine_id: list[str] = Form([]),
+    used_machine_value: list[str] = Form([]),
+    # Legacy Felder (Fallback)
+    filament_material_id: int = Form(None),
+    filament_weight_g: str = Form(None),
+    print_time_hours: str = Form(None),
+    sheet_material_id: int = Form(None),
+    sheet_count: str = Form(None),
+    units_per_sheet: str = Form(None),
+    units_per_batch: str = Form(None),
+    calculation_mode: str = Form(None),
+    printer_machine_id: str = Form(None),
+    cutter_machine_id: str = Form(None),
+    cut_time_hours: str = Form(None),
+    machine_id: int = Form(None),
     machine_ids: list[int] = Form([]),
-    # Komponenten
     component_id: list[str] = Form([]),
     component_name: list[str] = Form([]),
     component_quantity: list[str] = Form([]),
@@ -1553,101 +1572,256 @@ async def update_product(
     
     product.name = name
     product.category = category
-    product.is_for_market = 1 if is_for_market in ["1", "true", "on"] else 0
-    
-    # Typ-spezifische Felder
-    if product.product_type == "3d_print":
-        product.filament_material_id = filament_material_id
-        product.filament_weight_g = parse_decimal(filament_weight_g) if filament_weight_g else None
-        product.print_time_hours = parse_decimal(print_time_hours)
-        product.machine_id = machine_id
-    elif product.product_type in ["sticker", "sticker_sheet", "diecut_sticker", "stationery", "paper"]:
-        product.sheet_material_id = sheet_material_id
-        product.sheet_count = parse_decimal(sheet_count) if sheet_count else 1.0
-        product.calculation_mode = calculation_mode
-        if calculation_mode == "per_unit":
-            product.units_per_sheet = parse_decimal(units_per_sheet) if units_per_sheet else 1.0
-            product.units_per_batch = 1
-        else:
-            product.units_per_batch = int(units_per_batch) if units_per_batch else 1
-            product.units_per_sheet = 1.0
-        
-        all_mids = []
-        if printer_machine_id and str(printer_machine_id).strip():
-            try:
-                all_mids.append(int(str(printer_machine_id).strip()))
-            except ValueError:
-                pass
-        if cutter_machine_id and str(cutter_machine_id).strip():
-            try:
-                cid = int(str(cutter_machine_id).strip())
-                if cid not in all_mids:
-                    all_mids.append(cid)
-            except ValueError:
-                pass
-        for mid in machine_ids:
-            if mid not in all_mids:
-                all_mids.append(mid)
-        
-        product.machine_id = all_mids[0] if all_mids else None
-        product.additional_machine_ids = ",".join(str(mid) for mid in all_mids[1:]) if len(all_mids) > 1 else None
-    
-    # Gemeinsame Felder
-    product.selling_price = parse_decimal(selling_price) if (selling_price and parse_decimal(selling_price) > 0) else None
+    product.notes = notes
     product.labor_minutes = parse_decimal(labor_minutes)
     product.labor_rate_per_hour = parse_decimal(labor_rate_per_hour)
     product.packaging_cost = parse_decimal(packaging_cost)
     product.shipping_cost = parse_decimal(shipping_cost)
-    product.notes = notes
+    product.selling_price = parse_decimal(selling_price) if (selling_price and parse_decimal(selling_price) > 0) else None
+    product.is_for_market = 1 if is_for_market in ["1", "true", "on"] else 0
     product.updated_at = datetime.utcnow()
-    
-    # Komponenten aktualisieren (löschen und neu erstellen)
-    db.query(ProductComponent).filter(ProductComponent.product_id == product_id).delete()
-    
-    for i in range(len(component_name)):
-        if i < len(component_name) and component_name[i].strip():
-            linked_id = None
-            unit_cost = parse_decimal(component_unit_cost[i]) if i < len(component_unit_cost) else 0
-            
-            if i < len(component_linked_product_id) and component_linked_product_id[i]:
+
+    # Universelles Formular verarbeiten (falls used_material_id, used_machine_id oder batch_yield vorliegen)
+    if used_material_id or used_machine_id or batch_yield is not None:
+        yield_val = max(1.0, parse_decimal(batch_yield or "1"))
+
+        # 1. Materialien sammeln
+        valid_materials = []
+        for mid_str, amt_str in zip(used_material_id, used_material_amount):
+            if mid_str and str(mid_str).strip() and amt_str and str(amt_str).strip():
                 try:
-                    linked_id = int(component_linked_product_id[i])
-                    linked_product = db.query(Product).filter(Product.id == linked_id).first()
-                    if linked_product:
-                        linked_calc = linked_product.calculate_costs()
-                        unit_cost = linked_calc['total_cost']
-                except (ValueError, TypeError):
-                    linked_id = None
-            
+                    m_id = int(mid_str.strip())
+                    amt = parse_decimal(amt_str)
+                    if amt > 0:
+                        mat = db.query(Material).filter(Material.id == m_id).first()
+                        if mat:
+                            valid_materials.append((mat, amt))
+                except ValueError:
+                    pass
+
+        # 2. Maschinen sammeln
+        valid_machines = []
+        for mid_str, val_str in zip(used_machine_id, used_machine_value):
+            if mid_str and str(mid_str).strip() and val_str and str(val_str).strip():
+                try:
+                    m_id = int(mid_str.strip())
+                    val = parse_decimal(val_str)
+                    if val > 0:
+                        mach = db.query(Machine).filter(Machine.id == m_id).first()
+                        if mach:
+                            valid_machines.append((mach, val))
+                except ValueError:
+                    pass
+
+        # 3. Typ ableiten
+        has_3d_printer = any(m[0].machine_type in ["3d_printer"] for m in valid_machines)
+        has_sticker_machine = any(m[0].machine_type in ["cutter_plotter", "inkjet_printer"] for m in valid_machines)
+
+        if has_sticker_machine:
+            prod_type = "sticker"
+        elif has_3d_printer:
+            prod_type = "3d_print"
+        elif detected_product_type in ["3d_print", "sticker"]:
+            prod_type = detected_product_type
+        else:
+            prod_type = product.product_type or "3d_print"
+
+        product.product_type = prod_type
+        extra_components = []
+
+        if prod_type == "3d_print":
+            # Primäres Filament suchen
+            filament_entry = next((m for m in valid_materials if m[0].material_type == "filament" or m[0].unit == "kg"), None)
+            if filament_entry:
+                product.filament_material_id = filament_entry[0].id
+                product.filament_weight_g = filament_entry[1]
+            elif valid_materials:
+                product.filament_material_id = valid_materials[0][0].id
+                product.filament_weight_g = valid_materials[0][1]
+            else:
+                product.filament_material_id = None
+                product.filament_weight_g = None
+
+            product.sheet_material_id = None
+            product.sheet_count = None
+
+            primary_printer = next((m for m in valid_machines if m[0].machine_type == "3d_printer"), None)
+            if primary_printer:
+                product.machine_id = primary_printer[0].id
+                product.print_time_hours = primary_printer[1] / 60.0
+                other_machines = [m for m in valid_machines if m[0].id != primary_printer[0].id]
+            elif valid_machines:
+                product.machine_id = valid_machines[0][0].id
+                product.print_time_hours = valid_machines[0][1] / 60.0
+                other_machines = valid_machines[1:]
+            else:
+                product.machine_id = None
+                product.print_time_hours = 0.0
+                other_machines = []
+
+            product.additional_machine_ids = ",".join(str(m[0].id) for m in other_machines) if other_machines else None
+
+            # Weitere Materialien als Komponenten hinzufügen
+            for mat, amt in valid_materials:
+                if product.filament_material_id and mat.id == product.filament_material_id:
+                    continue
+                qty_per_unit = amt / yield_val
+                if mat.unit == "kg":
+                    unit_cost = float(mat.price_per_unit) / 1000.0
+                else:
+                    unit_cost = float(mat.price_per_unit)
+                extra_components.append({
+                    "name": mat.name,
+                    "quantity": round(qty_per_unit, 3),
+                    "unit_cost": round(unit_cost, 4),
+                    "notes": f"Material: {mat.name} ({amt} {mat.unit} Charge)"
+                })
+
+        else:
+            # Sticker Produkt
+            sheet_entry = next((m for m in valid_materials if m[0].unit == "sheet" or m[0].material_type in ["sticker_sheet", "diecut_sticker"]), None)
+            if sheet_entry:
+                product.sheet_material_id = sheet_entry[0].id
+                product.sheet_count = sheet_entry[1]
+            elif valid_materials:
+                product.sheet_material_id = valid_materials[0][0].id
+                product.sheet_count = valid_materials[0][1]
+            else:
+                product.sheet_material_id = None
+                product.sheet_count = 1.0
+
+            product.filament_material_id = None
+            product.filament_weight_g = None
+            product.print_time_hours = 0.0
+
+            if valid_machines:
+                product.machine_id = valid_machines[0][0].id
+                other_machines = valid_machines[1:]
+                product.additional_machine_ids = ",".join(str(m[0].id) for m in other_machines) if other_machines else None
+            else:
+                product.machine_id = None
+                product.additional_machine_ids = None
+
+            for mat, amt in valid_materials:
+                if product.sheet_material_id and mat.id == product.sheet_material_id:
+                    continue
+                qty_per_unit = amt / yield_val
+                unit_cost = float(mat.price_per_unit)
+                extra_components.append({
+                    "name": mat.name,
+                    "quantity": round(qty_per_unit, 3),
+                    "unit_cost": round(unit_cost, 4),
+                    "notes": f"Material: {mat.name}"
+                })
+
+        product.units_per_sheet = yield_val
+        product.units_per_batch = int(yield_val)
+        product.calculation_mode = "per_batch" if yield_val > 1 else "per_unit"
+
+        # Komponenten neu erstellen
+        db.query(ProductComponent).filter(ProductComponent.product_id == product_id).delete()
+        for comp_data in extra_components:
             comp = ProductComponent(
                 product_id=product.id,
-                name=component_name[i].strip(),
-                quantity=parse_decimal(component_quantity[i]) if i < len(component_quantity) else 1,
-                unit_cost=unit_cost,
-                notes=component_notes[i] if i < len(component_notes) else None,
-                linked_product_id=linked_id,
-                sort_order=i
+                name=comp_data["name"],
+                quantity=comp_data["quantity"],
+                unit_cost=comp_data["unit_cost"],
+                notes=comp_data.get("notes", "")
             )
             db.add(comp)
-    
+
+    else:
+        # Legacy Formularverarbeitung (Fallback)
+        if product.product_type == "3d_print":
+            product.filament_material_id = filament_material_id
+            product.filament_weight_g = parse_decimal(filament_weight_g) if filament_weight_g else None
+            product.print_time_hours = parse_decimal(print_time_hours or "0")
+            product.machine_id = machine_id
+        elif product.product_type in ["sticker", "sticker_sheet", "diecut_sticker", "stationery", "paper"]:
+            product.sheet_material_id = sheet_material_id
+            product.sheet_count = parse_decimal(sheet_count) if sheet_count else 1.0
+            product.calculation_mode = calculation_mode or "per_unit"
+            if calculation_mode == "per_unit":
+                product.units_per_sheet = parse_decimal(units_per_sheet) if units_per_sheet else 1.0
+                product.units_per_batch = 1
+            else:
+                product.units_per_batch = int(units_per_batch) if units_per_batch else 1
+                product.units_per_sheet = 1.0
+
+            all_mids = []
+            if printer_machine_id and str(printer_machine_id).strip():
+                try:
+                    all_mids.append(int(str(printer_machine_id).strip()))
+                except ValueError:
+                    pass
+            if cutter_machine_id and str(cutter_machine_id).strip():
+                try:
+                    cid = int(str(cutter_machine_id).strip())
+                    if cid not in all_mids:
+                        all_mids.append(cid)
+                except ValueError:
+                    pass
+            for mid in machine_ids:
+                if mid not in all_mids:
+                    all_mids.append(mid)
+
+            product.machine_id = all_mids[0] if all_mids else None
+            product.additional_machine_ids = ",".join(str(mid) for mid in all_mids[1:]) if len(all_mids) > 1 else None
+
+        db.query(ProductComponent).filter(ProductComponent.product_id == product_id).delete()
+        for i in range(len(component_name)):
+            if i < len(component_name) and component_name[i].strip():
+                linked_id = None
+                unit_cost = parse_decimal(component_unit_cost[i]) if i < len(component_unit_cost) else 0
+                if i < len(component_linked_product_id) and component_linked_product_id[i]:
+                    try:
+                        linked_id = int(component_linked_product_id[i])
+                        linked_product = db.query(Product).filter(Product.id == linked_id).first()
+                        if linked_product:
+                            linked_calc = linked_product.calculate_costs()
+                            unit_cost = linked_calc['total_cost']
+                    except (ValueError, TypeError):
+                        linked_id = None
+                comp = ProductComponent(
+                    product_id=product.id,
+                    name=component_name[i].strip(),
+                    quantity=parse_decimal(component_quantity[i]) if i < len(component_quantity) else 1,
+                    unit_cost=unit_cost,
+                    notes=component_notes[i] if i < len(component_notes) else None,
+                    linked_product_id=linked_id,
+                    sort_order=i
+                )
+                db.add(comp)
+
     db.commit()
-    return RedirectResponse(url=f"/products/{product_id}", status_code=303)
+    return RedirectResponse(url=f"/products/{product_id}?success=Produkt+erfolgreich+aktualisiert", status_code=303)
 
 
 @app.post("/products/{product_id}/delete")
 async def delete_product(product_id: int, db: Session = Depends(get_db)):
-    """Produkt löschen"""
+    """Produkt löschen mit sicherer FK-Bereinigung"""
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Produkt nicht gefunden")
-    
-    # Lösche zuerst alle Komponenten
+
+    # 1. Fremdschlüssel auflösen: Entkopple verlinkte Komponenten anderer Produkte
+    db.query(ProductComponent).filter(ProductComponent.linked_product_id == product_id).update(
+        {ProductComponent.linked_product_id: None}
+    )
+
+    # 2. Eigene Komponenten löschen
     db.query(ProductComponent).filter(ProductComponent.product_id == product_id).delete()
-    
+
+    # 3. Entkopple Event-Items
+    db.query(EventItem).filter(EventItem.product_id == product_id).update(
+        {EventItem.product_id: None}
+    )
+
+    # 4. Produkt löschen
     db.delete(product)
     db.commit()
-    
-    return RedirectResponse(url="/products", status_code=303)
+
+    return RedirectResponse(url="/products?success=Produkt+wurde+gelöscht", status_code=303)
 
 
 # =============================================================================
