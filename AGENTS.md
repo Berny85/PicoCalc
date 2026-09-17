@@ -413,6 +413,11 @@ Aktuell hat das Projekt keine automatisierten Tests. Testing erfolgt manuell:
 - Live-Kostenberechnung in den 3D-Druck- und Sticker-Formularen
 - Detailansicht zeigt EK/VK, Aufschlüsselung und Maschinen prominent an
 
+### Universelles Produkt-Formular & Produktlöschung
+- Universelles Editier- und Erstell-Formular (`form_universal.html`) nach dem Rezept- und Ausbeuteprinzip
+- Standardmengen bei Materialauswahl: Einheit „Stück“ wird standardmäßig mit `1` vorbelegt, „Gramm“ bleibt leer
+- Sichere Produktlöschung aus Liste, Detailansicht und Formular mit automatischer Entkopplung von Fremdschlüsseln (`linked_product_id`, `event_items`)
+
 ## Database Migrations (Alembic)
 
 PicoCalc verwendet **Alembic** für Datenbank-Migrationen.
