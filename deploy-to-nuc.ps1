@@ -1,11 +1,14 @@
-﻿# Deployment Script für PicoCalc
+# Deployment Script für PicoCalc auf Debian NUC
 # Dieses Script pusht den Code zu GitHub und deployed auf den NUC
 
-$NUC_IP = "192.168.50.8"
-$NUC_PATH = "/mnt/user/appdata/picocalc"
+param (
+    [string]$NUC_IP = "192.168.50.8",
+    [string]$SSH_USER = "berny",
+    [string]$NUC_PATH = "/srv/containers/picocalc"
+)
 
 Write-Host "========================================" -ForegroundColor Green
-Write-Host "PicoCalc Deployment Tool" -ForegroundColor Green
+Write-Host "PicoCalc Deployment Tool (Debian NUC)   " -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 
@@ -38,10 +41,11 @@ Write-Host "      Code erfolgreich gepusht" -ForegroundColor Green
 
 # 2. Deploy auf NUC
 Write-Host "[2/3] Deploye auf NUC..." -ForegroundColor Yellow
-Write-Host "      Verbinde mit $NUC_IP..." -ForegroundColor Gray
+Write-Host "      Verbinde mit ${SSH_USER}@$NUC_IP..." -ForegroundColor Gray
 
-# Führe Deploy-Script auf NUC aus
-ssh root@$NUC_IP "bash $NUC_PATH/deploy.sh"
+# Pull & Rebuild auf NUC
+$deployCmd = "cd $NUC_PATH && git pull origin main && docker compose up -d --build"
+ssh ${SSH_USER}@$NUC_IP "$deployCmd"
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Fehler: Deployment auf NUC fehlgeschlagen!" -ForegroundColor Red
@@ -53,25 +57,16 @@ Write-Host "      Deployment erfolgreich" -ForegroundColor Green
 # 3. Status prüfen
 Write-Host "[3/3] Prüfe Container-Status..." -ForegroundColor Yellow
 Start-Sleep -Seconds 2
-$status = ssh root@$NUC_IP "docker compose -f $NUC_PATH/docker-compose.prod.yml ps --services --filter 'status=running' | wc -l"
-$status = [int]$status.Trim()
+ssh ${SSH_USER}@$NUC_IP "containers status"
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
-Write-Host "Deployment erfolgreich!" -ForegroundColor Green
+Write-Host "Deployment erfolgreich abgeschlossen!   " -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "Services:" -ForegroundColor Yellow
-Write-Host "  PicoCalc App: http://$NUC_IP`:5000" -ForegroundColor Cyan
-Write-Host "  Portainer:    http://$NUC_IP`:9000" -ForegroundColor Cyan
-Write-Host "  Dozzle:       http://$NUC_IP`:8080" -ForegroundColor Cyan
-Write-Host "  pgAdmin:      http://$NUC_IP`:5050" -ForegroundColor Cyan
-Write-Host ""
-
-if ($status -ge 4) {
-    Write-Host "Container Status: $status/5 laufen" -ForegroundColor Green
-} else {
-    Write-Host "Container Status: $status/5 laufen" -ForegroundColor Red
-}
-
+Write-Host "  PicoCalc:       http://${NUC_IP}:5000" -ForegroundColor Cyan
+Write-Host "  PicoAccounting: http://${NUC_IP}:8500" -ForegroundColor Cyan
+Write-Host "  Bambuddy:       http://${NUC_IP}:8000" -ForegroundColor Cyan
+Write-Host "  Dozzle (Logs):  http://${NUC_IP}:8080" -ForegroundColor Cyan
 Write-Host ""

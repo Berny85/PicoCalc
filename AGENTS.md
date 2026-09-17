@@ -21,7 +21,7 @@
 | Frontend | Jinja2 Templates + HTMX | 1.9.10 |
 | Styling | Vanilla CSS (Purple/Blue Theme) |
 | Deployment | Docker + Docker Compose |
-| Infrastructure | Intel NUC mit Unraid OS |
+| Infrastructure | Intel NUC mit Debian Server (Docker Engine) |
 | CI/CD | GitHub Actions + Docker Hub |
 | Migrationen | Alembic | 1.13.1 |
 | SVG Konvertierung | vtracer | 0.6.11 |
@@ -80,12 +80,12 @@ PicoCalc/
 - **pgAdmin**: http://localhost:5050
 - **Hot reload**: Code als Volume gemountet, Auto-Reload aktiviert
 
-### Production Environment (Intel NUC mit Unraid)
+### Production Environment (Intel NUC mit Debian Server)
 - **IP**: 192.168.50.8
 - **PicoCalc App**: http://192.168.50.8:5000
-- **Portainer**: http://192.168.50.8:9000 (Docker Management)
 - **Dozzle**: http://192.168.50.8:8080 (Log-Viewer)
-- **pgAdmin**: http://192.168.50.8:5050
+- **Bambuddy**: http://192.168.50.8:8000
+- **PicoAccounting**: http://192.168.50.8:8500
 
 ### Production Services (docker-compose.prod.yml)
 
@@ -591,7 +591,7 @@ docker-compose up -d    # Erstellt neu
 
 13. **Storage Paths**:
     - Development: `/app/storage` (Docker Volume)
-    - Production: `/mnt/user/appdata/picocalc/storage` (Unraid Pfad)
+    - Production: `/srv/containers/picocalc/storage` (Debian Server)
 
 14. **Sticker Workflow**:
     - Produkttyp `sticker` mit Kategorie `StickerSheet` oder `DieCut`
