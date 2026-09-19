@@ -19,13 +19,10 @@
         text-transform: uppercase;
         font-weight: 600;
     }
-    .product-type-badge.sticker {
-        background: #e3f2fd;
-        color: #1565c0;
-    }
-    .product-type-badge.prd_print {
-        background: #f3e5f5;
-        color: #7b1fa2;
+    .product-type-badge {
+        background: #e8eaf6;
+        color: #3f51b5;
+        text-transform: none;
     }
     .price-ek {
         font-weight: 600;
@@ -117,8 +114,8 @@
                         </a>
                     </td>
                     <td>
-                        <span class="product-type-badge {{ item.product.product_type }}">
-                            {{ item.product.product_type }}
+                        <span class="product-type-badge">
+                            {{ item.product.type_label }}
                         </span>
                     </td>
                     <td style="text-align: center;">
@@ -129,7 +126,7 @@
                                    hx-post="/products/{{ item.product.id }}/toggle-market"
                                    hx-swap="none"
                                    onchange="if(!window.htmx) this.form.submit(); updateMasterCheckboxState();"
-                                   {% if item.product.is_for_market == 1 %}checked{% endif %}
+                                   {% if item.product.is_for_market %}checked{% endif %}
                                    style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--color-primary);"
                                    title="Klicken zum Umschalten der Flohmarkt-Verfügbarkeit">
                         </form>

@@ -21,15 +21,15 @@
         <div>
             <h2>{{ product.name }}</h2>
             <div style="display: flex; gap: 6px; align-items: center; margin-top: 5px; flex-wrap: wrap;">
-                <span class="category-badge category-{{ product.product_type }}">
-                    {{ product.product_type }}
+                <span class="category-badge">
+                    {{ product.type_label }}
                 </span>
                 {% if product.category %}
                 <span style="font-size: 0.8rem; padding: 3px 8px; border-radius: 12px; background: var(--color-bg-hover); color: var(--color-text-light);">
-                    {{ product.category }}
+                    {{ product.category.name }}
                 </span>
                 {% endif %}
-                {% if product.is_for_market == 1 %}
+                {% if product.is_for_market %}
                 <span style="font-size: 0.8rem; padding: 3px 8px; border-radius: 12px; font-weight: bold; background: #e8eaf6; color: #3f51b5;">
                     🎪 Flohmarkt-Bereit
                 </span>
@@ -42,13 +42,13 @@
         </div>
         <div class="actions" style="flex-wrap: wrap;">
             <a href="/products/{{ product.id }}/edit" class="btn btn-primary">✏️ Bearbeiten</a>
-            <form method="POST" action="/products/{{ product.id }}/delete" style="display: inline;" 
+            <form method="POST" action="/products/{{ product.id }}/delete" style="display: inline;"
                   onsubmit="return confirm('Möchtest du dieses Produkt wirklich löschen?');">
                 <button type="submit" class="btn btn-danger">🗑️ Löschen</button>
             </form>
         </div>
     </div>
-    
+
     {% if product.notes %}
     <div style="margin-top: 20px; padding: 15px; background-color: var(--color-bg-hover); border-radius: 4px;">
         <strong>Notizen:</strong><br>
@@ -79,194 +79,114 @@
                 </div>
             </div>
         </div>
-        
+
         <div style="margin: 20px 0; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 4px;">
-            <strong>Kostenaufschlüsselung pro Einheit:</strong><br>
-            Material: <span class="streamer-mask">{{ "%.2f"|format(calc.material_cost) }} €</span> | 
-            Maschine: <span class="streamer-mask">{{ "%.2f"|format(calc.machine_cost) }} €</span> | 
+            <strong>Kostenaufschlüsselung pro Stück:</strong><br>
+            Material: <span class="streamer-mask">{{ "%.2f"|format(calc.material_cost) }} €</span> |
+            Maschine: <span class="streamer-mask">{{ "%.2f"|format(calc.machine_cost) }} €</span> |
             Arbeit: <span class="streamer-mask">{{ "%.2f"|format(calc.labor_cost) }} €</span> |
-            {% if calc.components_count > 0 %}
-            Komponenten: <span class="streamer-mask">{{ "%.2f"|format(calc.components_cost) }} €</span> |
-            {% endif %}
             Produktverpackung: <span class="streamer-mask">{{ "%.2f"|format(calc.packaging_cost) }} €</span> (1:1)
         </div>
-    </div>
-</div>
 
-<div class="grid">
-    <div class="card">
-        <h2>Material & Verpackung</h2>
-        
-        {% if product.product_type == '3d_print' %}
-        <div class="table-responsive">
-        <table>
-            <tr>
-                <td>Filament:</td>
-                <td><strong>{{ product.filament_material.name if product.filament_material else '-' }}</strong></td>
-            </tr>
-            <tr>
-                <td>Gewicht:</td>
-                <td><strong>{{ product.filament_weight_g }} g</strong></td>
-            </tr>
-            <tr>
-                <td>Preis/kg:</td>
-                <td><strong><span class="streamer-mask">{{ "%.2f"|format(product.filament_material.price_per_unit) if product.filament_material else '0.00' }} €</span></strong></td>
-            </tr>
-            <tr style="border-top: 2px solid var(--color-primary-dark);">
-                <td>Materialkosten:</td>
-                <td><strong><span class="streamer-mask">{{ "%.2f"|format(calc.material_cost) }} €</span></strong></td>
-            </tr>
-        </table>
-        </div>
-        {% elif product.product_type in ['sticker', 'sticker_sheet', 'diecut_sticker'] %}
-        <div class="table-responsive">
-        <table>
-            <tr>
-                <td>Materialbogen:</td>
-                <td><strong>{{ product.sheet_material.name if product.sheet_material else '-' }}</strong></td>
-            </tr>
-            <tr>
-                <td>Preis/Bogen:</td>
-                <td><strong><span class="streamer-mask">{{ "%.2f"|format(product.sheet_material.price_per_unit) if product.sheet_material else '0.00' }} €</span></strong></td>
-            </tr>
-            <tr>
-                <td>Ausbeute pro Bogen:</td>
-                <td><strong>{{ product.units_per_sheet|int if product.units_per_sheet else 1 }} Stück</strong></td>
-            </tr>
-            <tr style="border-top: 2px solid var(--color-primary-dark);">
-                <td>Materialkosten / Stück:</td>
-                <td><strong><span class="streamer-mask">{{ "%.2f"|format(calc.material_cost) }} €</span></strong></td>
-            </tr>
-        </table>
-        </div>
-        {% endif %}
-        
-        <h3 style="margin-top: 30px;">Produktverpackung</h3>
-        <div class="table-responsive">
-        <table>
-            <tr>
-                <td>Verpackung (1:1 Durchreichung):</td>
-                <td><strong><span class="streamer-mask">{{ "%.2f"|format(calc.packaging_cost) }} €</span></strong></td>
-            </tr>
-        </table>
-        </div>
-    </div>
-    
-    <div class="card">
-        <h2>Maschinen & Arbeitszeit</h2>
-        <div class="table-responsive">
-        <table>
-            {% if product.product_type == '3d_print' %}
-            <tr>
-                <td>Genutzte Maschine:</td>
-                <td><strong>{{ product.machine.name if product.machine else '-' }}</strong></td>
-            </tr>
-            <tr>
-                <td>Maschinenkosten/Std:</td>
-                <td><strong><span class="streamer-mask">{{ "%.3f"|format(calc.machine_cost_per_hour) }} €/h</span></strong></td>
-            </tr>
-            <tr>
-                <td>Druckzeit:</td>
-                <td><strong>{{ product.print_time_hours }} h</strong></td>
-            </tr>
-            <tr>
-                <td>Maschinenkosten:</td>
-                <td><strong><span class="streamer-mask">{{ "%.2f"|format(calc.machine_cost) }} €</span></strong></td>
-            </tr>
-            {% elif product.product_type in ['sticker', 'sticker_sheet', 'diecut_sticker'] %}
-            {% if calc.machines_list and calc.machines_list|length > 0 %}
-            {% for m in calc.machines_list %}
-            <tr>
-                <td>{{ m.name }} ({{ machine_type_labels.get(m.machine_type, m.machine_type) if machine_type_labels is defined else m.machine_type }}):</td>
-                <td><strong><span class="streamer-mask">{{ "%.3f"|format(m.cost_per_sheet) }} €/Bogen</span></strong></td>
-            </tr>
-            {% endfor %}
-            <tr>
-                <td>Maschinenkosten pro Bogen gesamt:</td>
-                <td><strong><span class="streamer-mask">{{ "%.3f"|format(calc.cost_per_sheet or 0) }} €</span></strong></td>
-            </tr>
-            <tr>
-                <td>Maschinenkosten / Stück (÷ {{ product.units_per_sheet|int if product.units_per_sheet else 1 }}):</td>
-                <td><strong><span class="streamer-mask">{{ "%.2f"|format(calc.machine_cost) }} €</span></strong></td>
-            </tr>
-            {% else %}
-            <tr>
-                <td>Genutzte Maschine:</td>
-                <td><strong>{{ product.machine.name if product.machine else '-' }}</strong></td>
-            </tr>
-            <tr>
-                <td>Maschinenkosten / Stück:</td>
-                <td><strong><span class="streamer-mask">{{ "%.2f"|format(calc.machine_cost) }} €</span></strong></td>
-            </tr>
-            {% endif %}
-            {% else %}
-            <tr>
-                <td>Genutzte Maschine:</td>
-                <td><strong>{{ product.machine.name if product.machine else '-' }}</strong></td>
-            </tr>
-            <tr>
-                <td>Maschinenkosten:</td>
-                <td><strong><span class="streamer-mask">{{ "%.2f"|format(calc.machine_cost) }} €</span></strong></td>
-            </tr>
-            {% endif %}
-            <tr style="border-top: 2px solid var(--color-primary-dark);">
-                <td>Arbeitszeit:</td>
-                <td><strong>{{ product.labor_minutes }} min</strong> ({{ "%.2f"|format(calc.labor_hours) }} h)</td>
-            </tr>
-            <tr>
-                <td>Stundensatz:</td>
-                <td><strong><span class="streamer-mask">{{ "%.2f"|format(product.labor_rate_per_hour or 20.0) }} €/h</span></strong></td>
-            </tr>
-            <tr>
-                <td>Arbeitskosten / Einheit:</td>
-                <td><strong><span class="streamer-mask">{{ "%.2f"|format(calc.labor_cost) }} €</span></strong></td>
-            </tr>
-        </table>
+        <div style="font-size: 0.9rem;">
+            Gewinn pro Stück: <strong class="streamer-mask">{{ "%.2f"|format(calc.profit) }} €</strong>
+            ({{ "%.1f"|format(calc.margin_percent) }} % vom VK)
         </div>
     </div>
 </div>
 
-<!-- Komponenten (für alle Produkttypen) -->
 <div class="card">
-    <h2>🧩 Komponenten</h2>
-    {% if calc.components_count > 0 %}
+    <h2>🧾 Rezept einer Charge <small style="font-weight: normal; color: var(--color-text-light);">(Ausbeute: {{ calc.yield_qty }} Stück)</small></h2>
+
+    <div class="grid">
+        <div>
+            <h3>Materialien</h3>
+            {% if calc.materials %}
+            <div class="table-responsive">
+            <table>
+                {% for m in calc.materials %}
+                <tr>
+                    <td>{{ m.name }} &times; {{ "%g"|format(m.amount) }} {{ units[m.unit].input_label if m.unit in units else m.unit }}</td>
+                    <td><strong><span class="streamer-mask">{{ "%.2f"|format(m.cost) }} €</span></strong>
+                        <small>({{ m.price_per_unit|price }} {{ units[m.unit].price_label if m.unit in units else '€' }})</small></td>
+                </tr>
+                {% endfor %}
+                <tr style="border-top: 2px solid var(--color-primary-dark);">
+                    <td>Material der Charge:</td>
+                    <td><strong><span class="streamer-mask">{{ "%.2f"|format(calc.batch_material_cost) }} €</span></strong></td>
+                </tr>
+            </table>
+            </div>
+            {% else %}
+            <p style="color: var(--color-text-light);">Keine Materialien angegeben.</p>
+            {% endif %}
+        </div>
+
+        <div>
+            <h3>Maschinen &amp; Arbeitszeit</h3>
+            <div class="table-responsive">
+            <table>
+                {% for m in calc.machines %}
+                <tr>
+                    <td>{{ m.name }} &times; {{ "%g"|format(m.value) }} {{ 'Bögen' if m.billing_mode == 'sheet' else 'min' }}</td>
+                    <td><strong><span class="streamer-mask">{{ "%.2f"|format(m.cost) }} €</span></strong>
+                        <small>({{ m.rate|price }} {{ '€/Bogen' if m.billing_mode == 'sheet' else '€/h' }})</small></td>
+                </tr>
+                {% endfor %}
+                {% if not calc.machines %}
+                <tr><td colspan="2" style="color: var(--color-text-light);">Keine Maschinen angegeben.</td></tr>
+                {% endif %}
+                <tr style="border-top: 2px solid var(--color-primary-dark);">
+                    <td>Maschinen der Charge:</td>
+                    <td><strong><span class="streamer-mask">{{ "%.2f"|format(calc.batch_machine_cost) }} €</span></strong></td>
+                </tr>
+                {% for s in calc.labor %}
+                <tr>
+                    <td>{{ s.description or 'Arbeit' }} &times; {{ "%g"|format(s.minutes) }} min</td>
+                    <td><strong><span class="streamer-mask">{{ "%.2f"|format(s.cost) }} €</span></strong>
+                        <small>({{ "%.2f"|format(s.hourly_rate) }} €/h)</small></td>
+                </tr>
+                {% endfor %}
+                {% if not calc.labor %}
+                <tr><td colspan="2" style="color: var(--color-text-light);">Keine Arbeitsschritte angegeben.</td></tr>
+                {% endif %}
+                <tr style="border-top: 2px solid var(--color-primary-dark);">
+                    <td>Arbeit der Charge ({{ "%g"|format(calc.labor_minutes) }} min):</td>
+                    <td><strong><span class="streamer-mask">{{ "%.2f"|format(calc.batch_labor_cost) }} €</span></strong></td>
+                </tr>
+            </table>
+            </div>
+        </div>
+    </div>
+
+    <div style="margin-top: 15px; padding: 12px; background: var(--color-bg-hover); border-radius: 4px;">
+        <strong>Chargen-Gesamtkosten: <span class="streamer-mask">{{ "%.2f"|format(calc.batch_total_cost) }} €</span></strong>
+        &divide; {{ calc.yield_qty }} Stück = <strong><span class="streamer-mask">{{ "%.2f"|format(calc.production_cost) }} €</span></strong> Herstellkosten pro Stück
+        <br>
+        <small style="color: var(--color-text-light);">
+            Versandkosten (nur Richtwert): {{ "%.2f"|format(calc.shipping_cost) }} € pro Stück
+        </small>
+    </div>
+
+    <h3 style="margin-top: 25px;">Produktverpackung <small style="font-weight: normal; color: var(--color-text-light);">(pro Stück, 1:1 ohne Marge)</small></h3>
+    {% if calc.packaging %}
     <div class="table-responsive">
     <table>
-        <thead>
-            <tr>
-                <th>Komponente</th>
-                <th>Menge</th>
-                <th>EK/Stück</th>
-                <th>Gesamt</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for comp in calc.components %}
-            <tr>
-                <td><strong>{{ comp.name }}</strong></td>
-                <td>{{ comp.quantity }}</td>
-                <td><span class="streamer-mask streamer-mask-compact">{{ "%.2f"|format(comp.unit_cost) }} €</span></td>
-                <td><strong><span class="streamer-mask streamer-mask-compact">{{ "%.2f"|format(comp.total) }} €</span></strong></td>
-            </tr>
-            {% if comp.notes %}
-            <tr>
-                <td colspan="4" style="color: var(--color-text-light); font-size: 0.9em; padding-top: 0;">
-                    {{ comp.notes }}
-                </td>
-            </tr>
-            {% endif %}
-            {% endfor %}
-        </tbody>
-        <tfoot>
-            <tr style="border-top: 2px solid var(--color-primary-dark);">
-                <td colspan="3"><strong>Gesamtkosten Komponenten:</strong></td>
-                <td><strong><span class="streamer-mask">{{ "%.2f"|format(calc.components_cost) }} €</span></strong></td>
-            </tr>
-        </tfoot>
+        {% for m in calc.packaging %}
+        <tr>
+            <td>{{ m.name }} &times; {{ "%g"|format(m.amount) }} {{ units[m.unit].input_label if m.unit in units else m.unit }}</td>
+            <td><strong><span class="streamer-mask">{{ "%.2f"|format(m.cost) }} €</span></strong>
+                <small>({{ m.price_per_unit|price }} {{ units[m.unit].price_label if m.unit in units else '€' }})</small></td>
+        </tr>
+        {% endfor %}
+        <tr style="border-top: 2px solid var(--color-primary-dark);">
+            <td>Verpackung pro Stück:</td>
+            <td><strong><span class="streamer-mask">{{ "%.2f"|format(calc.packaging_cost) }} €</span></strong></td>
+        </tr>
     </table>
     </div>
     {% else %}
-    <p style="color: var(--color-text-light);">Keine Komponenten definiert.</p>
+    <p style="color: var(--color-text-light);">Keine Verpackung angegeben.</p>
     {% endif %}
 </div>
 

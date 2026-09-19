@@ -1,72 +1,51 @@
-# PicoCalc
+# PicoCalc (Picobellu Design)
 
-Calculator for product prices.
+Webbasierter Produktpreis-Kalkulator für kleine Fertigungsbetriebe (3D-Druck, Sticker, Handarbeit).
+Ein Produkt ist ein **Rezept für eine Charge**: Materialien, Maschinenzeiten und Arbeitszeit ergeben die
+Chargenkosten, geteilt durch die Ausbeute die Herstellkosten pro Stück. Dazu kommen Materialverwaltung,
+Maschinenverwaltung mit Strom- und Abschreibungskosten, Flohmarkt-Vorproduktion (Events, Materialbedarf, Packliste)
+und ein PNG→SVG-Konverter.
 
-## Entwicklungs-Workflow
+**Stack:** Python 3.11, FastAPI, SQLAlchemy 2, PostgreSQL 16, Jinja2, Alembic – läuft in Docker.
 
-Dieses Projekt verwendet einen einfachen Workflow ohne Docker Hub:
-
-### Lokale Entwicklung (Windows PC)
+## Lokal entwickeln (Windows, Docker Desktop)
 
 ```bash
-# 1. Entwicklungsumgebung starten
-docker-compose up -d
-
-# 2. Entwickeln und testen unter http://localhost:5000
-
-# 3. Änderungen zu GitHub pushen
-git add .
-git commit -m "Beschreibung"
-git push origin main
+docker compose up -d        # App unter http://localhost:5000, pgAdmin unter http://localhost:5050
+docker compose logs -f web  # Logs
 ```
 
-### Deployment auf NUC
+Der Code ist als Volume eingebunden (Auto-Reload). Das Datenbankschema wird beim Start automatisch per Alembic
+angelegt bzw. aktualisiert.
+
+## Tests
+
+```bash
+docker exec picocalc-db-1 psql -U printuser -d postgres -c "CREATE DATABASE printcalc_test;"   # einmalig
+docker compose run --rm --no-deps \
+  -e DATABASE_URL=postgresql://printuser:printpass@db:5432/printcalc_test \
+  -e FILE_STORAGE_PATH=/tmp/storage web sh run_tests.sh
+```
+
+## Deployment und Betrieb (Debian-NUC)
 
 ```powershell
-# Automatisch via PowerShell
-.\deploy-to-nuc.ps1
+.\deploy-to-nuc.ps1     # committen (optional), pushen, auf dem NUC pullen und neu bauen
+.\backup-to-local.ps1   # Datenbank-Dump und Dateien vom NUC auf den lokalen Rechner sichern
 ```
 
-Oder manuell:
-```bash
-# Per SSH auf NUC
-ssh root@192.168.50.8
-cd /mnt/user/appdata/picocalc
-git pull origin main
-docker compose -f docker-compose.prod.yml up --build -d
-```
+Einzelheiten, Wiederherstellung und die einmalige Umstellung auf das neue Datenbankschema stehen in
+[DEPLOYMENT.md](DEPLOYMENT.md). Architektur, Datenmodell und Konventionen für die Weiterentwicklung stehen in
+[AGENTS.md](AGENTS.md).
 
-## Architektur
+## Wichtige Dateien
 
-- **Entwicklung**: Windows 11 mit Docker Desktop
-- **Produktion**: Intel NUC mit Unraid
-- **Deployment**: Direkt via Git + SSH (kein Docker Hub nötig)
-
-## Services
-
-| Service | URL | Beschreibung |
-|---------|-----|--------------|
-| **PicoCalc** | `http://192.168.50.8:5000` | Hauptanwendung |
-| **Portainer** | `http://192.168.50.8:9000` | Docker Management |
-| **Dozzle** | `http://192.168.50.8:8080` | Log-Viewer |
-| **pgAdmin** | `http://192.168.50.8:5050` | PostgreSQL Management |
-| **PostgreSQL** | `192.168.50.8:5432` | Datenbank |
-
-### pgAdmin Zugangsdaten
-- **Email**: admin@admin.com
-- **Passwort**: admin
-
-**Wichtig**: Nach dem ersten Login solltest du das Passwort ändern!
-
-## Setup NUC (einmalig)
-
-```bash
-mkdir -p /mnt/user/appdata/picocalc
-cd /mnt/user/appdata/picocalc
-git clone https://github.com/berny85/PicoCalc.git .
-mkdir -p /mnt/user/backups/picocalc/wal
-cp postgresql.conf /mnt/user/appdata/picocalc/
-docker compose -f docker-compose.prod.yml up --build -d
-```
-
-Siehe [DEPLOYMENT.md](DEPLOYMENT.md) für vollständige Dokumentation.
+| Pfad | Zweck |
+|------|-------|
+| `app/` | Anwendung (Router, Modelle, Kalkulation, Templates, Tests, Alembic-Migrationen) |
+| `docker-compose.yaml` | Entwicklungsumgebung |
+| `deploy-to-nuc.ps1`, `backup-to-local.ps1` | Deployment und Backup für den Debian-NUC |
+| `migrate.sh`, `migrate.ps1` | Alembic-Hilfsskripte für die Entwicklung |
+| `reset-prod.sh` | Datenbank auf dem Server zurücksetzen (einmalig nach dem Schema-Umbau) |
+| `scripts/backup/` | Automatisches Backup auf den OMV (NFS, systemd-Timer) |
+| `scripts/migration/` | Einmal-Skripte vom Umzug Unraid → Debian |

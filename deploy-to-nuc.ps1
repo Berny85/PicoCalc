@@ -43,8 +43,8 @@ Write-Host "      Code erfolgreich gepusht" -ForegroundColor Green
 Write-Host "[2/3] Deploye auf NUC..." -ForegroundColor Yellow
 Write-Host "      Verbinde mit ${SSH_USER}@$NUC_IP..." -ForegroundColor Gray
 
-# Pull & Rebuild auf NUC
-$deployCmd = "cd $NUC_PATH && git pull origin main && docker compose up -d --build"
+# deploy.sh auf dem NUC ausführen (git pull, Container neu bauen, Health-Checks); nutzt docker-compose.prod.yml
+$deployCmd = "cd $NUC_PATH && bash deploy.sh"
 ssh ${SSH_USER}@$NUC_IP "$deployCmd"
 
 if ($LASTEXITCODE -ne 0) {

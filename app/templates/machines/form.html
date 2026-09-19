@@ -5,20 +5,20 @@
 {% block content %}
 <div class="card">
     <h2>{{ title }}</h2>
-    
+
     <form method="POST" action="{% if machine %}/machines/{{ machine.id }}/update{% else %}/machines{% endif %}">
         <div class="grid">
             <div>
                 <div class="form-group">
                     <label for="name">Maschinenname *</label>
-                    <input type="text" id="name" name="name" required 
+                    <input type="text" id="name" name="name" required
                            value="{{ machine.name if machine else '' }}"
                            placeholder="z.B. Prusa i3 MK3, Silhouette Cameo">
                 </div>
-                
+
                 <div class="form-group">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                        <label for="machine_type" style="margin-bottom: 0;">Typ *</label>
+                        <label for="machine_type_id" style="margin-bottom: 0;">Typ *</label>
                         <div style="display: flex; gap: 6px;">
                             <button type="button" class="btn btn-secondary btn-sm" onclick="toggleQuickAddType()" style="padding: 2px 8px; font-size: 0.78rem;" title="Neuen Typ direkt anlegen">
                                 ➕ Neuer Typ
@@ -28,24 +28,23 @@
                             </button>
                         </div>
                     </div>
-                    <select id="machine_type" name="machine_type" required onchange="updateFormFields()">
-                        {% for key, label in machine_types %}
-                        <option value="{{ key }}" {% if machine and machine.machine_type == key %}selected{% endif %}>
-                            {{ label }}
+                    <select id="machine_type_id" name="machine_type_id" required onchange="onTypeChanged()">
+                        {% for t in machine_types %}
+                        <option value="{{ t.id }}" data-mode="{{ t.default_billing_mode }}" {% if machine and machine.machine_type_id == t.id %}selected{% endif %}>
+                            {{ t.name }}
                         </option>
                         {% endfor %}
-                        {% if machine and machine.machine_type not in machine_types|map(attribute=0)|list %}
-                        <option value="{{ machine.machine_type }}" selected>
-                            {{ machine.machine_type }}
-                        </option>
-                        {% endif %}
                     </select>
 
                     <!-- Inline Quick-Add Box -->
                     <div id="quick-add-type-box" style="display: none; margin-top: 8px; padding: 10px; background: var(--color-bg-hover); border-radius: 6px; border: 1px solid var(--color-border);">
                         <label style="font-size: 0.82rem; font-weight: 600; margin-bottom: 5px; display: block;">Neuen Maschinen-Typ anlegen:</label>
-                        <div style="display: flex; gap: 6px;">
-                            <input type="text" id="new-type-input" placeholder="z. B. Stickmaschine" style="flex: 1; padding: 5px 8px; font-size: 0.88rem;" onkeydown="if(event.key==='Enter'){event.preventDefault();quickAddMachineType();}">
+                        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                            <input type="text" id="new-type-input" placeholder="z. B. Stickmaschine" style="flex: 1; min-width: 140px; padding: 5px 8px; font-size: 0.88rem;" onkeydown="if(event.key==='Enter'){event.preventDefault();quickAddMachineType();}">
+                            <select id="new-type-mode" style="padding: 5px 8px; font-size: 0.88rem;">
+                                <option value="time">Abrechnung nach Zeit</option>
+                                <option value="sheet">Abrechnung pro Bogen</option>
+                            </select>
                             <button type="button" class="btn btn-primary btn-sm" onclick="quickAddMachineType()" style="padding: 5px 12px; font-size: 0.85rem;">Speichern</button>
                             <button type="button" class="btn btn-secondary btn-sm" onclick="toggleQuickAddType(false)" style="padding: 5px 10px; font-size: 0.85rem;">✕</button>
                         </div>
@@ -56,127 +55,96 @@
                         Typen können auch in den <a href="/settings" target="_blank" style="color: var(--color-primary);">Einstellungen ⚙️</a> verwaltet werden.
                     </small>
                 </div>
+
+                <div class="form-group">
+                    <label for="billing_mode">Abrechnung im Produkt *</label>
+                    <select id="billing_mode" name="billing_mode" required onchange="updateFormFields()">
+                        <option value="time" {% if machine and machine.billing_mode == 'time' %}selected{% endif %}>Nach Zeit (Minuten × Stundensatz)</option>
+                        <option value="sheet" {% if machine and machine.billing_mode == 'sheet' %}selected{% endif %}>Pro Bogen / Durchlauf (Bögen × Bogenpreis)</option>
+                    </select>
+                    <small style="color: var(--color-text-light);">
+                        Legt fest, ob bei der Produktkalkulation Minuten oder Bögen eingegeben werden.
+                    </small>
+                </div>
             </div>
-            
+
             <div>
                 <div class="form-group">
                     <label for="description">Beschreibung</label>
-                    <textarea id="description" name="description">{{ machine.description if machine else '' }}</textarea>
+                    <textarea id="description" name="description">{{ machine.description if machine and machine.description else '' }}</textarea>
                 </div>
             </div>
         </div>
-        
+
         <!-- 1. DETAIL-RECHNUNG (Grundkosten der Maschine) -->
         <h3 style="margin-top: 30px; color: var(--color-primary-dark);">1. Detail-Rechnung (Grundkosten der Maschine)</h3>
         <p style="color: var(--color-text-light); margin-bottom: 15px; font-size: 0.9rem;">
             Hier erfasst du die festen Gerätekosten. Daraus werden automatisch die Stromkosten und die zeitbasierte Geräteabschreibung berechnet.
         </p>
-        
-        <!-- Zeitbasierte Felder (für 3D-Drucker, Cutter, etc.) -->
+
         <div id="time-based-fields" class="grid">
             <div>
                 <div class="form-group">
                     <label for="depreciation_euro">Abschreibung (€)</label>
-                    <input type="number" id="depreciation_euro" name="depreciation_euro" 
+                    <input type="number" id="depreciation_euro" name="depreciation_euro"
                            step="0.01" min="0"
-                           value="{{ machine.depreciation_euro if machine else '350' }}">
+                           value="{{ ('%g'|format(machine.depreciation_euro) if machine.time_costs else '') if machine else '350' }}">
                 </div>
-                
+
                 <div class="form-group">
                     <label for="lifespan_hours">Lebensdauer (Stunden)</label>
-                    <input type="number" id="lifespan_hours" name="lifespan_hours" 
+                    <input type="number" id="lifespan_hours" name="lifespan_hours"
                            step="1" min="1"
-                           value="{{ machine.lifespan_hours if machine else '3000' }}">
+                           value="{{ ('%g'|format(machine.lifespan_hours) if machine.time_costs else '') if machine else '3000' }}">
                 </div>
             </div>
-            
+
             <div>
                 <div class="form-group">
-                    <label for="power_kw">Stromverbrauch (kW)</label>
-                    <input type="number" id="power_kw" name="power_kw" 
-                           step="0.001" min="0"
-                           value="{{ machine.power_kw if machine else '0,1' }}">
-                    <small style="color: var(--color-text-light);">z.B. 0,1 für 100W (Strompreis aktuell: {{ "%.2f"|format(STROM_PREIS_KWH) }} €/kWh)</small>
+                    <label for="power_w">Stromverbrauch (W)</label>
+                    <input type="number" id="power_w" name="power_w"
+                           step="0.1" min="0"
+                           value="{{ ('%g'|format(machine.power_w) if machine.time_costs else '') if machine else 100 }}">
+                    <small style="color: var(--color-text-light);">z.B. 100 für einen 100-W-Drucker (Strompreis aktuell: {{ "%.2f"|format(electricity_price) }} €/kWh)</small>
                 </div>
-                
+
                 <div class="form-group">
                     <label>Berechnete Kosten pro Stunde</label>
-                    <div id="calculated-cost-hourly" style="padding: 10px; background: var(--color-bg-hover); border-radius: 4px;">
-                        <strong>{% if machine %}{{ "%.4f"|format(machine.calculate_cost_per_hour()) }} €{% else %}- €{% endif %}</strong>
-                        {% if machine %}
-                        {% set power_kw_float = machine.power_kw | float %}
-                        {% set depreciation_float = machine.depreciation_euro | float %}
-                        {% set lifespan_float = (machine.lifespan_hours | float) if (machine.lifespan_hours and (machine.lifespan_hours | float) > 0) else 1.0 %}
-                        {% set current_strompreis = STROM_PREIS_KWH if STROM_PREIS_KWH is defined else 0.22 %}
-                        <small style="color: var(--color-text-light); display: block; margin-top: 5px;">
-                            (Strom: {{ "%.3f"|format(current_strompreis * power_kw_float) }} €/h + Abschreibung: {{ "%.3f"|format(depreciation_float / lifespan_float) }} €/h)
-                        </small>
-                        {% endif %}
-                    </div>
+                    <div id="calculated-cost-hourly" style="padding: 10px; background: var(--color-bg-hover); border-radius: 4px;"></div>
                 </div>
             </div>
         </div>
-        
-        <!-- Seitenbasierte Felder (nur für Tintenstrahl-Drucker) -->
-        <div id="page-based-fields" class="grid" style="display: none;">
-            <div>
-                <div class="form-group">
-                    <label for="lifespan_pages">Lebensdauer (Seiten)</label>
-                    <input type="number" id="lifespan_pages" name="lifespan_pages" 
-                           step="1" min="0"
-                           value="{{ machine.lifespan_pages|int if machine and machine.lifespan_pages else '' }}">
-                    <small style="color: var(--color-text-light);">Erwartete Gesamtdruckmenge in Seiten</small>
-                </div>
-            </div>
-            
-            <div>
-                <div class="form-group">
-                    <label for="depreciation_per_page">Abschreibung pro Seite (€)</label>
-                    <input type="number" id="depreciation_per_page" name="depreciation_per_page" 
-                           step="0.0001" min="0"
-                           value="{{ machine.depreciation_per_page if machine and machine.depreciation_per_page else '' }}">
-                    <small style="color: var(--color-text-light);">Z.B. 0,05 für 5 Cent pro Seite (inkl. Tinte & Druckkopf)</small>
-                </div>
-                
-                <div class="form-group">
-                    <label>Berechnete Kosten pro Seite</label>
-                    <div id="calculated-cost-page" style="padding: 10px; background: var(--color-bg-hover); border-radius: 4px;">
-                        <strong>{% if machine and machine.machine_type == 'inkjet_printer' %}{{ "%.4f"|format(machine.calculate_cost_per_page()) }} €{% else %}- €{% endif %}</strong>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- 2. BOGEN-KALKULATION & DECKUNGSPRÜFUNG (für Plotter & Sticker) -->
+
+        <!-- 2. BOGEN-KALKULATION & DECKUNGSPRÜFUNG (nur bei Abrechnung pro Bogen) -->
         <div id="sheet-based-section" style="margin-top: 35px;">
-            <h3 style="color: var(--color-primary-dark);">2. Bogen-Kalkulation & Deckungsprüfung (für Sticker)</h3>
+            <h3 style="color: var(--color-primary-dark);">2. Bogenpreis & Deckungsprüfung</h3>
             <p style="color: var(--color-text-light); margin-bottom: 15px; font-size: 0.9rem;">
-                In der Sticker-Produktion wird die Maschine pauschal pro Bogen abgerechnet. Unten legst du den Bogenpreis fest, der die Kosten aus der obigen Detail-Rechnung sowie Verschleißteile auffangen muss.
+                Bei Abrechnung pro Bogen wird die Maschine pauschal pro Bogen abgerechnet. Unten legst du den Bogenpreis fest, der die Kosten aus der obigen Detail-Rechnung sowie Verschleißteile auffangen muss.
             </p>
 
-            <!-- Detail-Herleitung pro Bogen (für Schneideplotter & Sonstiges) -->
+            <!-- Detail-Herleitung pro Bogen -->
             <div id="plotter-detail-box" style="background: var(--color-bg-hover); border-radius: 8px; padding: 15px; margin-bottom: 20px; border-left: 4px solid var(--color-primary);">
                 <h4 style="margin-bottom: 10px; color: var(--color-primary-dark); font-size: 1rem;">📐 Herleitung der Mindestkosten pro Bogen</h4>
-                
+
                 <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 15px; align-items: start;">
                     <div>
                         <div class="form-group" style="margin-bottom: 10px;">
                             <label for="plotter_time_minutes" style="font-size: 0.85rem;">Geschätzte Laufzeit pro Bogen (Minuten)</label>
-                            <input type="number" id="plotter_time_minutes" value="2.5" step="0.1" min="0.5" max="30" oninput="updateSheetCoverageCheck()" style="max-width: 150px;">
+                            <input type="number" id="plotter_time_minutes" value="2.5" step="0.1" min="0.5" max="30" oninput="scheduleRate()" style="max-width: 150px;">
                             <small style="color: var(--color-text-light); display: block; margin-top: 2px;">
                                 Standard: 2,5 Min. (typisch für A4 Stickerbögen)
                             </small>
                         </div>
-                        
+
                         <div class="form-group" style="margin-bottom: 0;">
                             <label for="wear_cost_estimate" style="font-size: 0.85rem;">Klingen- & Mattenverschleiß pro Bogen (€)</label>
-                            <input type="number" id="wear_cost_estimate" value="0.07" step="0.01" min="0" oninput="updateSheetCoverageCheck()" style="max-width: 150px;">
+                            <input type="number" id="wear_cost_estimate" value="0.07" step="0.01" min="0" oninput="scheduleRate()" style="max-width: 150px;">
                             <small style="color: var(--color-text-light); display: block; margin-top: 2px;">
                                 Richtwert: 0,06 € – 0,08 € (Klinge + Schneidematte)
                             </small>
                         </div>
                     </div>
-                    
+
                     <div style="background: white; border-radius: 6px; padding: 12px; border: 1px solid var(--color-border); font-size: 0.9rem;">
                         <strong>Rechnerische Kosten pro Bogen:</strong>
                         <div style="margin-top: 8px; line-height: 1.6;">
@@ -200,18 +168,18 @@
                         💡 Empfehlung übernehmen
                     </button>
                 </div>
-                
+
                 <p style="color: var(--color-text-light); font-size: 0.85rem; margin-bottom: 15px;">
-                    Dieser Wert fließt 1:1 in die Produktpreiskalkulation (Stickersheets & DieCut) ein und wird dort durch die Ausbeute geteilt. <strong>Er sollte mindestens das Ergebnis der obigen Detail-Rechnung abdecken!</strong>
+                    Dieser Wert fließt 1:1 in die Produktkalkulation ein. <strong>Er sollte mindestens das Ergebnis der obigen Detail-Rechnung abdecken!</strong>
                 </p>
 
                 <div class="grid" style="grid-template-columns: 1fr 1.5fr; gap: 20px; align-items: center;">
                     <div class="form-group" style="margin-bottom: 0;">
                         <label for="cost_per_sheet" style="font-weight: bold; font-size: 0.95rem;">Kosten pro Bogen (€) *</label>
-                        <input type="number" id="cost_per_sheet" name="cost_per_sheet" 
+                        <input type="number" id="cost_per_sheet" name="cost_per_sheet"
                                step="0.0001" min="0"
                                placeholder="z.B. 0.10"
-                               value="{{ machine.cost_per_sheet if machine and machine.cost_per_sheet else '' }}"
+                               value="{{ '%g'|format(machine.cost_per_sheet) if machine and machine.cost_per_sheet is not none else '' }}"
                                oninput="updateSheetCoverageCheck()" style="font-size: 1.15rem; font-weight: bold; color: var(--color-primary-dark);">
                     </div>
 
@@ -222,7 +190,7 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="actions" style="margin-top: 30px;">
             <button type="submit" class="btn btn-primary">
                 {% if machine %}Aktualisieren{% else %}Maschine speichern{% endif %}
@@ -233,195 +201,130 @@
 </div>
 
 <script>
-const STROM_PREIS_KWH = {{ STROM_PREIS_KWH if STROM_PREIS_KWH is defined else 0.22 }};
 const depreciationInput = document.getElementById('depreciation_euro');
 const lifespanInput = document.getElementById('lifespan_hours');
-const powerKwInput = document.getElementById('power_kw');
-const machineTypeSelect = document.getElementById('machine_type');
-const timeBasedFields = document.getElementById('time-based-fields');
-const pageBasedFields = document.getElementById('page-based-fields');
-const lifespanPagesInput = document.getElementById('lifespan_pages');
-const depreciationPerPageInput = document.getElementById('depreciation_per_page');
+const powerWInput = document.getElementById('power_w');
+const typeSelect = document.getElementById('machine_type_id');
+const billingSelect = document.getElementById('billing_mode');
 const costPerSheetInput = document.getElementById('cost_per_sheet');
+const IS_NEW_MACHINE = {{ 'false' if machine else 'true' }};
 
-function updateFormFields() {
-    const selectedType = machineTypeSelect.value;
-    const sheetSection = document.getElementById('sheet-based-section');
-    const plotterDetailBox = document.getElementById('plotter-detail-box');
-    
-    if (selectedType === 'inkjet_printer') {
-        timeBasedFields.style.display = 'none';
-        pageBasedFields.style.display = 'grid';
-        if (sheetSection) sheetSection.style.display = 'block';
-        if (plotterDetailBox) plotterDetailBox.style.display = 'none';
-        
-        depreciationInput.required = false;
-        lifespanInput.required = false;
-        powerKwInput.required = false;
-    } else if (selectedType === '3d_printer') {
-        timeBasedFields.style.display = 'grid';
-        pageBasedFields.style.display = 'none';
-        if (sheetSection) sheetSection.style.display = 'none';
-        
-        depreciationInput.required = true;
-        lifespanInput.required = true;
-        powerKwInput.required = true;
-    } else { // cutter_plotter or other
-        timeBasedFields.style.display = 'grid';
-        pageBasedFields.style.display = 'none';
-        if (sheetSection) sheetSection.style.display = 'block';
-        if (plotterDetailBox) plotterDetailBox.style.display = 'block';
-        
-        depreciationInput.required = true;
-        lifespanInput.required = true;
-        powerKwInput.required = true;
+// Alle Kostenwerte rechnet der Server (GET /api/machine-rate, mit dem Strompreis aus den Einstellungen).
+let rateData = null;
+let rateTimer = null;
+let rateSequence = 0;
+
+function scheduleRate() {
+    clearTimeout(rateTimer);
+    rateTimer = setTimeout(refreshRate, 150);
+}
+
+async function refreshRate() {
+    const sequence = ++rateSequence;
+    const params = new URLSearchParams({
+        depreciation_euro: depreciationInput.value,
+        lifespan_hours: lifespanInput.value,
+        power_w: powerWInput.value,
+        minutes_per_sheet: document.getElementById('plotter_time_minutes').value,
+        wear_cost: document.getElementById('wear_cost_estimate').value,
+    });
+    try {
+        const response = await fetch('/api/machine-rate?' + params);
+        const data = await response.json();
+        if (sequence !== rateSequence) return;
+        if (!response.ok) throw new Error(data.error);
+        rateData = data;
+        renderRate();
+    } catch (err) {
+        if (sequence !== rateSequence) return;
+        rateData = null;
+        document.getElementById('calculated-cost-hourly').innerText = err.message || '–';
     }
+}
 
-    updateCalculatedCostHourly();
-    updateCalculatedCostPerPage();
+function renderRate() {
+    if (!rateData) return;
+    document.getElementById('calculated-cost-hourly').innerHTML =
+        '<strong>' + rateData.cost_per_hour.toFixed(4) + ' €/h</strong>' +
+        '<small style="color: var(--color-text-light); display: block; margin-top: 5px;">' +
+        '(Strom: ' + rateData.power_cost.toFixed(3) + ' €/h + Abschreibung: ' + rateData.depreciation_cost.toFixed(3) + ' €/h)</small>';
+    document.getElementById('detail-sheet-machine-cost').textContent = rateData.sheet_machine_cost.toFixed(4) + ' €';
+    document.getElementById('detail-sheet-wear-cost').textContent =
+        (rateData.sheet_min_cost - rateData.sheet_machine_cost).toFixed(4) + ' €';
+    document.getElementById('detail-sheet-total-min').textContent = rateData.sheet_min_cost.toFixed(4) + ' €';
     updateSheetCoverageCheck();
 }
 
-function updateCalculatedCostHourly() {
-    const depreciation = parseFloat(depreciationInput.value) || 0;
-    const lifespan = parseFloat(lifespanInput.value) || 1;
-    const power = parseFloat(powerKwInput.value) || 0;
-    
-    const stromKosten = STROM_PREIS_KWH * power;
-    const abschreibung = depreciation / (lifespan > 0 ? lifespan : 1);
-    const costPerHour = stromKosten + abschreibung;
-    
-    const costElement = document.getElementById('calculated-cost-hourly');
-    if (costElement) {
-        costElement.innerHTML = '<strong>' + costPerHour.toFixed(4) + ' €/h</strong>';
-        costElement.innerHTML += '<small style="color: var(--color-text-light); display: block; margin-top: 5px;">';
-        costElement.innerHTML += '(Strom: ' + stromKosten.toFixed(3) + ' €/h + Abschreibung: ' + abschreibung.toFixed(3) + ' €/h)';
-        costElement.innerHTML += '</small>';
+// Ein Typ schlägt nur die Abrechnungsart vor; sie bleibt an der Maschine frei einstellbar
+function onTypeChanged() {
+    const opt = typeSelect.options[typeSelect.selectedIndex];
+    if (opt && opt.dataset.mode) {
+        billingSelect.value = opt.dataset.mode;
     }
+    updateFormFields();
 }
 
-function updateCalculatedCostPerPage() {
-    const costPerPage = parseFloat(depreciationPerPageInput.value) || 0;
-    const costElement = document.getElementById('calculated-cost-page');
-    if (costElement) {
-        costElement.innerHTML = '<strong>' + costPerPage.toFixed(4) + ' €</strong>';
-    }
+function updateFormFields() {
+    const isSheet = billingSelect.value === 'sheet';
+    document.getElementById('sheet-based-section').style.display = isSheet ? 'block' : 'none';
+    costPerSheetInput.required = isSheet;
+    scheduleRate();
 }
 
+// Ampel: vergleicht den eingetragenen Bogenpreis mit den vom Server berechneten Mindestkosten
 function updateSheetCoverageCheck() {
-    const selectedType = machineTypeSelect.value;
-    const costPerSheet = parseFloat(costPerSheetInput.value) || 0;
     const statusBox = document.getElementById('sheet-coverage-status');
-    if (!statusBox) return;
+    if (!statusBox || billingSelect.value !== 'sheet' || !rateData) return;
 
-    if (selectedType === 'inkjet_printer') {
-        const pageCost = parseFloat(depreciationPerPageInput.value) || 0;
-        if (!costPerSheetInput.value || costPerSheet <= 0) {
-            statusBox.style.background = 'var(--color-bg-hover)';
-            statusBox.style.border = '1px solid var(--color-border)';
-            statusBox.style.color = 'var(--color-text)';
-            statusBox.innerHTML = `ℹ️ <strong>Standard aktiv:</strong> Wenn dieses Feld frei bleibt, wird automatisch die berechnete Abschreibung pro Seite (<strong>${pageCost.toFixed(4)} €</strong>) als Bogenpreis verwendet.`;
-        } else if (costPerSheet < pageCost) {
-            statusBox.style.background = '#f8d7da';
-            statusBox.style.border = '1px solid #f5c6cb';
-            statusBox.style.color = '#721c24';
-            statusBox.innerHTML = `🔴 <strong>Achtung - Unterdeckt:</strong> Dein Bogenpreis (${costPerSheet.toFixed(4)} €) liegt unter den Druckkosten pro Seite (${pageCost.toFixed(4)} €)!`;
-        } else {
-            statusBox.style.background = '#d4edda';
-            statusBox.style.border = '1px solid #c3e6cb';
-            statusBox.style.color = '#155724';
-            statusBox.innerHTML = `🟢 <strong>Kostendeckend:</strong> Der Bogenpreis (${costPerSheet.toFixed(4)} €) deckt die Druckkosten (${pageCost.toFixed(4)} €) vollständig ab. (Puffer: <strong>+${(costPerSheet - pageCost).toFixed(4)} €/Bogen</strong>)`;
-        }
-        return;
-    }
-
-    // Für Schneideplotter & Sonstiges
-    const depreciation = parseFloat(depreciationInput.value) || 0;
-    const lifespan = parseFloat(lifespanInput.value) || 1;
-    const power = parseFloat(powerKwInput.value) || 0;
-    const stromKosten = STROM_PREIS_KWH * power;
-    const abschreibung = depreciation / (lifespan > 0 ? lifespan : 1);
-    const costPerHour = stromKosten + abschreibung;
-
-    const timeMinutes = parseFloat(document.getElementById('plotter_time_minutes')?.value) || 2.5;
-    const wearCost = parseFloat(document.getElementById('wear_cost_estimate')?.value) || 0.07;
-
-    const machineCostPerSheet = (costPerHour / 60) * timeMinutes;
-    const totalMinCost = machineCostPerSheet + wearCost;
-
-    const elMach = document.getElementById('detail-sheet-machine-cost');
-    if (elMach) elMach.textContent = machineCostPerSheet.toFixed(4) + ' €';
-
-    const elWear = document.getElementById('detail-sheet-wear-cost');
-    if (elWear) elWear.textContent = wearCost.toFixed(4) + ' €';
-
-    const elTotal = document.getElementById('detail-sheet-total-min');
-    if (elTotal) elTotal.textContent = totalMinCost.toFixed(4) + ' €';
+    const costPerSheet = parseFloat(costPerSheetInput.value) || 0;
+    const machineCost = rateData.sheet_machine_cost;
+    const totalMinCost = rateData.sheet_min_cost;
+    const wearCost = totalMinCost - machineCost;
 
     if (!costPerSheetInput.value || costPerSheet <= 0) {
         statusBox.style.background = 'var(--color-bg-hover)';
         statusBox.style.border = '1px solid var(--color-border)';
         statusBox.style.color = 'var(--color-text)';
         statusBox.innerHTML = `ℹ️ <strong>Bogenpreis festlegen:</strong> Bitte trage den Preis pro Bogen ein. Empfohlener Mindestwert: <strong>${totalMinCost.toFixed(4)} €</strong> (z.B. 0,10 €).`;
-    } else if (costPerSheet < machineCostPerSheet) {
+    } else if (costPerSheet < machineCost) {
         statusBox.style.background = '#f8d7da';
         statusBox.style.border = '1px solid #f5c6cb';
         statusBox.style.color = '#721c24';
-        statusBox.innerHTML = `🔴 <strong>Achtung - Stark unterdeckt:</strong> Der Bogenpreis (${costPerSheet.toFixed(4)} €) deckt nicht einmal die reinen Grundkosten für Strom & Abschreibung (${machineCostPerSheet.toFixed(4)} €) ab! Das Gerät arbeitet mit Verlust.`;
+        statusBox.innerHTML = `🔴 <strong>Achtung - Stark unterdeckt:</strong> Der Bogenpreis (${costPerSheet.toFixed(4)} €) deckt nicht einmal die reinen Grundkosten für Strom & Abschreibung (${machineCost.toFixed(4)} €) ab! Das Gerät arbeitet mit Verlust.`;
     } else if (costPerSheet < totalMinCost) {
         statusBox.style.background = '#fff3cd';
         statusBox.style.border = '1px solid #ffeeba';
         statusBox.style.color = '#856404';
-        const remainingWear = costPerSheet - machineCostPerSheet;
-        statusBox.innerHTML = `🟡 <strong>Verschleiß nicht voll gedeckt:</strong> Strom & Abschreibung (${machineCostPerSheet.toFixed(4)} €) sind gedeckt, aber für Klinge & Schneidematte verbleiben nur <strong>+${remainingWear.toFixed(4)} €</strong> (empfohlen: mindestens ${wearCost.toFixed(4)} €).`;
+        statusBox.innerHTML = `🟡 <strong>Verschleiß nicht voll gedeckt:</strong> Strom & Abschreibung (${machineCost.toFixed(4)} €) sind gedeckt, aber für Klinge & Schneidematte verbleiben nur <strong>+${(costPerSheet - machineCost).toFixed(4)} €</strong> (empfohlen: mindestens ${wearCost.toFixed(4)} €).`;
     } else {
         statusBox.style.background = '#d4edda';
         statusBox.style.border = '1px solid #c3e6cb';
         statusBox.style.color = '#155724';
-        const buffer = costPerSheet - totalMinCost;
-        statusBox.innerHTML = `🟢 <strong>Voll kostendeckend:</strong> Strom & Abschreibung (${machineCostPerSheet.toFixed(4)} €) sowie Klingen- & Schneidemattenverschleiß (${wearCost.toFixed(4)} €) sind sicher abgedeckt! (Puffer: <strong>+${buffer.toFixed(4)} €/Bogen</strong>)`;
+        statusBox.innerHTML = `🟢 <strong>Voll kostendeckend:</strong> Strom & Abschreibung (${machineCost.toFixed(4)} €) sowie Klingen- & Schneidemattenverschleiß (${wearCost.toFixed(4)} €) sind sicher abgedeckt! (Puffer: <strong>+${(costPerSheet - totalMinCost).toFixed(4)} €/Bogen</strong>)`;
     }
 }
 
 function applyRecommendedSheetCost() {
-    const selectedType = machineTypeSelect.value;
-    if (selectedType === 'inkjet_printer') {
-        const pageCost = parseFloat(depreciationPerPageInput.value) || 0;
-        costPerSheetInput.value = pageCost.toFixed(4);
-    } else {
-        const depreciation = parseFloat(depreciationInput.value) || 0;
-        const lifespan = parseFloat(lifespanInput.value) || 1;
-        const power = parseFloat(powerKwInput.value) || 0;
-        const costPerHour = (STROM_PREIS_KWH * power) + (depreciation / (lifespan > 0 ? lifespan : 1));
-        const timeMinutes = parseFloat(document.getElementById('plotter_time_minutes')?.value) || 2.5;
-        const wearCost = parseFloat(document.getElementById('wear_cost_estimate')?.value) || 0.07;
-        const totalMinCost = ((costPerHour / 60) * timeMinutes) + wearCost;
-        
-        // Runde auf sinnvolle nächste 2 Dezimalstellen auf (mindestens 0.08 oder 0.10)
-        let rounded = Math.ceil(totalMinCost * 100) / 100;
-        if (rounded < 0.08) rounded = 0.08;
-        costPerSheetInput.value = rounded.toFixed(4);
-    }
+    if (!rateData) return;
+    costPerSheetInput.value = rateData.recommended_sheet_price.toFixed(4);
     updateSheetCoverageCheck();
 }
 
-// Event Listener
-depreciationInput.addEventListener('input', () => { updateCalculatedCostHourly(); updateSheetCoverageCheck(); });
-lifespanInput.addEventListener('input', () => { updateCalculatedCostHourly(); updateSheetCoverageCheck(); });
-powerKwInput.addEventListener('input', () => { updateCalculatedCostHourly(); updateSheetCoverageCheck(); });
-depreciationPerPageInput.addEventListener('input', () => { updateCalculatedCostPerPage(); updateSheetCoverageCheck(); });
+depreciationInput.addEventListener('input', scheduleRate);
+lifespanInput.addEventListener('input', scheduleRate);
+powerWInput.addEventListener('input', scheduleRate);
 costPerSheetInput.addEventListener('input', updateSheetCoverageCheck);
 
-// Quick-Add und Reload für Maschinentypen
+// --- Maschinentypen: Quick-Add und Neuladen ---
 function toggleQuickAddType(show = null) {
     const box = document.getElementById('quick-add-type-box');
     const input = document.getElementById('new-type-input');
     const msg = document.getElementById('quick-add-type-msg');
     if (!box) return;
-    
+
     const isVisible = box.style.display !== 'none';
     const shouldShow = show !== null ? show : !isVisible;
-    
+
     box.style.display = shouldShow ? 'block' : 'none';
     if (msg) msg.style.display = 'none';
     if (shouldShow && input) {
@@ -437,6 +340,18 @@ function showTypeStatus(text, color) {
     msg.style.display = 'block';
 }
 
+function fillTypeSelect(types, selectedId) {
+    typeSelect.innerHTML = '';
+    types.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = t.name;
+        opt.dataset.mode = t.default_billing_mode;
+        if (String(t.id) === String(selectedId)) opt.selected = true;
+        typeSelect.appendChild(opt);
+    });
+}
+
 async function quickAddMachineType() {
     const input = document.getElementById('new-type-input');
     const name = input ? input.value.trim() : '';
@@ -448,10 +363,8 @@ async function quickAddMachineType() {
     try {
         const formData = new FormData();
         formData.append('name', name);
-        const resp = await fetch('/api/machine-types/quick-add', {
-            method: 'POST',
-            body: formData
-        });
+        formData.append('default_billing_mode', document.getElementById('new-type-mode').value);
+        const resp = await fetch('/api/machine-types/quick-add', { method: 'POST', body: formData });
 
         if (!resp.ok) {
             const err = await resp.json();
@@ -459,24 +372,9 @@ async function quickAddMachineType() {
         }
 
         const data = await resp.json();
-        
-        // Dropdown aktualisieren und den neuen Typ auswählen
-        const select = document.getElementById('machine_type');
-        select.innerHTML = '';
-        data.machine_types.forEach(t => {
-            const opt = document.createElement('option');
-            opt.value = t.key;
-            opt.textContent = t.label;
-            if (t.key === data.key) {
-                opt.selected = true;
-            }
-            select.appendChild(opt);
-        });
+        fillTypeSelect(data.machine_types, data.id);
+        onTypeChanged();
 
-        select.value = data.key;
-        updateFormFields();
-
-        // Input leeren und Box schließen
         input.value = '';
         toggleQuickAddType(false);
     } catch (err) {
@@ -484,54 +382,29 @@ async function quickAddMachineType() {
     }
 }
 
-async function reloadMachineTypes(selectedKeyToSet = null, showNotification = true) {
-    const select = document.getElementById('machine_type');
-    const currentVal = selectedKeyToSet || select.value;
-    
+async function reloadMachineTypes() {
+    const currentId = typeSelect.value;
     try {
         const resp = await fetch('/api/machine-types');
         if (!resp.ok) return;
         const types = await resp.json();
-        
-        const currentOptions = Array.from(select.options).map(o => o.value);
-        const newOptions = types.map(t => t.key);
-        const hasChanged = currentOptions.length !== newOptions.length || !newOptions.every((v, i) => v === currentOptions[i]);
-        
-        if (!hasChanged && !selectedKeyToSet) {
-            return;
-        }
-
-        select.innerHTML = '';
-        types.forEach(t => {
-            const opt = document.createElement('option');
-            opt.value = t.key;
-            opt.textContent = t.label;
-            if (t.key === currentVal) {
-                opt.selected = true;
-            }
-            select.appendChild(opt);
-        });
-
-        if (selectedKeyToSet) {
-            select.value = selectedKeyToSet;
-        } else if (!types.some(t => t.key === currentVal) && types.length > 0) {
-            select.value = types[0].key;
-        } else {
-            select.value = currentVal;
-        }
-
-        updateFormFields();
+        const changed = types.length !== typeSelect.options.length ||
+            types.some((t, i) => String(t.id) !== typeSelect.options[i].value);
+        if (!changed) return;
+        fillTypeSelect(types, currentId);
     } catch (e) {
         console.error('Fehler beim Neuladen der Maschinentypen:', e);
     }
 }
 
 // Wenn Benutzer aus dem Einstellungen-Tab zurückkehrt, Dropdown automatisch synchronisieren
-window.addEventListener('focus', () => {
-    reloadMachineTypes(null, false);
-});
+window.addEventListener('focus', reloadMachineTypes);
 
-// Initialisierung
-updateFormFields();
+// Initialisierung: bei neuen Maschinen die Abrechnungsart des gewählten Typs vorschlagen
+if (IS_NEW_MACHINE) {
+    onTypeChanged();
+} else {
+    updateFormFields();
+}
 </script>
 {% endblock %}

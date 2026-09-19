@@ -50,7 +50,7 @@ case "$COMMAND" in
         
         # Kopiere neue Migration in das lokale Verzeichnis
         echo -e "\n${YELLOW}📥 Kopiere neue Migrationsdatei...${NC}"
-        docker cp "picocalc-web-1:/app/alembic/versions/." alembic/versions/ 2>/dev/null || true
+        docker cp "picocalc-web-1:/app/alembic/versions/." app/alembic/versions/ 2>/dev/null || true
         
         echo -e "\n${GREEN}✅ Migration erstellt! Führe jetzt aus mit: ./migrate.sh${NC}"
         ;;

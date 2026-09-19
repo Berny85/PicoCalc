@@ -3,6 +3,12 @@
 {% block title %}Maschinen - Picobellu Kalkulator{% endblock %}
 
 {% block content %}
+{% if error_msg %}
+<div class="alert alert-error" style="background: #f8d7da; color: #721c24; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+    ⚠️ {{ error_msg }}
+</div>
+{% endif %}
+
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
         <h2>Maschinen-Verwaltung</h2>
@@ -48,9 +54,9 @@
                 <th>Name</th>
                 <th>Typ</th>
                 <th>Beschreibung</th>
-                <th>{% if m and m.machine_type == 'inkjet_printer' %}Abschreibung/Seite{% else %}Abschreibung{% endif %}</th>
+                <th>Abschreibung</th>
                 <th>Lebensdauer</th>
-                <th>Strom (kW)</th>
+                <th>Strom (W)</th>
                 <th>Kosten</th>
                 <th>Aktionen</th>
             </tr>
@@ -60,38 +66,24 @@
             <tr>
                 <td><strong>{{ m.name }}</strong></td>
                 <td>
-                    {{ machine_type_labels.get(m.machine_type, m.machine_type) }}
+                    {{ m.machine_type.name }}
+                    <small style="display: block; color: var(--color-text-light);">
+                        {% if m.billing_mode == 'sheet' %}Abrechnung pro Bogen{% else %}Abrechnung nach Zeit{% endif %}
+                    </small>
                 </td>
                 <td>{{ m.description or '-' }}</td>
-                
-                {% if m.machine_type == 'inkjet_printer' %}
-                    {# Tintenstrahl-Drucker: Seitenbasierte Anzeige #}
-                    <td><strong><span class="streamer-mask streamer-mask-compact">{{ "%.4f"|format(m.depreciation_per_page or 0) }} €/Seite</span></strong></td>
-                    <td><strong>{{ m.lifespan_pages|int if m.lifespan_pages else '-' }} Seiten</strong></td>
-                    <td><strong>-</strong></td>
-                    <td>
-                        <strong><span class="streamer-mask streamer-mask-compact">{{ "%.4f"|format(m.calculate_cost_per_page()) }} €/Seite</span></strong>
-                        {% if m.cost_per_sheet %}
-                        <small style="display: block; color: var(--color-primary-dark); font-weight: 600; margin-top: 2px;">
-                            Bogen: <span class="streamer-mask streamer-mask-compact">{{ "%.3f"|format(m.cost_per_sheet) }} €</span>
-                        </small>
-                        {% endif %}
-                    </td>
-                {% else %}
-                    {# Andere Maschinen: Zeitbasierte Anzeige #}
-                    <td><strong><span class="streamer-mask streamer-mask-compact">{{ m.depreciation_euro }} €</span></strong></td>
-                    <td><strong>{{ m.lifespan_hours }} h</strong></td>
-                    <td><strong>{{ m.power_kw }} kW</strong></td>
-                    <td>
-                        <strong><span class="streamer-mask streamer-mask-compact">{{ "%.3f"|format(m.calculate_cost_per_hour()) }} €/h</span></strong>
-                        {% if m.cost_per_sheet %}
-                        <small style="display: block; color: var(--color-primary-dark); font-weight: 600; margin-top: 2px;">
-                            Bogen: <span class="streamer-mask streamer-mask-compact">{{ "%.3f"|format(m.cost_per_sheet) }} €</span>
-                        </small>
-                        {% endif %}
-                    </td>
-                {% endif %}
-                
+
+                <td>{% if m.time_costs %}<strong><span class="streamer-mask streamer-mask-compact">{{ "%.2f"|format(m.depreciation_euro) }} €</span></strong>{% else %}–{% endif %}</td>
+                <td>{% if m.time_costs %}<strong>{{ "%g"|format(m.lifespan_hours) }} h</strong>{% else %}–{% endif %}</td>
+                <td>{% if m.time_costs %}<strong>{{ "%g"|format(m.power_w) }} W</strong>{% else %}–{% endif %}</td>
+                <td>
+                    {% if m.billing_mode == 'sheet' %}
+                        <strong><span class="streamer-mask streamer-mask-compact">{{ m.cost_per_sheet_value()|price }} €/Bogen</span></strong>
+                    {% else %}
+                        <strong><span class="streamer-mask streamer-mask-compact">{{ "%.3f"|format(m.cost_per_hour(electricity_price)) }} €/h</span></strong>
+                    {% endif %}
+                </td>
+
                 <td>
                     <a href="/machines/{{ m.id }}/edit" class="btn btn-primary" 
                        style="padding: 6px 12px; font-size: 14px;">Bearbeiten</a>

@@ -1,0 +1,12 @@
+[Unit]
+Description=PicoCalc Backup (Datenbank und Storage auf den OMV)
+Wants=network-online.target
+After=network-online.target docker.service
+# Bindet den NFS-Share ein (fstab/automount) und bricht ab, wenn er nicht verfügbar ist
+RequiresMountsFor=/mnt/omv-backup
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/picocalc-backup.env
+ExecStart=/bin/bash /srv/containers/picocalc/scripts/backup/backup-picocalc.sh
+Nice=10

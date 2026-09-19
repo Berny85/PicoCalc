@@ -227,7 +227,7 @@
     </div>
     <div class="summary-box">
         <div class="val">{{ totals.total_print_time_hours }} h</div>
-        <div class="lbl">Gesamte Druckzeit</div>
+        <div class="lbl">Gesamte Maschinenzeit</div>
     </div>
     <div class="summary-box">
         <div class="val">{{ totals.todos_done }} / {{ totals.todos_total }}</div>
@@ -274,7 +274,7 @@
 </table>
 
 <!-- Materialbedarf -->
-{% if totals.filament_breakdown or totals.sheet_breakdown %}
+{% if totals.filament_breakdown or totals.sheet_breakdown or totals.other_breakdown %}
 <h2>🧵 Materialbedarf Vorproduktion</h2>
 <div style="display: flex; gap: 30px; margin-bottom: 20px;">
     {% if totals.filament_breakdown %}
@@ -294,6 +294,17 @@
         <ul style="margin: 5px 0; padding-left: 20px;">
             {% for name, sheets in totals.sheet_breakdown.items() %}
             <li>{{ name }}: {{ sheets }} Bögen</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {% if totals.other_breakdown %}
+    <div style="flex: 1;">
+        <strong>Weitere Materialien</strong>
+        <ul style="margin: 5px 0; padding-left: 20px;">
+            {% for m in totals.other_breakdown %}
+            <li>{{ m.name }}: {{ m.amount }} {{ m.unit }}</li>
             {% endfor %}
         </ul>
     </div>

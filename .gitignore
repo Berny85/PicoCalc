@@ -1,3 +1,16 @@
-/old_project
+# Python
 __pycache__/
 *.pyc
+.pytest_cache/
+
+# Laufzeitdaten und Geheimnisse (liegen auch auf dem Server im Projektordner)
+.env
+app/storage/
+/storage/
+/db_data/
+/db/
+/pgadmin/
+/logs/
+*.log
+*.dump
+picocalc_dump*.sql

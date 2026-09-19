@@ -77,7 +77,7 @@ switch ($Command) {
         
         # Kopiere neue Migration in das lokale Verzeichnis
         Write-Host "`n📥 Kopiere neue Migrationsdatei..." -ForegroundColor Yellow
-        docker cp "picocalc-web-1:/app/alembic/versions/." alembic/versions/ 2>$null
+        docker cp "picocalc-web-1:/app/alembic/versions/." app/alembic/versions/ 2>$null
         
         Write-Host "`n✅ Migration erstellt! Führe jetzt aus mit: .\migrate.ps1" -ForegroundColor Green
     }

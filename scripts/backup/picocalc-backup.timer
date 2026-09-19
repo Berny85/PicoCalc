@@ -1,0 +1,11 @@
+[Unit]
+Description=PicoCalc Backup täglich um 02:30
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+RandomizedDelaySec=10min
+# Wurde der NUC zur Backup-Zeit ausgeschaltet, wird das Backup beim nächsten Start nachgeholt
+Persistent=true
+
+[Install]
+WantedBy=timers.target

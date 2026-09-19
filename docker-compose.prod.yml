@@ -1,119 +1,73 @@
-version: '3.8'
+# =============================================================================
+# PicoCalc - Produktion (Debian-NUC, /srv/containers/picocalc)
+# =============================================================================
+# Abgeleitet von der laufenden Compose-Datei auf dem NUC (Umzug vom 17.09.2026).
+#
+# WICHTIG: Im Repo liegt zusätzlich die Entwicklungs-Datei "docker-compose.yaml". Ein einfaches
+# "docker compose ..." würde diese nehmen. Deshalb immer mit -f arbeiten (deploy.sh tut das) oder in der
+# .env auf dem Server einmalig setzen:
+#     COMPOSE_FILE=docker-compose.prod.yml
+#
+# Zugangsdaten stehen in der .env auf dem Server (nicht im Repo): DB_PASSWORD (Pflicht), SECRET_KEY.
+# Daten liegen relativ zu diesem Ordner: ./db_data (PostgreSQL) und ./storage (SVG-Konverter).
+# =============================================================================
 
 services:
   db:
     image: postgres:16-alpine
     container_name: picocalc-db
+    restart: unless-stopped
     volumes:
-      - /mnt/user/appdata/picocalc/db:/var/lib/postgresql/data
-      - /mnt/user/backups/picocalc/wal:/var/lib/postgresql/wal
-      - /mnt/user/appdata/picocalc/postgresql.conf:/etc/postgresql/postgresql.conf
+      - ./db_data:/var/lib/postgresql/data
     environment:
       - POSTGRES_DB=printcalc
       - POSTGRES_USER=printuser
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:?DB_PASSWORD fehlt in der .env}
       - PGDATA=/var/lib/postgresql/data/pgdata
     ports:
       - "5432:5432"
-    command: postgres -c config_file=/etc/postgresql/postgresql.conf
-    restart: unless-stopped
-    labels:
-      - "backup.stop=true"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U printuser -d printcalc"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
       retries: 5
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
-        max-file: "10"
+        max-file: "5"
 
   web:
-    build: 
+    build:
       context: .
       dockerfile: app/Dockerfile
     container_name: picocalc-app
+    restart: unless-stopped
     ports:
       - "5000:5000"
     environment:
-      - DATABASE_URL=postgresql://printuser:${DB_PASSWORD}@db:5432/printcalc
-      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=postgresql://printuser:${DB_PASSWORD:?DB_PASSWORD fehlt in der .env}@db:5432/printcalc
+      - SECRET_KEY=${SECRET_KEY:-}
       - FILE_STORAGE_PATH=/app/storage
     volumes:
-      - /mnt/user/appdata/picocalc/storage:/app/storage
+      - ./storage:/app/storage
     depends_on:
-      - db
-    restart: unless-stopped
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "10"
-
-  backup:
-    image: offen/docker-volume-backup:latest
-    container_name: picocalc-backup
-    volumes:
-      - /mnt/user/backups/picocalc:/backup
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /etc/localtime:/etc/localtime:ro
-      - /mnt/user/appdata/picocalc/storage:/backup/files:ro
-    environment:
-      - BACKUP_CRON_EXPRESSION=0 6,12,18 * * *
-      - BACKUP_RETENTION_DAYS=14
-      - BACKUP_FILENAME=backup-%Y-%m-%dT%H-%M-%S.tar.gz
-      - BACKUP_ARCHIVE=/backup
-      - BACKUP_STOP_CONTAINER_LABEL=backup.stop
-      - BACKUP_STOP_CONTAINER_TIMEOUT=120
-      - BACKUP_PRUNING_PREFIX=backup-
-      - AWS_S3_BUCKET_NAME=
-      - BACKUP_NOTIFICATION_URL=
-    restart: unless-stopped
-    depends_on:
-      - db
-
-  dozzle:
-    image: amir20/dozzle:latest
-    container_name: dozzle
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    ports:
-      - "8080:8080"
-    environment:
-      - DOZZLE_BASE=/
-      - DOZZLE_LEVEL=info
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: picocalc-pgadmin
-    user: "0:0"
-    ports:
-      - "5050:80"
-    environment:
-      - PGADMIN_DEFAULT_EMAIL=admin@admin.com
-      - PGADMIN_DEFAULT_PASSWORD=admin
-      - PGADMIN_CONFIG_SERVER_MODE=False
-    volumes:
-      - /mnt/user/appdata/picocalc/pgadmin:/var/lib/pgadmin
-    depends_on:
-      - db
-    restart: unless-stopped
+      db:
+        condition: service_healthy
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "5"
 
-volumes:
-  postgres_data:
-  backup_data:
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - DOZZLE_BASE=/
+      - DOZZLE_LEVEL=info

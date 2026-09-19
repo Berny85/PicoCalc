@@ -73,6 +73,7 @@
                       placeholder="Dekoration&#10;Technik&#10;Ersatzteile&#10;Spielzeug&#10;Werkzeuge&#10;Sticker&#10;Papierprodukte&#10;Sonstiges">{{ product_categories_text }}</textarea>
             <small style="color: var(--color-text-light);">
                 Tragen Sie hier die Kategorien ein, die bei neuen Produkten im Dropdown zur Auswahl stehen sollen (eine Kategorie pro Zeile).
+                Kategorien, die noch von Produkten verwendet werden, bleiben erhalten.
             </small>
         </div>
 
@@ -83,7 +84,8 @@
                       style="width: 100%; font-family: monospace; font-size: 0.95rem; padding: 10px; line-height: 1.5; border-radius: 4px; border: 1px solid var(--color-border);" 
                       placeholder="3D-Drucker&#10;Schneideplotter&#10;Tintenstrahl-Drucker&#10;Laser / Gravierer&#10;Transferpresse / Heißpresse&#10;Sonstiges">{{ machine_types_text }}</textarea>
             <small style="color: var(--color-text-light);">
-                Tragen Sie hier die Maschinen-Typen ein, die bei Maschinen im Dropdown zur Auswahl stehen sollen (ein Typ pro Zeile, z. B. <code>3D-Drucker</code>, <code>Schneideplotter</code>, <code>Laser</code>, <code>Transferpresse</code>).
+                Ein Typ pro Zeile. Mit <code>| Bogen</code> hinter dem Namen schlägt der Typ bei neuen Maschinen die Abrechnung pro Bogen vor
+                (z. B. <code>Schneideplotter | Bogen</code>), sonst nach Zeit. Typen, die noch von Maschinen verwendet werden, bleiben erhalten.
             </small>
         </div>
 

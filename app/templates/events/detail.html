@@ -83,16 +83,17 @@
 
     <!-- Zeitaufwand -->
     <div class="stat-card" style="border-top: 4px solid #ffc107;">
-        <h3 style="font-size: 1.6rem; color: #d39e00;">{{ totals.total_print_time_hours }} h <span style="font-size: 1rem; font-weight: normal;">Druck</span></h3>
+        <h3 style="font-size: 1.6rem; color: #d39e00;">{{ totals.total_print_time_hours }} h <span style="font-size: 1rem; font-weight: normal;">Maschine</span></h3>
         <p style="font-weight: 600;">Zeitaufwand Gesamt</p>
         <small style="color: var(--color-text-light);">+ {{ totals.total_labor_hours }} h Handarbeit</small>
     </div>
 </div>
 
 <!-- Ressourcen-Bedarf Aufschlüsselung (Filament / Sticker) -->
-{% if totals.filament_breakdown or totals.sheet_breakdown %}
+{% if totals.filament_breakdown or totals.sheet_breakdown or totals.other_breakdown %}
 <div class="card" style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%); border-left: 4px solid var(--color-primary);">
     <h3 style="font-size: 1.1rem; color: var(--color-primary-dark); margin-bottom: 12px;">📦 Benötigte Rohmaterialien für Vorproduktion</h3>
+    <p style="font-size: 0.8rem; color: var(--color-text-light); margin-bottom: 10px;">Berechnet in ganzen Chargen (die Soll-Menge wird auf volle Chargen aufgerundet).</p>
     <div style="display: flex; flex-wrap: wrap; gap: 20px;">
         {% if totals.filament_breakdown %}
         <div style="flex: 1; min-width: 240px;">
@@ -111,6 +112,17 @@
             <ul style="margin-top: 6px; padding-left: 20px; font-size: 0.95rem;">
                 {% for mat_name, sheets in totals.sheet_breakdown.items() %}
                 <li>{{ mat_name }}: <strong>{{ sheets }} Bögen</strong></li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if totals.other_breakdown %}
+        <div style="flex: 1; min-width: 240px;">
+            <strong>🧩 Weitere Materialien:</strong>
+            <ul style="margin-top: 6px; padding-left: 20px; font-size: 0.95rem;">
+                {% for m in totals.other_breakdown %}
+                <li>{{ m.name }}: <strong>{{ m.amount }} {{ m.unit }}</strong></li>
                 {% endfor %}
             </ul>
         </div>
@@ -172,15 +184,15 @@
                     {% if market_products %}
                     <optgroup label="🎪 Flohmarkt-Produkte">
                         {% for p in market_products %}
-                        <option value="{{ p.id }}">{{ p.name }} ({{ p.product_type }})</option>
+                        <option value="{{ p.id }}">{{ p.name }} ({{ p.type_label }})</option>
                         {% endfor %}
                     </optgroup>
                     {% endif %}
-                    {% set non_market = all_products|selectattr("is_for_market", "equalto", 0)|list %}
+                    {% set non_market = all_products|rejectattr("is_for_market")|list %}
                     {% if non_market %}
                     <optgroup label="🔒 Einmalprodukte / Nur Kalkulation">
                         {% for p in non_market %}
-                        <option value="{{ p.id }}">{{ p.name }} ({{ p.product_type }})</option>
+                        <option value="{{ p.id }}">{{ p.name }} ({{ p.type_label }})</option>
                         {% endfor %}
                     </optgroup>
                     {% endif %}
@@ -234,14 +246,14 @@
                             {{ item.get_name() }}
                             {% endif %}
                         </strong>
-                        {% if item.product and item.product.product_type == '3d_print' %}
+                        {% if item.product %}
                         <div style="font-size: 0.8rem; color: var(--color-text-light);">
-                            {{ item.product.filament_weight_g }}g | {{ item.product.print_time_hours }}h Druck
+                            Charge ({{ item.product.yield_qty }} Stk.): {{ item.product.get_material_summary() }}
                         </div>
                         {% endif %}
                     </td>
                     <td>
-                        <span class="category-badge category-{{ item.get_product_type() }}">
+                        <span class="category-badge">
                             {{ item.get_product_type() }}
                         </span>
                     </td>

@@ -20,9 +20,6 @@
             💾 Änderungen speichern
         </button>
         {% else %}
-        <a href="/products/classic-new" class="btn btn-secondary" style="font-size: 0.85rem; padding: 7px 12px;">
-            ⚙️ Klassische Typ-Auswahl
-        </a>
         <a href="/products" class="btn btn-secondary">Abbrechen</a>
         <button type="submit" form="universalProductForm" class="btn btn-primary" style="padding: 10px 20px; font-weight: bold;">
             💾 Produkt speichern
@@ -35,7 +32,7 @@
 <form id="deleteProductForm" method="POST" action="/products/{{ product.id }}/delete" style="display: none;"></form>
 {% endif %}
 
-<form id="universalProductForm" method="POST" action="{% if product %}/products/{{ product.id }}/update{% else %}/products/create-universal{% endif %}">
+<form id="universalProductForm" method="POST" action="{% if product %}/products/{{ product.id }}/update{% else %}/products{% endif %}">
     <div class="calc-layout">
         <!-- LINKE SPALTE: REZEPT & EINGABEN -->
         <div class="calc-inputs">
@@ -52,14 +49,11 @@
                 </div>
                 <div class="grid">
                     <div class="form-group">
-                        <label for="category">Kategorie</label>
-                        <select id="category" name="category">
+                        <label for="category_id">Kategorie</label>
+                        <select id="category_id" name="category_id">
                             {% for cat in categories %}
-                            <option value="{{ cat }}" {% if product and product.category == cat %}selected{% elif not product and cat == 'Sonstiges' %}selected{% endif %}>{{ cat }}</option>
+                            <option value="{{ cat.id }}" {% if product and product.category_id == cat.id %}selected{% elif not product and cat.name == 'Sonstiges' %}selected{% endif %}>{{ cat.name }}</option>
                             {% endfor %}
-                            {% if 'Sonstiges' not in categories and categories %}
-                            <option value="Sonstiges" {% if not product or product.category == 'Sonstiges' %}selected{% endif %}>Sonstiges</option>
-                            {% endif %}
                         </select>
                         <small style="color: var(--color-text-light);">
                             <a href="/settings" target="_blank">Kategorien verwalten ⚙️</a>
@@ -83,7 +77,7 @@
                 </div>
                 <p style="color: var(--color-text-light); font-size: 0.85rem; margin-bottom: 15px;">
                     Filamente, Papier, Stickerbögen oder Kleinteile für die gesamte Charge. Die Mengeneinheit passt sich automatisch an.
-                    <a href="/materials/new" target="_blank" style="margin-left: 8px;">Neues Material anlegen ↗</a>
+                    <a href="#" onclick="openMaterialDialog(); return false;" style="margin-left: 8px;">Neues Material anlegen ＋</a>
                 </p>
 
                 <div id="materialsContainer">
@@ -102,6 +96,7 @@
                 <p style="color: var(--color-text-light); font-size: 0.85rem; margin-bottom: 15px;">
                     Genutzte Geräte (3D-Drucker mit Minuten/Stunden, Plotter oder Tintenstrahler mit Bögen). 
                     Der Produkttyp wird hieraus automatisch abgeleitet.
+                    <a href="#" onclick="openMachineDialog(); return false;" style="margin-left: 8px;">Neue Maschine anlegen ＋</a>
                     <a href="/machines" target="_blank" style="margin-left: 8px;">Maschinen verwalten ↗</a>
                 </p>
 
@@ -110,24 +105,23 @@
                 </div>
             </div>
 
-            <!-- 4. ARBEITSZEIT -->
+            <!-- 4. ARBEITSSCHRITTE -->
             <div class="card" style="margin-bottom: 20px;">
-                <h3 style="color: var(--color-primary-dark); margin-bottom: 15px;">4. Arbeitszeit (Handarbeit)</h3>
-                <div class="grid">
-                    <div class="form-group">
-                        <label for="labor_minutes">Arbeitszeit gesamt (Minuten)</label>
-                        <input type="number" id="labor_minutes" name="labor_minutes" value="{{ product.labor_minutes if product else 0 }}" min="0" step="1" oninput="calculateAll()">
-                        <small style="color: var(--color-text-light);">Vorbereitung, Stützen entfernen, Montage, Entgittern</small>
-                    </div>
-                    <div class="form-group">
-                        <label for="labor_rate_per_hour">Stundensatz (€/h)</label>
-                        <input type="number" id="labor_rate_per_hour" name="labor_rate_per_hour" 
-                               value="{{ product.labor_rate_per_hour if product else (default_labor_rate or '20.00') }}" step="0.5" min="0" oninput="calculateAll()">
-                        <small style="color: var(--color-text-light);">Standardwert aus den Einstellungen</small>
-                    </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h3 style="color: var(--color-primary-dark); margin: 0;">4. Arbeitsschritte (Handarbeit)</h3>
+                    <button type="button" class="btn btn-secondary" style="font-size: 0.85rem; padding: 5px 12px;" onclick="addLaborRow()">
+                        + Arbeitsschritt hinzufügen
+                    </button>
+                </div>
+                <p style="color: var(--color-text-light); font-size: 0.85rem; margin-bottom: 15px;">
+                    Zeit für die gesamte Charge, z.B. Vorbereitung, Stützen entfernen, Montage, Entgittern. Jeder Schritt kann einen eigenen
+                    Stundensatz haben (Vorgabe aus den <a href="/settings" target="_blank">Einstellungen</a>).
+                </p>
+
+                <div id="laborContainer">
+                    <!-- Dynamische Arbeitsschritt-Zeilen -->
                 </div>
             </div>
-
             <!-- 5. AUSBEUTE / CHARGENGRÖSSE -->
             <div class="card" style="margin-bottom: 20px; border: 2px solid var(--color-primary); background: #faf8ff;">
                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
@@ -141,7 +135,7 @@
                 <div style="display: flex; align-items: center; gap: 15px;">
                     <div class="form-group" style="max-width: 200px; margin-bottom: 0;">
                         <label for="batch_yield" style="font-weight: bold; font-size: 1rem;">Ausbeute (Stück) *</label>
-                        <input type="number" id="batch_yield" name="batch_yield" value="{{ (product.units_per_batch or product.units_per_sheet or 1)|int if product else 1 }}" min="1" step="1" required 
+                        <input type="number" id="batch_yield" name="batch_yield" value="{{ product.yield_qty if product else 1 }}" min="1" step="1" required
                                style="font-size: 1.3rem; font-weight: bold; text-align: center; color: var(--color-primary-dark);" oninput="calculateAll()">
                     </div>
                     <div style="flex: 1; background: white; padding: 10px 14px; border-radius: 6px; border: 1px solid #e0d5f5; font-size: 0.85rem; color: #555;">
@@ -155,25 +149,32 @@
 
             <!-- 6. VERPACKUNG & VERSAND (1:1) -->
             <div class="card" style="margin-bottom: 20px;">
-                <h3 style="color: var(--color-primary-dark); margin-bottom: 15px;">6. Produktverpackung & Versand</h3>
-                <div class="grid">
-                    <div class="form-group">
-                        <label for="packaging_cost">Produktverpackung (€/Stück)</label>
-                        <input type="number" id="packaging_cost" name="packaging_cost" value="{{ '%.2f'|format(product.packaging_cost) if product and product.packaging_cost is not none else '0.00' }}" min="0" step="0.01" oninput="calculateAll()">
-                        <small style="color: var(--color-text-light);">Wird <strong>1:1 ohne Marge</strong> durchgereicht (z.B. Schutzbeutel, Headercard, Karton)</small>
-                    </div>
-                    <div class="form-group">
-                        <label for="shipping_cost">Versandkosten (€/Stück)</label>
-                        <input type="number" id="shipping_cost" name="shipping_cost" value="{{ '%.2f'|format(product.shipping_cost) if product and product.shipping_cost is not none else '0.00' }}" min="0" step="0.01">
-                        <small style="color: var(--color-text-light);">Optional (nur Richtwert)</small>
-                    </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h3 style="color: var(--color-primary-dark); margin: 0;">6. Produktverpackung & Versand</h3>
+                    <button type="button" class="btn btn-secondary" style="font-size: 0.85rem; padding: 5px 12px;" onclick="addPackagingRow()">
+                        + Verpackung hinzufügen
+                    </button>
+                </div>
+                <p style="color: var(--color-text-light); font-size: 0.85rem; margin-bottom: 15px;">
+                    Verpackungsmaterial <strong>pro verkauftem Stück</strong> (z.B. 1 Schutzbeutel, 1 Headercard). Es wird <strong>1:1 ohne Marge</strong>
+                    durchgereicht und rechnet mit dem aktuellen Materialpreis.
+                    <a href="#" onclick="openMaterialDialog(null, 'pack'); return false;" style="margin-left: 8px;">Neues Material anlegen ＋</a>
+                </p>
+
+                <div id="packagingContainer">
+                    <!-- Dynamische Verpackungs-Zeilen -->
+                </div>
+
+                <div class="form-group" style="max-width: 260px; margin-top: 15px;">
+                    <label for="shipping_cost">Versandkosten (€/Stück)</label>
+                    <input type="number" id="shipping_cost" name="shipping_cost" value="{{ '%g'|format(product.shipping_cost) if product else '0' }}" min="0" step="0.01">
+                    <small style="color: var(--color-text-light);">Optional (nur Richtwert)</small>
                 </div>
             </div>
-
             <!-- 7. EVENT-VERFÜGBARKEIT -->
             <div class="card" style="margin-bottom: 20px; background: var(--color-bg-hover);">
                 <label style="display: flex; align-items: center; gap: 12px; cursor: pointer; margin-bottom: 0;">
-                    <input type="checkbox" name="is_for_market" value="1" {% if not product or product.is_for_market == 1 %}checked{% endif %} style="width: 20px; height: 20px;">
+                    <input type="checkbox" name="is_for_market" value="1" {% if not product or product.is_for_market %}checked{% endif %} style="width: 20px; height: 20px;">
                     <div>
                         <strong>🎪 Für Flohmärkte & Events verfügbar</strong><br>
                         <small style="color: var(--color-text-light);">Haken entfernen, wenn es sich um einen einmaligen Kundenauftrag oder Testkalkulation handelt.</small>
@@ -188,10 +189,9 @@
             <div class="card sticky-panel" style="border-top: 5px solid var(--color-primary);">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--color-border); padding-bottom: 10px;">
                     <h3 style="margin: 0; color: var(--color-primary-dark);">📊 Kalkulation</h3>
-                    <span id="detected_type_badge" style="font-size: 0.8rem; padding: 4px 10px; border-radius: 12px; font-weight: bold; background: #e8eaf6; color: #3f51b5;">
-                        🏷️ 3D-Druck
+                    <span id="detected_type_badge" style="font-size: 0.8rem; padding: 4px 10px; border-radius: 12px; font-weight: bold; background: #f5f5f5; color: #616161;">
+                        ✂️ Handarbeit / Montage
                     </span>
-                    <input type="hidden" id="detected_product_type" name="detected_product_type" value="{{ product.product_type if product else '3d_print' }}">
                 </div>
 
                 <!-- CHARGEN-SUMME -->
@@ -244,7 +244,7 @@
                 <div style="margin-bottom: 20px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                         <span style="font-size: 0.9rem; color: var(--color-text-light);">
-                            Richtwert-VK (Marge {{ margin_multiplier or 2.0 }}×):
+                            Richtwert-VK (Marge {{ '%g'|format(margin_multiplier) }}×):
                         </span>
                         <strong id="suggested_vk" style="font-size: 1.15rem; color: #2e7d32;">0,00 €</strong>
                     </div>
@@ -256,9 +256,9 @@
                     <div class="form-group" style="margin-bottom: 10px;">
                         <label for="selling_price" style="font-weight: bold;">Tatsächlicher Verkaufspreis (VK) *</label>
                         <div style="display: flex; align-items: center; gap: 8px;">
-                            <input type="number" id="selling_price" name="selling_price" step="0.05" min="0" required
+                            <input type="number" id="selling_price" name="selling_price" step="0.01" min="0" required
                                    value="{{ '%.2f'|format(product.selling_price) if product and product.selling_price is not none else '' }}"
-                                   style="font-size: 1.3rem; font-weight: bold; text-align: right;" oninput="updateProfitPreview()">
+                                   style="font-size: 1.3rem; font-weight: bold; text-align: right;" oninput="calculateAll()">
                             <span style="font-size: 1.2rem; font-weight: bold;">€</span>
                         </div>
                         <small style="color: var(--color-text-light);">Frei anpassbar oder per Button oben übernehmen</small>
@@ -274,6 +274,7 @@
                             <span>Gewinnmarge:</span>
                             <strong id="profit_percent" style="color: #2e7d32;">0 %</strong>
                         </div>
+                        <small id="profit_hint" style="display: none; color: var(--color-text-light); margin-top: 4px;">Auf Basis des Richtwert-VK (noch kein VK eingetragen)</small>
                     </div>
                 </div>
 
@@ -285,13 +286,146 @@
     </div>
 </form>
 
+<!-- DIALOG: NEUES MATERIAL (bewusst außerhalb des Produktformulars, da Formulare nicht verschachtelt werden dürfen) -->
+<dialog id="materialDialog" style="border: none; border-radius: 10px; padding: 0; margin: auto; width: min(560px, 92vw); max-height: 92vh; overflow-y: auto; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
+    <form id="materialDialogForm" onsubmit="submitMaterialDialog(event)" style="padding: 22px;">
+        <h3 style="color: var(--color-primary-dark); margin: 0 0 15px 0;">Neues Material anlegen</h3>
+
+        <div class="form-group">
+            <label for="dlg_name">Materialname *</label>
+            <input type="text" id="dlg_name" name="name" required placeholder="z.B. PLA Filament, A4 Papier, Sticker-Sheet">
+        </div>
+
+        <div class="grid">
+            <div class="form-group">
+                <label for="dlg_material_type">Materialtyp *</label>
+                <select id="dlg_material_type" name="material_type_id" required>
+                    {% for mt in material_types %}
+                    <option value="{{ mt.id }}">{{ mt.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="dlg_unit">Einheit *</label>
+                <select id="dlg_unit" name="unit" required>
+                    {% for u in units %}
+                    <option value="{{ u.key }}">{{ u.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="form-group">
+                <label for="dlg_brand">Marke (optional)</label>
+                <input type="text" id="dlg_brand" name="brand" placeholder="z.B. Prusament, Xerox">
+            </div>
+            <div class="form-group">
+                <label for="dlg_color">Farbe (optional)</label>
+                <input type="text" id="dlg_color" name="color" placeholder="z.B. Schwarz, Weiß">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="dlg_price">Preis pro Einheit (€) *</label>
+            <input type="number" id="dlg_price" name="price_per_unit" step="0.0001" min="0" required>
+            <small style="color: var(--color-text-light);">Bei Einheit kg: Preis pro Kilogramm (im Kalkulator wird in Gramm gerechnet)</small>
+        </div>
+
+        <div id="materialDialogError" style="display: none; background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; font-size: 0.9rem;"></div>
+
+        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+            <button type="button" class="btn btn-secondary" onclick="closeMaterialDialog()">Abbrechen</button>
+            <button type="submit" id="materialDialogSave" class="btn btn-primary">💾 Material speichern</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- DIALOG: NEUE MASCHINE (ebenfalls außerhalb des Produktformulars) -->
+<dialog id="machineDialog" style="border: none; border-radius: 10px; padding: 0; margin: auto; width: min(560px, 92vw); max-height: 92vh; overflow-y: auto; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
+    <form id="machineDialogForm" onsubmit="submitMachineDialog(event)" style="padding: 22px;">
+        <h3 style="color: var(--color-primary-dark); margin: 0 0 15px 0;">Neue Maschine anlegen</h3>
+
+        <div class="grid">
+            <div class="form-group">
+                <label for="mdlg_name">Maschinenname *</label>
+                <input type="text" id="mdlg_name" name="name" required placeholder="z.B. Prusa i3 MK3, Silhouette Cameo">
+            </div>
+            <div class="form-group">
+                <label for="mdlg_machine_type">Typ *</label>
+                <select id="mdlg_machine_type" name="machine_type_id" required onchange="onMachineDialogTypeChanged()">
+                    {% for t in machine_types %}
+                    <option value="{{ t.id }}" data-mode="{{ t.default_billing_mode }}">{{ t.name }}</option>
+                    {% endfor %}
+                </select>
+                <small style="color: var(--color-text-light);">
+                    <a href="/settings" target="_blank">Typen verwalten ⚙️</a>
+                </small>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="mdlg_billing_mode">Abrechnung im Produkt *</label>
+            <select id="mdlg_billing_mode" name="billing_mode" required onchange="updateMachineDialogFields()">
+                <option value="time">Nach Zeit (Minuten × Stundensatz)</option>
+                <option value="sheet">Pro Bogen / Durchlauf (Bögen × Bogenpreis)</option>
+            </select>
+        </div>
+
+        <!-- Zeitbasierte Kosten -->
+        <fieldset id="mdlg_time_group" style="border: none;">
+            <div class="grid">
+                <div class="form-group">
+                    <label for="mdlg_depreciation_euro">Abschreibung (€)</label>
+                    <input type="number" id="mdlg_depreciation_euro" name="depreciation_euro" step="0.01" min="0" value="350" oninput="updateMachineDialogCost()">
+                </div>
+                <div class="form-group">
+                    <label for="mdlg_lifespan_hours">Lebensdauer (Stunden)</label>
+                    <input type="number" id="mdlg_lifespan_hours" name="lifespan_hours" step="1" min="1" value="3000" oninput="updateMachineDialogCost()">
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="mdlg_power_w">Stromverbrauch (W)</label>
+                <input type="number" id="mdlg_power_w" name="power_w" step="1" min="0" value="100" oninput="updateMachineDialogCost()">
+                <small style="color: var(--color-text-light);">z.B. 100 für einen 100-W-Drucker</small>
+            </div>
+            <div style="padding: 8px 12px; background: var(--color-bg-hover); border-radius: 6px; font-size: 0.88rem;">
+                Kosten pro Stunde: <strong id="mdlg_cost_hour">–</strong>
+            </div>
+        </fieldset>
+
+        <!-- Bogenpreis (nur bei Abrechnung pro Bogen) -->
+        <fieldset id="mdlg_sheet_group" style="border: none;" hidden disabled>
+            <div class="form-group">
+                <label for="mdlg_cost_per_sheet">Kosten pro Bogen (€) *</label>
+                <input type="number" id="mdlg_cost_per_sheet" name="cost_per_sheet" step="0.0001" min="0" placeholder="z.B. 0.10">
+                <small style="color: var(--color-text-light);">Pauschaler Preis pro Bogen inkl. Strom, Abschreibung und Verschleiß (z.B. 0,10). Details kannst du später in der Maschinenverwaltung ergänzen.</small>
+            </div>
+        </fieldset>
+
+        <div class="form-group">
+            <label for="mdlg_description">Beschreibung (optional)</label>
+            <input type="text" id="mdlg_description" name="description">
+        </div>
+
+        <div id="machineDialogError" style="display: none; background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; font-size: 0.9rem;"></div>
+
+        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+            <button type="button" class="btn btn-secondary" onclick="closeMachineDialog()">Abbrechen</button>
+            <button type="submit" id="machineDialogSave" class="btn btn-primary">💾 Maschine speichern</button>
+        </div>
+    </form>
+</dialog>
+
 <script>
     // Daten aus Backend
     const MATERIALS = {{ materials_json | safe }};
     const MACHINES = {{ machines_json | safe }};
-    const MARGIN_MULTIPLIER = {{ margin_multiplier or 2.0 }};
     const INITIAL_MATERIALS = {{ initial_materials_json | safe if initial_materials_json else '[]' }};
     const INITIAL_MACHINES = {{ initial_machines_json | safe if initial_machines_json else '[]' }};
+    const INITIAL_LABOR = {{ initial_labor_json | safe if initial_labor_json else '[]' }};
+    const INITIAL_PACKAGING = {{ initial_packaging_json | safe if initial_packaging_json else '[]' }};
+    const DEFAULT_LABOR_RATE = {{ default_labor_rate or 20 }};
 
     let materialCounter = 0;
     let machineCounter = 0;
@@ -301,19 +435,40 @@
         calculateAll();
     }
 
-    // --- MATERIAL ZEILEN ---
-    function addMaterialRow(preselectedId = null, defaultAmount = '') {
-        const container = document.getElementById('materialsContainer');
-        const rowId = 'mat_row_' + (++materialCounter);
+    const NEW_MATERIAL_VALUE = '__new__';
 
+    function escapeHtml(str) {
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // Preis mit mindestens 2 und höchstens 4 Nachkommastellen (11,90 / 0,2355)
+    function formatPrice(value) {
+        let text = Number(value).toFixed(4).replace(/0+$/, '');
+        const [integer, fraction = ''] = text.split('.');
+        return integer + ',' + fraction.padEnd(2, '0');
+    }
+
+    function materialOptionsHtml(selectedId = null) {
         let options = '<option value="">-- Material auswählen --</option>';
         MATERIALS.forEach(m => {
-            const isSel = preselectedId && preselectedId == m.id ? 'selected' : '';
-            const brandStr = m.brand ? ` [${m.brand}]` : '';
-            options += `<option value="${m.id}" data-unit="${m.unit}" data-price="${m.price_per_unit}" ${isSel}>
-                ${m.name}${brandStr} (${m.price_per_unit.toFixed(2)} €/${m.unit})
+            const isSel = selectedId && selectedId == m.id ? 'selected' : '';
+            const brandStr = m.brand ? ` [${escapeHtml(m.brand)}]` : '';
+            options += `<option value="${m.id}" data-unit="${escapeHtml(m.unit)}" data-factor="${m.factor}" data-input-label="${escapeHtml(m.input_label)}" ${isSel}>
+                ${escapeHtml(m.name)}${brandStr} (${formatPrice(m.price_per_unit)} ${escapeHtml(m.price_label)})
             </option>`;
         });
+        options += `<option value="${NEW_MATERIAL_VALUE}">＋ Neues Material anlegen …</option>`;
+        return options;
+    }
+
+    // --- MATERIAL ZEILEN ---
+    // kind 'mat' = Material der Charge, 'pack' = Verpackung pro Stück (gleiche Zeile, eigene Felder/Container)
+    function addMaterialRow(preselectedId = null, defaultAmount = '', kind = 'mat') {
+        const container = document.getElementById(kind === 'pack' ? 'packagingContainer' : 'materialsContainer');
+        const rowId = kind + '_row_' + (++materialCounter);
+        const fieldPrefix = kind === 'pack' ? 'used_packaging' : 'used_material';
+
+        const options = materialOptionsHtml(preselectedId);
 
         const row = document.createElement('div');
         row.id = rowId;
@@ -321,27 +476,27 @@
         row.style.cssText = 'display: grid; grid-template-columns: 2fr 1fr 80px 100px 36px; gap: 10px; margin-bottom: 10px; align-items: center;';
         row.innerHTML = `
             <div>
-                <select name="used_material_id" class="mat-select" style="width: 100%;" onchange="onMaterialSelected('${rowId}')">
+                <select name="${fieldPrefix}_id" class="${kind}-select" style="width: 100%;" onchange="onMaterialSelected('${rowId}')">
                     ${options}
                 </select>
             </div>
             <div>
-                <input type="number" name="used_material_amount" class="mat-amount" step="any" min="0" placeholder="Menge" value="${defaultAmount !== '' && defaultAmount !== null && defaultAmount !== undefined ? defaultAmount : ''}" oninput="onAmountInput(this)" style="width: 100%;">
+                <input type="number" name="${fieldPrefix}_amount" class="${kind}-amount" step="any" min="0" placeholder="${kind === 'pack' ? 'Menge pro Stück' : 'Menge'}" value="${defaultAmount !== '' && defaultAmount !== null && defaultAmount !== undefined ? defaultAmount : ''}" oninput="onAmountInput(this)" style="width: 100%;">
             </div>
             <div>
-                <span class="mat-unit-badge" style="display: inline-block; width: 100%; text-align: center; padding: 6px 4px; background: #eee; border-radius: 4px; font-size: 0.85rem; font-weight: 500;">
+                <span class="${kind}-unit-badge" style="display: inline-block; width: 100%; text-align: center; padding: 6px 4px; background: #eee; border-radius: 4px; font-size: 0.85rem; font-weight: 500;">
                     Einheit
                 </span>
             </div>
             <div style="text-align: right;">
-                <span class="mat-cost-display" style="font-weight: 600; font-size: 0.95rem; color: #444;">0,00 €</span>
+                <span class="${kind}-cost-display" style="font-weight: 600; font-size: 0.95rem; color: #444;">0,00 €</span>
             </div>
             <div>
                 <button type="button" class="btn btn-danger" onclick="removeRow('${rowId}')" style="padding: 4px 8px; font-size: 0.9rem; line-height: 1;">✕</button>
             </div>
         `;
         container.appendChild(row);
-        const amountInput = row.querySelector('.mat-amount');
+        const amountInput = row.querySelector('.mat-amount, .pack-amount');
         if (defaultAmount !== '' && defaultAmount !== null && defaultAmount !== undefined) {
             amountInput.dataset.userEdited = 'true';
         }
@@ -353,10 +508,18 @@
     function onMaterialSelected(rowId) {
         const row = document.getElementById(rowId);
         if (!row) return;
-        const select = row.querySelector('.mat-select');
-        const unitBadge = row.querySelector('.mat-unit-badge');
-        const amountInput = row.querySelector('.mat-amount');
+        const select = row.querySelector('.mat-select, .pack-select');
+        const unitBadge = row.querySelector('.mat-unit-badge, .pack-unit-badge');
+        const amountInput = row.querySelector('.mat-amount, .pack-amount');
         const opt = select.options[select.selectedIndex];
+
+        if (opt && opt.value === NEW_MATERIAL_VALUE) {
+            // Auswahl zurücksetzen und Dialog öffnen; das neue Material landet in dieser Zeile
+            select.value = select.dataset.prevValue || '';
+            openMaterialDialog(rowId);
+            return;
+        }
+        select.dataset.prevValue = select.value;
 
         if (!opt || !opt.value) {
             unitBadge.innerText = 'Einheit';
@@ -364,39 +527,230 @@
             return;
         }
 
-        const dbUnit = (opt.getAttribute('data-unit') || '').toLowerCase();
-        const isPiece = (dbUnit === 'piece' || dbUnit === 'stk' || dbUnit === 'stück' || dbUnit === 'stueck');
-        const isGram = (dbUnit === 'kg' || dbUnit === 'g' || dbUnit === 'gramm');
+        // Die Menge wird in der Eingabe-Einheit des Materials erfasst (z.B. Gramm bei einem kg-Preis)
+        const factor = parseFloat(opt.dataset.factor) || 1;
+        unitBadge.innerText = opt.dataset.inputLabel;
+        unitBadge.title = factor !== 1
+            ? `Eingabe in ${opt.dataset.inputLabel} (Preis gilt pro ${factor} ${opt.dataset.inputLabel})`
+            : `Eingabe in ${opt.dataset.inputLabel}`;
 
-        if (dbUnit === 'kg') {
-            unitBadge.innerText = 'Gramm';
-            unitBadge.title = 'Eingabe in Gramm (wird durch 1000 geteilt)';
-        } else if (dbUnit === 'g' || dbUnit === 'gramm') {
-            unitBadge.innerText = 'Gramm';
-            unitBadge.title = 'Eingabe in Gramm';
-        } else if (dbUnit === 'sheet' || dbUnit === 'bogen') {
-            unitBadge.innerText = 'Bogen';
-        } else if (isPiece) {
-            unitBadge.innerText = 'Stück';
-        } else if (dbUnit === 'm' || dbUnit === 'meter') {
-            unitBadge.innerText = 'Meter';
-        } else {
-            unitBadge.innerText = dbUnit;
-        }
-
-        // Mengen-Standardbelegung:
-        // Bei Stück immer standardmäßig 1 eintragen, bei Gramm leer lassen
-        if (isPiece) {
-            if (!amountInput.value || !amountInput.dataset.userEdited) {
-                amountInput.value = '1';
-            }
-        } else if (isGram) {
-            if (!amountInput.dataset.userEdited) {
-                amountInput.value = '';
-            }
+        // Stückmaterial: standardmäßig 1, sofern noch nichts eingegeben wurde
+        if (opt.dataset.unit === 'piece' && (!amountInput.value || !amountInput.dataset.userEdited)) {
+            amountInput.value = '1';
         }
 
         calculateAll();
+    }
+
+    // --- NEUES MATERIAL (DIALOG) ---
+    let materialDialogTargetRow = null;
+
+    function openMaterialDialog(targetRowId = null, kind = 'mat') {
+        // Ohne Zielzeile: erste Zeile ohne Material im passenden Bereich verwenden, sonst neue Zeile anlegen
+        if (!targetRowId) {
+            const containerId = kind === 'pack' ? 'packagingContainer' : 'materialsContainer';
+            const emptySelect = Array.from(document.querySelectorAll(`#${containerId} .${kind}-select`))
+                .find(s => !s.value);
+            if (emptySelect) {
+                targetRowId = emptySelect.closest('.calc-row').id;
+            } else {
+                addMaterialRow(null, '', kind);
+                const rows = document.querySelectorAll(`#${containerId} .calc-row`);
+                targetRowId = rows[rows.length - 1].id;
+            }
+        }
+        materialDialogTargetRow = targetRowId;
+
+        const dialog = document.getElementById('materialDialog');
+        document.getElementById('materialDialogForm').reset();
+        document.getElementById('materialDialogError').style.display = 'none';
+        dialog.showModal();
+        document.getElementById('dlg_name').focus();
+    }
+
+    function closeMaterialDialog() {
+        document.getElementById('materialDialog').close();
+        materialDialogTargetRow = null;
+    }
+
+    async function submitMaterialDialog(event) {
+        event.preventDefault();
+        const form = event.target;
+        const errorBox = document.getElementById('materialDialogError');
+        const saveBtn = document.getElementById('materialDialogSave');
+        errorBox.style.display = 'none';
+        saveBtn.disabled = true;
+
+        try {
+            const response = await fetch('/api/materials', {
+                method: 'POST',
+                body: new URLSearchParams(new FormData(form))
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || 'Material konnte nicht gespeichert werden.');
+            }
+
+            MATERIALS.push(data);
+            MATERIALS.sort((a, b) => a.name.localeCompare(b.name, 'de'));
+
+            // Alle Dropdowns aktualisieren, bestehende Auswahl bleibt erhalten
+            document.querySelectorAll('#materialsContainer .mat-select, #packagingContainer .pack-select').forEach(sel => {
+                const current = sel.value;
+                sel.innerHTML = materialOptionsHtml(current);
+                sel.dataset.prevValue = sel.value;
+            });
+
+            // Neues Material in der Zielzeile vorauswählen
+            const targetRow = materialDialogTargetRow && document.getElementById(materialDialogTargetRow);
+            if (targetRow) {
+                targetRow.querySelector('.mat-select, .pack-select').value = data.id;
+                onMaterialSelected(materialDialogTargetRow);
+            }
+            closeMaterialDialog();
+            // Erst nach dem Schließen fokussieren, da close() den Fokus zurücksetzt
+            if (targetRow) targetRow.querySelector('.mat-amount, .pack-amount').focus();
+        } catch (err) {
+            errorBox.innerText = err.message;
+            errorBox.style.display = 'block';
+        } finally {
+            saveBtn.disabled = false;
+        }
+    }
+
+    // --- NEUE MASCHINE (DIALOG) ---
+    const NEW_MACHINE_VALUE = '__new_machine__';
+    let machineDialogTargetRow = null;
+
+    function machineOptionsHtml(selectedId = null) {
+        let options = '<option value="">-- Maschine auswählen --</option>';
+        MACHINES.forEach(m => {
+            const isSel = selectedId && selectedId == m.id ? 'selected' : '';
+            options += `<option value="${m.id}" data-mode="${escapeHtml(m.billing_mode)}" ${isSel}>
+                ${escapeHtml(m.name)} (${escapeHtml(m.machine_type)})
+            </option>`;
+        });
+        options += `<option value="${NEW_MACHINE_VALUE}">＋ Neue Maschine anlegen …</option>`;
+        return options;
+    }
+
+    // Ein Typ schlägt nur die Abrechnungsart vor; sie bleibt an der Maschine frei einstellbar
+    function onMachineDialogTypeChanged() {
+        const opt = document.getElementById('mdlg_machine_type').selectedOptions[0];
+        if (opt && opt.dataset.mode) {
+            document.getElementById('mdlg_billing_mode').value = opt.dataset.mode;
+        }
+        updateMachineDialogFields();
+    }
+
+    // Zeit: Abschreibung/Lebensdauer/Strom; Bogen: nur der Bogenpreis
+    function updateMachineDialogFields() {
+        const isSheet = document.getElementById('mdlg_billing_mode').value === 'sheet';
+
+        const setGroup = (id, visible) => {
+            const group = document.getElementById(id);
+            group.hidden = !visible;
+            group.disabled = !visible; // deaktivierte Felder werden nicht mitgesendet und blockieren nicht per "required"
+        };
+        setGroup('mdlg_time_group', !isSheet);
+        setGroup('mdlg_sheet_group', isSheet);
+
+        document.getElementById('mdlg_cost_per_sheet').required = isSheet;
+        updateMachineDialogCost();
+    }
+
+    // Stundensatz der neuen Maschine: rechnet der Server (GET /api/machine-rate)
+    let machineRateSequence = 0;
+    async function updateMachineDialogCost() {
+        const sequence = ++machineRateSequence;
+        const target = document.getElementById('mdlg_cost_hour');
+        const params = new URLSearchParams({
+            depreciation_euro: document.getElementById('mdlg_depreciation_euro').value,
+            lifespan_hours: document.getElementById('mdlg_lifespan_hours').value,
+            power_w: document.getElementById('mdlg_power_w').value,
+        });
+        try {
+            const response = await fetch('/api/machine-rate?' + params);
+            const rate = await response.json();
+            if (sequence !== machineRateSequence) return;
+            target.innerText = response.ok
+                ? `${formatEuro(rate.cost_per_hour, 4)}/h (Strom ${formatEuro(rate.power_cost, 3)} + Abschreibung ${formatEuro(rate.depreciation_cost, 3)})`
+                : rate.error;
+        } catch (err) {
+            if (sequence === machineRateSequence) target.innerText = '–';
+        }
+    }
+
+    function openMachineDialog(targetRowId = null) {
+        // Ohne Zielzeile: erste Zeile ohne Maschine verwenden, sonst neue Zeile anlegen
+        if (!targetRowId) {
+            const emptySelect = Array.from(document.querySelectorAll('#machinesContainer .mac-select'))
+                .find(s => !s.value);
+            if (emptySelect) {
+                targetRowId = emptySelect.closest('.calc-row').id;
+            } else {
+                addMachineRow();
+                const rows = document.querySelectorAll('#machinesContainer .calc-row');
+                targetRowId = rows[rows.length - 1].id;
+            }
+        }
+        machineDialogTargetRow = targetRowId;
+
+        document.getElementById('machineDialogForm').reset();
+        document.getElementById('machineDialogError').style.display = 'none';
+        onMachineDialogTypeChanged();
+        document.getElementById('machineDialog').showModal();
+        document.getElementById('mdlg_name').focus();
+    }
+
+    function closeMachineDialog() {
+        document.getElementById('machineDialog').close();
+        machineDialogTargetRow = null;
+    }
+
+    async function submitMachineDialog(event) {
+        event.preventDefault();
+        const form = event.target;
+        const errorBox = document.getElementById('machineDialogError');
+        const saveBtn = document.getElementById('machineDialogSave');
+        errorBox.style.display = 'none';
+        saveBtn.disabled = true;
+
+        try {
+            const response = await fetch('/api/machines', {
+                method: 'POST',
+                body: new URLSearchParams(new FormData(form))
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || 'Maschine konnte nicht gespeichert werden.');
+            }
+
+            MACHINES.push(data);
+            MACHINES.sort((a, b) => a.name.localeCompare(b.name, 'de'));
+
+            // Alle Dropdowns aktualisieren, bestehende Auswahl bleibt erhalten
+            document.querySelectorAll('#machinesContainer .mac-select').forEach(sel => {
+                const current = sel.value;
+                sel.innerHTML = machineOptionsHtml(current);
+                sel.dataset.prevValue = sel.value;
+            });
+
+            // Neue Maschine in der Zielzeile vorauswählen
+            const targetRow = machineDialogTargetRow && document.getElementById(machineDialogTargetRow);
+            if (targetRow) {
+                targetRow.querySelector('.mac-select').value = data.id;
+                onMachineSelected(machineDialogTargetRow);
+            }
+            closeMachineDialog();
+            // Erst nach dem Schließen fokussieren, da close() den Fokus zurücksetzt
+            if (targetRow) targetRow.querySelector('.mac-value').focus();
+        } catch (err) {
+            errorBox.innerText = err.message;
+            errorBox.style.display = 'block';
+        } finally {
+            saveBtn.disabled = false;
+        }
     }
 
     // --- MASCHINEN ZEILEN ---
@@ -404,13 +758,7 @@
         const container = document.getElementById('machinesContainer');
         const rowId = 'mac_row_' + (++machineCounter);
 
-        let options = '<option value="">-- Maschine auswählen --</option>';
-        MACHINES.forEach(m => {
-            const isSel = preselectedId && preselectedId == m.id ? 'selected' : '';
-            options += `<option value="${m.id}" data-type="${m.machine_type}" data-cost-hour="${m.cost_per_hour}" data-cost-sheet="${m.cost_per_sheet}" ${isSel}>
-                ${m.name} (${m.machine_type_label})
-            </option>`;
-        });
+        const options = machineOptionsHtml(preselectedId);
 
         const row = document.createElement('div');
         row.id = rowId;
@@ -450,21 +798,63 @@
         const unitBadge = row.querySelector('.mac-unit-badge');
         const opt = select.options[select.selectedIndex];
 
+        if (opt && opt.value === NEW_MACHINE_VALUE) {
+            // Auswahl zurücksetzen und Dialog öffnen; die neue Maschine landet in dieser Zeile
+            select.value = select.dataset.prevValue || '';
+            openMachineDialog(rowId);
+            return;
+        }
+        select.dataset.prevValue = select.value;
+
         if (!opt || !opt.value) {
             unitBadge.innerText = 'Minuten';
             calculateAll();
             return;
         }
 
-        const macType = opt.getAttribute('data-type');
-        if (macType === '3d_printer' || macType === 'other') {
-            unitBadge.innerText = 'Minuten';
-            unitBadge.title = 'Fertigungsdauer in Minuten';
-        } else {
+        if (opt.dataset.mode === 'sheet') {
             unitBadge.innerText = 'Bögen';
             unitBadge.title = 'Anzahl Bögen oder Durchläufe';
+        } else {
+            unitBadge.innerText = 'Minuten';
+            unitBadge.title = 'Fertigungsdauer in Minuten';
         }
         calculateAll();
+    }
+
+    // --- ARBEITSSCHRITT-ZEILEN ---
+    let laborCounter = 0;
+
+    function addLaborRow(description = '', minutes = '', rate = DEFAULT_LABOR_RATE) {
+        const container = document.getElementById('laborContainer');
+        const rowId = 'lab_row_' + (++laborCounter);
+
+        const row = document.createElement('div');
+        row.id = rowId;
+        row.className = 'calc-row';
+        row.style.cssText = 'display: grid; grid-template-columns: 2fr 1fr 1fr 100px 36px; gap: 10px; margin-bottom: 10px; align-items: center;';
+        row.innerHTML = `
+            <div>
+                <input type="text" name="used_labor_description" class="lab-description" maxlength="255" placeholder="Arbeitsschritt (z.B. Montage)" value="${escapeHtml(description)}" style="width: 100%;">
+            </div>
+            <div>
+                <input type="number" name="used_labor_minutes" class="lab-minutes" step="any" min="0" placeholder="Minuten" value="${minutes}" oninput="calculateAll()" style="width: 100%;">
+            </div>
+            <div>
+                <input type="number" name="used_labor_rate" class="lab-rate" step="0.5" min="0" placeholder="€/h" value="${rate}" title="Stundensatz in €/h" oninput="calculateAll()" style="width: 100%;">
+            </div>
+            <div style="text-align: right;">
+                <span class="lab-cost-display" style="font-weight: 600; font-size: 0.95rem; color: #444;">0,00 €</span>
+            </div>
+            <div>
+                <button type="button" class="btn btn-danger" onclick="removeRow('${rowId}')" style="padding: 4px 8px; font-size: 0.9rem; line-height: 1;">✕</button>
+            </div>
+        `;
+        container.appendChild(row);
+    }
+
+    function addPackagingRow(preselectedId = null, defaultAmount = '') {
+        addMaterialRow(preselectedId, defaultAmount, 'pack');
     }
 
     function removeRow(rowId) {
@@ -473,156 +863,148 @@
         calculateAll();
     }
 
-    // --- KALKULATIONS-ENGINE ---
+    // --- KALKULATION ---
+    // Alle Beträge rechnet der Server (POST /api/calculate), mit derselben Funktion wie beim gespeicherten
+    // Produkt. Das Formular sammelt nur die Eingaben ein und zeigt das Ergebnis an.
+    let calcTimer = null;
+    let calcSequence = 0;
+    let lastCalc = null;
+
+    function formatEuro(value, decimals = 2) {
+        return Number(value).toFixed(decimals).replace('.', ',') + ' €';
+    }
+
+    // Eingaben bündeln: erst 150 ms nach der letzten Änderung fragen
     function calculateAll() {
-        // 1. Materialien summieren
-        let sumMaterials = 0;
+        clearTimeout(calcTimer);
+        calcTimer = setTimeout(refreshCalculation, 150);
+    }
+
+    function collectCalculationPayload() {
+        const materials = [];
         document.querySelectorAll('#materialsContainer .calc-row').forEach(row => {
-            const select = row.querySelector('.mat-select');
-            const amountInput = row.querySelector('.mat-amount');
-            const costSpan = row.querySelector('.mat-cost-display');
-            const opt = select.options[select.selectedIndex];
-
-            let cost = 0;
-            if (opt && opt.value && amountInput.value) {
-                const amount = parseFloat(amountInput.value) || 0;
-                const price = parseFloat(opt.getAttribute('data-price')) || 0;
-                const dbUnit = opt.getAttribute('data-unit');
-
-                if (dbUnit === 'kg') {
-                    cost = (amount / 1000) * price; // Gramm zu kg
-                } else {
-                    cost = amount * price;
-                }
+            const id = row.querySelector('.mat-select').value;
+            const amount = parseFloat(row.querySelector('.mat-amount').value);
+            if (id && id !== NEW_MATERIAL_VALUE && amount > 0) {
+                materials.push({ key: row.id, material_id: parseInt(id), amount });
             }
-            costSpan.innerText = cost.toFixed(2).replace('.', ',') + ' €';
-            sumMaterials += cost;
         });
 
-        // 2. Maschinen summieren & Typ erkennen
-        let sumMachines = 0;
-        let has3dPrinter = false;
-        let hasStickerMachine = false;
-
+        const machines = [];
         document.querySelectorAll('#machinesContainer .calc-row').forEach(row => {
-            const select = row.querySelector('.mac-select');
-            const valInput = row.querySelector('.mac-value');
-            const costSpan = row.querySelector('.mac-cost-display');
-            const opt = select.options[select.selectedIndex];
-
-            let cost = 0;
-            if (opt && opt.value && valInput.value) {
-                const val = parseFloat(valInput.value) || 0;
-                const macType = opt.getAttribute('data-type');
-
-                if (macType === '3d_printer' || macType === 'other') {
-                    has3dPrinter = true;
-                    const costPerHour = parseFloat(opt.getAttribute('data-cost-hour')) || 0;
-                    cost = (val / 60) * costPerHour; // Minuten in Stunden
-                } else {
-                    hasStickerMachine = true;
-                    const costPerSheet = parseFloat(opt.getAttribute('data-cost-sheet')) || 0;
-                    cost = val * costPerSheet;
-                }
+            const id = row.querySelector('.mac-select').value;
+            const value = parseFloat(row.querySelector('.mac-value').value);
+            if (id && id !== NEW_MACHINE_VALUE && value > 0) {
+                machines.push({ key: row.id, machine_id: parseInt(id), value });
             }
-            costSpan.innerText = cost.toFixed(2).replace('.', ',') + ' €';
-            sumMachines += cost;
         });
 
-        // 3. Typ-Erkennung & Badge
+        const packaging = [];
+        document.querySelectorAll('#packagingContainer .calc-row').forEach(row => {
+            const id = row.querySelector('.pack-select').value;
+            const amount = parseFloat(row.querySelector('.pack-amount').value);
+            if (id && id !== NEW_MATERIAL_VALUE && amount > 0) {
+                packaging.push({ key: row.id, material_id: parseInt(id), amount });
+            }
+        });
+
+        const labor = [];
+        document.querySelectorAll('#laborContainer .calc-row').forEach(row => {
+            const minutes = parseFloat(row.querySelector('.lab-minutes').value);
+            if (minutes > 0) {
+                labor.push({
+                    key: row.id,
+                    description: row.querySelector('.lab-description').value,
+                    minutes,
+                    hourly_rate: parseFloat(row.querySelector('.lab-rate').value) || 0,
+                });
+            }
+        });
+
+        const sellingPrice = parseFloat(document.getElementById('selling_price').value);
+        return {
+            yield_qty: Math.max(1, parseInt(document.getElementById('batch_yield').value) || 1),
+            selling_price: sellingPrice > 0 ? sellingPrice : null,
+            materials,
+            machines,
+            labor,
+            packaging,
+        };
+    }
+
+    async function refreshCalculation() {
+        const sequence = ++calcSequence;
+        try {
+            const response = await fetch('/api/calculate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(collectCalculationPayload()),
+            });
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            const calc = await response.json();
+            if (sequence !== calcSequence) return;   // veraltete Antwort verwerfen
+            lastCalc = calc;
+            renderCalculation(calc);
+        } catch (err) {
+            if (sequence === calcSequence) showCalculationError();
+        }
+    }
+
+    function renderCalculation(calc) {
+        const text = (id, value) => { document.getElementById(id).innerText = value; };
+
+        // Einzelkosten je Zeile
+        const costByKey = {};
+        calc.materials.concat(calc.machines, calc.labor, calc.packaging).forEach(line => { costByKey[line.key] = line.cost; });
+        document.querySelectorAll('.calc-row').forEach(row => {
+            const span = row.querySelector('.mat-cost-display, .mac-cost-display, .lab-cost-display, .pack-cost-display');
+            if (span) span.innerText = formatEuro(costByKey[row.id] || 0);
+        });
+
+        // Chargenkosten
+        text('sum_materials', formatEuro(calc.batch_material_cost));
+        text('sum_machines', formatEuro(calc.batch_machine_cost));
+        text('sum_labor', formatEuro(calc.batch_labor_cost));
+        text('sum_batch_total', formatEuro(calc.batch_total_cost));
+
+        // Pro Stück
+        text('display_yield', calc.yield_qty + ' Stk.');
+        text('cost_per_unit', formatEuro(calc.production_cost));
+        text('display_packaging', formatEuro(calc.packaging_cost));
+        text('total_ek', formatEuro(calc.total_cost));
+        text('suggested_vk', formatEuro(calc.recommended_selling_price));
+
+        // Typ-Badge: ergibt sich aus den verwendeten Maschinen
+        const hasMachines = calc.machines.length > 0;
         const typeBadge = document.getElementById('detected_type_badge');
-        const typeHidden = document.getElementById('detected_product_type');
-        if (has3dPrinter && hasStickerMachine) {
-            typeBadge.innerText = '🏷️ Hybrid-Produkt';
-            typeBadge.style.background = '#fff3cd';
-            typeBadge.style.color = '#856404';
-            typeHidden.value = 'sticker';
-        } else if (hasStickerMachine) {
-            typeBadge.innerText = '🏷️ Sticker-Produkt';
-            typeBadge.style.background = '#e1f5fe';
-            typeBadge.style.color = '#0277bd';
-            typeHidden.value = 'sticker';
-        } else if (has3dPrinter) {
-            typeBadge.innerText = '🖨️ 3D-Druck';
-            typeBadge.style.background = '#e8eaf6';
-            typeBadge.style.color = '#3f51b5';
-            typeHidden.value = '3d_print';
-        } else {
-            typeBadge.innerText = '✂️ Handarbeit / Montage';
-            typeBadge.style.background = '#f5f5f5';
-            typeBadge.style.color = '#616161';
-            typeHidden.value = 'other';
-        }
+        typeBadge.innerText = hasMachines ? '🏷️ ' + calc.type_label : '✂️ Handarbeit / Montage';
+        typeBadge.style.background = hasMachines ? '#e8eaf6' : '#f5f5f5';
+        typeBadge.style.color = hasMachines ? '#3f51b5' : '#616161';
 
-        // 4. Arbeitskosten
-        const laborMin = parseFloat(document.getElementById('labor_minutes').value) || 0;
-        const laborRate = parseFloat(document.getElementById('labor_rate_per_hour').value) || 0;
-        const sumLabor = (laborMin / 60) * laborRate;
-
-        // 5. Chargen-Kosten gesamt
-        const batchTotal = sumMaterials + sumMachines + sumLabor;
-
-        // 6. Ausbeute & Produktions-EK
-        const batchYield = Math.max(1, parseInt(document.getElementById('batch_yield').value) || 1);
-        const prodEkPerUnit = batchTotal / batchYield;
-
-        // 7. Verpackung 1:1
-        const packaging = parseFloat(document.getElementById('packaging_cost').value) || 0;
-        const totalEk = prodEkPerUnit + packaging;
-
-        // 8. Richtwert-VK (Marge × Produktions-EK + Verpackung)
-        const suggestedVk = (prodEkPerUnit * MARGIN_MULTIPLIER) + packaging;
-
-        // DOM Aktualisierungen
-        document.getElementById('sum_materials').innerText = sumMaterials.toFixed(2).replace('.', ',') + ' €';
-        document.getElementById('sum_machines').innerText = sumMachines.toFixed(2).replace('.', ',') + ' €';
-        document.getElementById('sum_labor').innerText = sumLabor.toFixed(2).replace('.', ',') + ' €';
-        document.getElementById('sum_batch_total').innerText = batchTotal.toFixed(2).replace('.', ',') + ' €';
-
-        document.getElementById('display_yield').innerText = batchYield + ' Stk.';
-        document.getElementById('cost_per_unit').innerText = prodEkPerUnit.toFixed(2).replace('.', ',') + ' €';
-        document.getElementById('display_packaging').innerText = packaging.toFixed(2).replace('.', ',') + ' €';
-        document.getElementById('total_ek').innerText = totalEk.toFixed(2).replace('.', ',') + ' €';
-        document.getElementById('suggested_vk').innerText = suggestedVk.toFixed(2).replace('.', ',') + ' €';
-
-        updateProfitPreview(totalEk);
-    }
-
-    function applySuggestedPrice() {
-        const text = document.getElementById('suggested_vk').innerText;
-        const val = parseFloat(text.replace(' €', '').replace(',', '.'));
-        if (!isNaN(val)) {
-            document.getElementById('selling_price').value = val.toFixed(2);
-            calculateAll();
-        }
-    }
-
-    function updateProfitPreview(currentEk = null) {
-        if (currentEk === null) {
-            const ekText = document.getElementById('total_ek').innerText;
-            currentEk = parseFloat(ekText.replace(' €', '').replace(',', '.')) || 0;
-        }
-        const vk = parseFloat(document.getElementById('selling_price').value) || 0;
-        const profit = vk - currentEk;
-        const marginPct = vk > 0 ? (profit / vk) * 100 : 0;
-
+        // Gewinn (bei leerem VK-Feld auf Basis des Richtwert-VK)
+        const positive = calc.profit >= 0;
         const profitBox = document.getElementById('profitBox');
         const euroSpan = document.getElementById('profit_euro');
         const pctSpan = document.getElementById('profit_percent');
+        euroSpan.innerText = formatEuro(calc.profit);
+        pctSpan.innerText = calc.margin_percent.toFixed(1).replace('.', ',') + ' %';
+        document.getElementById('profit_hint').style.display = calc.has_custom_selling_price ? 'none' : 'block';
+        profitBox.style.background = positive ? '#e8f5e9' : '#ffebee';
+        profitBox.style.borderColor = positive ? '#c8e6c9' : '#ffcdd2';
+        euroSpan.style.color = pctSpan.style.color = positive ? '#2e7d32' : '#c62828';
+    }
 
-        euroSpan.innerText = profit.toFixed(2).replace('.', ',') + ' €';
-        pctSpan.innerText = marginPct.toFixed(1).replace('.', ',') + ' %';
+    function showCalculationError() {
+        ['sum_materials', 'sum_machines', 'sum_labor', 'sum_batch_total', 'cost_per_unit', 'display_packaging',
+         'total_ek', 'suggested_vk', 'profit_euro', 'profit_percent'].forEach(id => {
+            document.getElementById(id).innerText = '–';
+        });
+    }
 
-        if (profit >= 0) {
-            profitBox.style.background = '#e8f5e9';
-            profitBox.style.borderColor = '#c8e6c9';
-            euroSpan.style.color = '#2e7d32';
-            pctSpan.style.color = '#2e7d32';
-        } else {
-            profitBox.style.background = '#ffebee';
-            profitBox.style.borderColor = '#ffcdd2';
-            euroSpan.style.color = '#c62828';
-            pctSpan.style.color = '#c62828';
+    function applySuggestedPrice() {
+        if (lastCalc) {
+            document.getElementById('selling_price').value = lastCalc.recommended_selling_price.toFixed(2);
+            calculateAll();
         }
     }
 
@@ -636,6 +1018,14 @@
             addMaterialRow();
         }
 
+        if (INITIAL_LABOR && INITIAL_LABOR.length > 0) {
+            INITIAL_LABOR.forEach(step => addLaborRow(step.description, step.minutes, step.rate));
+        } else {
+            addLaborRow();
+        }
+
+        INITIAL_PACKAGING.forEach(item => addPackagingRow(item.id, item.amount));
+
         if (INITIAL_MACHINES && INITIAL_MACHINES.length > 0) {
             INITIAL_MACHINES.forEach(item => {
                 addMachineRow(item.id, item.value !== undefined && item.value !== null ? item.value : '');
@@ -645,11 +1035,6 @@
         }
 
         calculateAll();
-
-        const sellingPriceInput = document.getElementById('selling_price');
-        if (sellingPriceInput && sellingPriceInput.value && parseFloat(sellingPriceInput.value) > 0) {
-            updateProfitPreview();
-        }
     });
 </script>
 

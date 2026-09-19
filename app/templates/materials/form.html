@@ -17,10 +17,10 @@
                 </div>
                 
                 <div class="form-group">
-                    <label for="material_type">Materialtyp *</label>
-                    <select id="material_type" name="material_type" required>
+                    <label for="material_type_id">Materialtyp *</label>
+                    <select id="material_type_id" name="material_type_id" required>
                         {% for mt in material_types %}
-                        <option value="{{ mt.key }}" {% if material and material.material_type == mt.key %}selected{% endif %}>
+                        <option value="{{ mt.id }}" {% if material and material.material_type_id == mt.id %}selected{% endif %}>
                             {{ mt.name }}
                         </option>
                         {% endfor %}
@@ -32,9 +32,12 @@
                 
                 <div class="form-group">
                     <label for="brand">Marke (optional)</label>
-                    <input type="text" id="brand" name="brand" 
-                           value="{{ material.brand if material else '' }}"
-                           placeholder="z.B. Prusament, Xerox">
+                    <input type="text" id="brand" name="brand" list="brandList"
+                           value="{{ material.brand_name if material else '' }}"
+                           placeholder="z.B. Prusament, Xerox" autocomplete="off">
+                    <datalist id="brandList">
+                        {% for b in brands %}<option value="{{ b.name }}">{% endfor %}
+                    </datalist>
                 </div>
             </div>
             
@@ -49,20 +52,25 @@
                 <div class="form-group">
                     <label for="unit">Einheit *</label>
                     <select id="unit" name="unit" required>
-                        <option value="kg" {% if material and material.unit == 'kg' %}selected{% endif %}>Kilogramm (kg)</option>
-                        <option value="sheet" {% if material and material.unit == 'sheet' %}selected{% endif %}>Bogen (sheet)</option>
-                        <option value="piece" {% if material and material.unit == 'piece' %}selected{% endif %}>Stück (piece)</option>
-                        <option value="pack" {% if material and material.unit == 'pack' %}selected{% endif %}>Packung (pack)</option>
-                        <option value="m" {% if material and material.unit == 'm' %}selected{% endif %}>Meter (m)</option>
-                        <option value="m2" {% if material and material.unit == 'm2' %}selected{% endif %}>Quadratmeter (m²)</option>
+                        {% for key, u in units.items() %}
+                        <option value="{{ key }}" {% if material and material.unit == key %}selected{% endif %}>{{ u.label }}</option>
+                        {% endfor %}
                     </select>
+                    <small style="color: var(--color-text-light);">
+                        Der Preis bezieht sich auf diese Einheit. Bei kg wird die Menge im Produkt in Gramm erfasst.
+                    </small>
                 </div>
                 
                 <div class="form-group">
                     <label for="price_per_unit">Preis pro Einheit (€) *</label>
-                    <input type="number" id="price_per_unit" name="price_per_unit" 
-                           step="0.01" min="0" required
+                    <input type="number" id="price_per_unit" name="price_per_unit"
+                           step="0.0001" min="0" required
                            value="{{ material.price_per_unit if material else '' }}">
+                    {% if material %}
+                    <small style="color: var(--color-text-light);">
+                        Eine Preisänderung wird mit Datum in den Preisverlauf übernommen; bestehende Produkte rechnen ab sofort mit dem neuen Preis.
+                    </small>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -81,6 +89,28 @@
         </div>
     </form>
 </div>
+
+{% if material and material.prices|length > 0 %}
+<div class="card">
+    <h3>Preisverlauf</h3>
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr><th>Gültig ab</th><th style="text-align: right;">Preis</th><th></th></tr>
+            </thead>
+            <tbody>
+                {% for p in material.prices %}
+                <tr>
+                    <td>{{ p.valid_from.strftime('%d.%m.%Y %H:%M') }}</td>
+                    <td style="text-align: right;"><strong>{{ p.price|price }} {{ units[material.unit].price_label if material.unit in units else '€' }}</strong></td>
+                    <td>{% if loop.first %}<span class="category-badge">aktuell</span>{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
 {% endblock %}
 
 

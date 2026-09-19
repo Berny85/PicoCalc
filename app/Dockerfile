@@ -14,12 +14,8 @@ COPY app/requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy application code (inkl. alembic.ini und alembic/)
 COPY app/ .
-
-# Copy alembic config (from root context)
-COPY alembic.ini /app/
-COPY alembic /app/alembic/
 
 # Expose port
 EXPOSE 5000

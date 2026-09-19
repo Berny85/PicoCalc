@@ -75,8 +75,7 @@
 <div class="card">
     <h2>Neues Produkt anlegen</h2>
     <div class="actions" style="margin-top: 20px;">
-        <a href="/products/3d-print/new" class="btn btn-primary">+ 3D-Druck</a>
-        <a href="/products/sticker/new" class="btn btn-primary">+ Sticker</a>
+        <a href="/products/new" class="btn btn-primary">+ Neues Produkt kalkulieren</a>
     </div>
 </div>
 
@@ -97,12 +96,12 @@
         </thead>
         <tbody>
             {% for product in products %}
-            {% set calc = product.calculate_costs() %}
+            {% set calc = product.calculate_costs(calc_settings) %}
             <tr>
                 <td>{{ product.name }}</td>
                 <td>
-                    <span class="category-badge category-{{ product.product_type }}">
-                        {{ product.product_type }}
+                    <span class="category-badge">
+                        {{ product.type_label }}
                     </span>
                 </td>
                 <td>{{ product.get_material_summary() }}</td>

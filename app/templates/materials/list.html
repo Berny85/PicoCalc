@@ -3,6 +3,12 @@
 {% block title %}Materialien - Picobellu Kalkulator{% endblock %}
 
 {% block content %}
+{% if error_msg %}
+<div class="alert alert-error" style="background: #f8d7da; color: #721c24; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+    ⚠️ {{ error_msg }}
+</div>
+{% endif %}
+
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
         <h2>Material-Datenbank</h2>
@@ -67,19 +73,15 @@
             {% for m in materials %}
             <tr>
                 <td>
-                    {% for mt in material_types %}
-                        {% if mt.key == m.material_type %}
-                        <span class="category-badge category-{{ m.material_type }}">
-                            {{ mt.name }}
-                        </span>
-                        {% endif %}
-                    {% endfor %}
+                    <span class="category-badge category-{{ m.material_type.key }}">
+                        {{ m.material_type.name }}
+                    </span>
                 </td>
                 <td><strong>{{ m.name }}</strong></td>
-                <td>{{ m.brand or '-' }}</td>
+                <td>{{ m.brand_name or '-' }}</td>
                 <td>{{ m.color or '-' }}</td>
-                <td><strong><span class="streamer-mask streamer-mask-compact">{{ m.price_per_unit }} €</span></strong></td>
-                <td>{{ m.unit }}</td>
+                <td><strong><span class="streamer-mask streamer-mask-compact">{{ m.price_per_unit|price }} €</span></strong></td>
+                <td>{{ units[m.unit].label if m.unit in units else m.unit }}</td>
                 <td>
                     <a href="/materials/{{ m.id }}/edit" class="btn btn-primary" 
                        style="padding: 6px 12px; font-size: 14px;">Bearbeiten</a>
