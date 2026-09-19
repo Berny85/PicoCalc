@@ -5,7 +5,7 @@
 #
 # WARNUNG: Löscht ALLE Daten der PicoCalc-Datenbank (Produkte, Materialien, Maschinen, Events ...).
 #
-# Wann? Einmalig nach der Umstellung auf das neue Rezept-Schema (Alembic-Baseline 0001): Die alte
+# Wann? Einmalig nach der Umstellung auf das neue Rezept-Schema (Alembic ab Baseline 0001): Die alte
 # Datenbank hat ein anderes Schema und kann nicht migriert werden. Nach dem Reset legt die neue App
 # das Schema beim Start selbst an (alembic upgrade head + Standard-Stammdaten).
 #
@@ -109,11 +109,12 @@ echo ""
 
 REVISION="$(docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -At \
     -c 'SELECT version_num FROM alembic_version;' 2>/dev/null || true)"
-if [[ "$REVISION" == "0001" ]]; then
-    echo "OK: Schema-Revision 0001 - die neue Version läuft."
+HEAD_REVISION="$(docker exec "$APP_CONTAINER" alembic heads 2>/dev/null | awk 'NR==1 {print $1}' || true)"
+if [[ -n "$HEAD_REVISION" && "$REVISION" == "$HEAD_REVISION" ]]; then
+    echo "OK: Schema-Revision $REVISION (aktuell) - die neue Version läuft."
     echo "Jetzt in der App unter /settings, /materials und /machines die Stammdaten neu erfassen."
 else
-    echo "WARNUNG: Keine Revision 0001 gefunden (gefunden: '${REVISION:-nichts}')."
+    echo "WARNUNG: Schema-Revision '${REVISION:-nichts}' passt nicht zur App (erwartet: '${HEAD_REVISION:-unbekannt}')."
     echo "Läuft noch die alte App-Version? Erst die neue Version deployen, dann dieses Skript erneut starten."
     exit 1
 fi

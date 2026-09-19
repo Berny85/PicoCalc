@@ -14,49 +14,17 @@
     </p>
 </div>
 
-<!-- Suchleiste und Sortierung -->
-<div class="card">
-    <form method="GET" action="/material-types" style="margin-bottom: 0;">
-        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: end;">
-            <div style="flex: 1; min-width: 200px;">
-                <label style="font-size: 0.85rem; color: var(--color-text-light);">Suche</label>
-                <input type="text" name="search" value="{{ search }}" placeholder="Name oder Schlüssel..." style="width: 100%;">
-            </div>
-            <div>
-                <label style="font-size: 0.85rem; color: var(--color-text-light);">Sortierung</label>
-                <select name="sort_by">
-                    <option value="name" {% if sort_by == 'name' %}selected{% endif %}>Name</option>
-                    <option value="key" {% if sort_by == 'key' %}selected{% endif %}>Schlüssel</option>
-                    <option value="sort_order" {% if sort_by == 'sort_order' %}selected{% endif %}>Sortierung</option>
-                </select>
-            </div>
-            <div>
-                <label style="font-size: 0.85rem; color: var(--color-text-light);">Reihenfolge</label>
-                <select name="sort_order">
-                    <option value="asc" {% if sort_order == 'asc' %}selected{% endif %}>Aufsteigend</option>
-                    <option value="desc" {% if sort_order == 'desc' %}selected{% endif %}>Absteigend</option>
-                </select>
-            </div>
-            <div>
-                <button type="submit" class="btn btn-primary">Anwenden</button>
-                {% if search or sort_by != 'name' or sort_order != 'asc' %}
-                <a href="/material-types" class="btn btn-secondary">Zurücksetzen</a>
-                {% endif %}
-            </div>
-        </div>
-    </form>
-</div>
-
 <div class="card">
     {% if material_types %}
-    <table>
+    <div class="table-responsive">
+    <table class="data-table">
         <thead>
             <tr>
-                <th>Sortierung</th>
-                <th>Schlüssel</th>
-                <th>Name</th>
-                <th>Beschreibung</th>
-                <th>Status</th>
+                <th data-col="number">Sortierung</th>
+                <th data-col="text">Schlüssel</th>
+                <th data-col="text">Name</th>
+                <th data-col="text" data-list="off">Beschreibung</th>
+                <th data-col="text">Status</th>
                 <th>Aktionen</th>
             </tr>
         </thead>
@@ -87,13 +55,10 @@
             {% endfor %}
         </tbody>
     </table>
+    </div>
     {% else %}
     <p style="text-align: center; padding: 40px; color: var(--color-text-light);">
-        {% if search %}
-        Keine Materialtypen gefunden. <a href="/material-types">Filter zurücksetzen</a>
-        {% else %}
         Keine Materialtypen vorhanden.
-        {% endif %}
     </p>
     {% endif %}
 </div>

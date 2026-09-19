@@ -15,46 +15,12 @@ router = APIRouter()
 
 
 @router.get("/feedback-ideas", response_class=HTMLResponse)
-async def list_feedback_ideas(
-    request: Request,
-    status_filter: str = "",
-    search: str = "",
-    sort_by: str = "created_at",
-    sort_order: str = "desc",
-    db: Session = Depends(get_db)
-):
-    """Liste aller Feedback-Eintraege und Ideen"""
-    query = db.query(FeedbackIdea)
-    
-    if status_filter:
-        query = query.filter(FeedbackIdea.status == status_filter)
-    if search:
-        query = query.filter(FeedbackIdea.description.ilike(f"%{search}%"))
-    
-    sort_col = FeedbackIdea.created_at
-    if sort_by == "updated_at":
-        sort_col = FeedbackIdea.updated_at
-    elif sort_by == "status":
-        sort_col = FeedbackIdea.status
-    
-    if sort_order == "asc":
-        query = query.order_by(sort_col.asc())
-    else:
-        query = query.order_by(sort_col.desc())
-    
-    items = query.all()
-    open_count = db.query(FeedbackIdea).filter(FeedbackIdea.status == 'open').count()
-    done_count = db.query(FeedbackIdea).filter(FeedbackIdea.status == 'done').count()
-    
+async def list_feedback_ideas(request: Request, db: Session = Depends(get_db)):
+    """Liste aller Feedback-Einträge und Ideen (neueste zuerst); Filtern passiert im Browser (Spaltenköpfe)."""
+    items = db.query(FeedbackIdea).order_by(FeedbackIdea.created_at.desc()).all()
     return templates.TemplateResponse("feedback_ideas/list.html", {
         "request": request,
-        "items": items,
-        "status_filter": status_filter,
-        "open_count": open_count,
-        "done_count": done_count,
-        "search": search,
-        "sort_by": sort_by,
-        "sort_order": sort_order
+        "items": items
     })
 
 

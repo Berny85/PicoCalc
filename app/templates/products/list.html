@@ -42,66 +42,26 @@
         <a href="/products/new" class="btn btn-primary">+ Neues Produkt</a>
     </div>
     
-    <!-- Suchleiste und Sortierung -->
-    <form method="GET" action="/products" style="margin-bottom: 20px;">
-        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: end;">
-            <div style="flex: 1; min-width: 180px;">
-                <label style="font-size: 0.85rem; color: var(--color-text-light);">Suche</label>
-                <input type="text" name="search" value="{{ search }}" placeholder="Produktname suchen..." style="width: 100%;">
-            </div>
-            <div>
-                <label style="font-size: 0.85rem; color: var(--color-text-light);">Verfügbarkeit</label>
-                <select name="market_filter">
-                    <option value="" {% if not market_filter %}selected{% endif %}>Alle Produkte</option>
-                    <option value="market" {% if market_filter == 'market' %}selected{% endif %}>🎪 Nur Flohmarkt</option>
-                    <option value="non_market" {% if market_filter == 'non_market' %}selected{% endif %}>🔒 Nur Einmalprodukte</option>
-                </select>
-            </div>
-            <div>
-                <label style="font-size: 0.85rem; color: var(--color-text-light);">Sortierung</label>
-                <select name="sort_by">
-                    <option value="name" {% if sort_by == 'name' %}selected{% endif %}>Name</option>
-                    <option value="type" {% if sort_by == 'type' %}selected{% endif %}>Typ</option>
-                    <option value="purchase_price" {% if sort_by == 'purchase_price' %}selected{% endif %}>EK</option>
-                    <option value="selling_price" {% if sort_by == 'selling_price' %}selected{% endif %}>VK</option>
-                    <option value="updated_at" {% if sort_by == 'updated_at' %}selected{% endif %}>Zuletzt geändert</option>
-                </select>
-            </div>
-            <div>
-                <label style="font-size: 0.85rem; color: var(--color-text-light);">Reihenfolge</label>
-                <select name="sort_order">
-                    <option value="asc" {% if sort_order == 'asc' %}selected{% endif %}>Aufsteigend</option>
-                    <option value="desc" {% if sort_order == 'desc' %}selected{% endif %}>Absteigend</option>
-                </select>
-            </div>
-            <div>
-                <button type="submit" class="btn btn-primary">Anwenden</button>
-                {% if search or market_filter or sort_by != 'name' or sort_order != 'asc' %}
-                <a href="/products" class="btn btn-secondary">Zurücksetzen</a>
-                {% endif %}
-            </div>
-        </div>
-    </form>
-    
     {% if products %}
     <div class="table-responsive">
-        <table>
+        <table class="data-table">
             <thead>
                 <tr>
-                    <th>Name</th>
-                    <th>Typ</th>
-                    <th style="text-align: center; width: 105px;" title="Für Flohmärkte & Events verfügbar">
+                    <th data-col="text">Name</th>
+                    <th data-col="text">Typ</th>
+                    <th data-col="text" style="text-align: center; width: 130px;" title="Für Flohmärkte & Events verfügbar">
                         <div style="display: flex; flex-direction: column; align-items: center; gap: 3px;">
                             <span>🎪 Flohmarkt</span>
-                            <label style="font-size: 0.72rem; font-weight: normal; margin: 0; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; user-select: none; background: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 4px;" title="Alle auf dieser Seite aktivieren / deaktivieren">
+                            <label style="font-size: 0.72rem; font-weight: normal; margin: 0; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; user-select: none; background: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 4px;" title="Alle angezeigten Produkte aktivieren / deaktivieren">
                                 <input type="checkbox" id="selectAllMarket" onchange="toggleAllMarketCheckboxes(this)" style="width: 14px; height: 14px; cursor: pointer; accent-color: var(--color-primary);">
                                 <span>Alle</span>
                             </label>
                         </div>
                     </th>
-                    <th>Material</th>
-                    <th style="text-align: right;">EK</th>
-                    <th style="text-align: right;">VK</th>
+                    <th data-col="text" data-list="off">Material</th>
+                    <th data-col="number" style="text-align: right;">EK</th>
+                    <th data-col="number" style="text-align: right;">VK</th>
+                    <th data-col="date">Angelegt</th>
                     <th style="text-align: center;">Aktionen</th>
                 </tr>
             </thead>
@@ -134,11 +94,14 @@
                     <td style="font-size: 0.85rem; color: var(--color-text-light);">
                         {{ item.product.get_material_summary()[:40] }}{% if item.product.get_material_summary()|length > 40 %}...{% endif %}
                     </td>
-                    <td style="text-align: right;" class="price-ek">
+                    <td style="text-align: right;" class="price-ek" data-sort="{{ item.costs.purchase_price }}">
                         <span class="streamer-mask streamer-mask-compact">{{ item.costs.purchase_price }} €</span>
                     </td>
-                    <td style="text-align: right;" class="price-vk">
+                    <td style="text-align: right;" class="price-vk" data-sort="{{ item.costs.selling_price }}">
                         <span class="streamer-mask streamer-mask-compact">{{ item.costs.selling_price }} €</span>
+                    </td>
+                    <td data-sort="{{ item.product.created_at.isoformat() if item.product.created_at else '' }}" style="font-size: 0.85rem; color: var(--color-text-light); white-space: nowrap;">
+                        {{ item.product.created_at.strftime('%d.%m.%Y') if item.product.created_at else '–' }}
                     </td>
                     <td style="text-align: center;">
                         <div style="display: flex; gap: 5px; justify-content: center; flex-wrap: wrap;">
@@ -157,12 +120,8 @@
     </div>
     {% else %}
     <p style="text-align: center; padding: 40px; color: var(--color-text-light);">
-        {% if search %}
-        Keine Produkte gefunden. <a href="/products">Filter zurücksetzen</a>
-        {% else %}
-        Noch keine Produkte vorhanden. 
+        Noch keine Produkte vorhanden.
         <a href="/products/new">Erstes Produkt anlegen</a>
-        {% endif %}
     </p>
     {% endif %}
 </div>
@@ -170,7 +129,8 @@
 <script>
 async function toggleAllMarketCheckboxes(masterCheckbox) {
     const isChecked = masterCheckbox.checked;
-    const checkboxes = document.querySelectorAll('.market-checkbox');
+    // nur die Zeilen, die der Spaltenfilter gerade anzeigt
+    const checkboxes = Array.from(document.querySelectorAll('.market-checkbox')).filter(cb => !cb.closest('tr').hidden);
     const productIds = [];
     
     checkboxes.forEach(cb => {
@@ -200,7 +160,7 @@ async function toggleAllMarketCheckboxes(masterCheckbox) {
 function updateMasterCheckboxState() {
     const master = document.getElementById('selectAllMarket');
     if (!master) return;
-    const checkboxes = document.querySelectorAll('.market-checkbox');
+    const checkboxes = Array.from(document.querySelectorAll('.market-checkbox')).filter(cb => !cb.closest('tr').hidden);
     if (checkboxes.length === 0) return;
     const allChecked = Array.from(checkboxes).every(cb => cb.checked);
     const anyChecked = Array.from(checkboxes).some(cb => cb.checked);
@@ -208,6 +168,10 @@ function updateMasterCheckboxState() {
     master.indeterminate = anyChecked && !allChecked;
 }
 
-document.addEventListener('DOMContentLoaded', updateMasterCheckboxState);
+document.addEventListener('DOMContentLoaded', () => {
+    updateMasterCheckboxState();
+    const table = document.querySelector('table.data-table');
+    if (table) table.addEventListener('dt:filtered', updateMasterCheckboxState);
+});
 </script>
 {% endblock %}

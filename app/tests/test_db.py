@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 
 from database import APP_DIR
 from models import (
-    Brand, Category, Config, EventItem, Machine, MachineSheetCost, MachineTimeCost, MachineType, Material,
+    Brand, Config, EventItem, Machine, MachineSheetCost, MachineTimeCost, MachineType, Material,
     MaterialPrice, MaterialType, MarketEvent, Product, ProductLabor, ProductMachine, ProductMaterial,
     ProductPackaging,
 )
@@ -67,9 +67,35 @@ def test_migration_matches_models():
     command.check(cfg)  # wirft bei Abweichungen
 
 
+def test_migration_0002_removes_categories_and_keeps_products():
+    """Auf einer Datenbank mit Kategorien (Stand 0001) bleiben die Produkte erhalten; auch zurück geht es."""
+    from alembic import command
+    from alembic.config import Config as AlembicConfig
+    from sqlalchemy import inspect, text
+    from database import engine
+
+    cfg = AlembicConfig(str(APP_DIR / "alembic.ini"))
+    cfg.set_main_option("script_location", str(APP_DIR / "alembic"))
+    cfg.attributes["configure_logger"] = False
+    try:
+        command.downgrade(cfg, "0001")
+        with engine.begin() as conn:
+            category_id = conn.execute(text("INSERT INTO categories (name, sort_order) VALUES ('Alt', 0) RETURNING id")).scalar()
+            conn.execute(text("INSERT INTO products (name, category_id, yield_qty, shipping_cost, is_for_market) "
+                              "VALUES ('Altprodukt', :c, 1, 0, true)"), {"c": category_id})
+        command.upgrade(cfg, "head")
+        with engine.connect() as conn:
+            assert conn.execute(text("SELECT name FROM products")).scalars().all() == ["Altprodukt"]
+            assert "categories" not in inspect(conn).get_table_names()
+            assert "category_id" not in [c["name"] for c in inspect(conn).get_columns("products")]
+    finally:
+        command.upgrade(cfg, "head")
+        with engine.begin() as conn:
+            conn.execute(text("TRUNCATE products RESTART IDENTITY CASCADE"))
+
+
 def test_seed_defaults_are_created_once(db):
     seed_defaults(db)
-    assert db.query(Category).count() == 8
     assert db.query(MachineType).count() == 6
     assert db.query(MaterialType).count() == 4
 

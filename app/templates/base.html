@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Picobellu Kalkulator{% endblock %}</title>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <link rel="stylesheet" href="/static/css/table-tools.css">
+    <script src="/static/js/table-tools.js" defer></script>
     <script>
         // Streamer Mode Initialization: Standard ist immer AKTIV (geschützt), außer in der aktuellen Session explizit deaktiviert
         (function() {
@@ -362,15 +364,6 @@
             font-weight: 600;
         }
 
-        .category-dekoration { background-color: #e3f2fd; color: #1976d2; }
-        .category-technik { background-color: #f3e5f5; color: #7b1fa2; }
-        .category-ersatzteile { background-color: #e8f5e9; color: #388e3c; }
-        .category-spielzeug { background-color: #fff3e0; color: #f57c00; }
-        .category-werkzeuge { background-color: #fce4ec; color: #c2185b; }
-        .category-sticker { background-color: #fff8e1; color: #f9a825; }
-        .category-papierprodukte { background-color: #f3e5f5; color: #6a1b9a; }
-        .category-sonstiges { background-color: #f5f5f5; color: #616161; }
-        
         /* Material Type Badges */
         .category-filament { background-color: #e8f5e9; color: #2e7d32; }
         .category-paper { background-color: #fff3e0; color: #ef6c00; }

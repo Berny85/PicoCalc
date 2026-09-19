@@ -24,11 +24,6 @@
                 <span class="category-badge">
                     {{ product.type_label }}
                 </span>
-                {% if product.category %}
-                <span style="font-size: 0.8rem; padding: 3px 8px; border-radius: 12px; background: var(--color-bg-hover); color: var(--color-text-light);">
-                    {{ product.category.name }}
-                </span>
-                {% endif %}
                 {% if product.is_for_market %}
                 <span style="font-size: 0.8rem; padding: 3px 8px; border-radius: 12px; font-weight: bold; background: #e8eaf6; color: #3f51b5;">
                     🎪 Flohmarkt-Bereit

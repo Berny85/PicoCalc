@@ -44,13 +44,14 @@ PicoCalc/
 │   ├── seed.py                   # Standard-Stammdaten für eine frische Datenbank
 │   ├── database.py               # Datenbank-Konfiguration, Sessions, upgrade_database()
 │   ├── alembic/                  # Datenbank-Migrationen (Alembic), läuft beim App-Start
-│   │   └── versions/             # Migrations-Skripte (Baseline: 0001)
+│   │   └── versions/             # Migrations-Skripte (Baseline 0001, dann 0002)
 │   ├── alembic.ini               # Alembic Hauptkonfiguration
 │   ├── tests/                    # pytest: test_calc.py (ohne DB), test_db.py + test_routes.py (*_test-Datenbank)
 │   ├── run_tests.sh              # pyflakes + pytest im Container
 │   ├── requirements.txt          # Python-Abhängigkeiten
 │   ├── requirements-dev.txt      # + pytest, pyflakes
 │   ├── Dockerfile                # Container-Image Definition
+│   ├── assets/                   # Statische Dateien (unter /static): Logo, js/table-tools.js, css/table-tools.css
 │   └── templates/                # Jinja2 HTML Templates
 │       ├── base.html             # Base Layout mit Navigation und CSS
 │       ├── index.html            # Dashboard
@@ -104,10 +105,9 @@ Charge**: Materialien, Maschinennutzung und Arbeitsschritte ergeben die Chargenk
 (`yield_qty`) die Herstellkosten pro Stück; Verpackungsmaterial kommt pro verkauftem Stück obendrauf.
 
 **Designregel: lieber mehr schmale Tabellen als wenige breite.** Was nur zu einer Abrechnungsart gehört, was sich wiederholen
-kann oder was eine Historie hat, bekommt eine eigene Tabelle (20 Tabellen insgesamt). Verweise immer per Fremdschlüssel.
+kann oder was eine Historie hat, bekommt eine eigene Tabelle (19 Tabellen insgesamt). Verweise immer per Fremdschlüssel.
 
 ### Stammdaten
-- **Category** – Produktkategorien (`name`, `sort_order`), unter `/settings` als Zeilenliste gepflegt.
 - **MachineType** – Maschinentypen (`name`, `default_billing_mode`). Nur ein Etikett; schlägt beim Anlegen einer Maschine die Abrechnungsart vor.
 - **MaterialType** – Materialkategorien (`key`, `name`, `sort_order`, `is_active`), Verwaltung unter `/material-types`.
 - **Brand** – Marken/Hersteller (`name`, eindeutig); Materialien verweisen per `brand_id`.
@@ -126,7 +126,7 @@ kann oder was eine Historie hat, bekommt eine eigene Tabelle (20 Tabellen insges
 - Die Menge im Produkt wird in der **Eingabe-Einheit** erfasst (bei `kg` in Gramm). Der Umrechnungsfaktor steht in `units.py`, nirgends sonst.
 
 ### Produkte: `products` + vier Zeilentabellen
-- **Product**: `name`, `category_id`, `notes`, `yield_qty` (Ausbeute, ≥ 1), `shipping_cost` (nur Richtwert), `selling_price` (manueller VK, sonst Richtwert), `is_for_market`
+- **Product**: `name`, `notes`, `yield_qty` (Ausbeute, ≥ 1), `shipping_cost` (nur Richtwert), `selling_price` (manueller VK, sonst Richtwert), `is_for_market`
 - **ProductMaterial** (`material_id`, `amount` in Eingabe-Einheit **pro Charge**)
 - **ProductMachine** (`machine_id`, `value` in Minuten bzw. Bögen **pro Charge**)
 - **ProductLabor** – Arbeitsschritte (`description`, `minutes`, `hourly_rate`) **pro Charge**, jeder mit eigenem Stundensatz. `product.labor_minutes` = Summe
@@ -301,13 +301,19 @@ docker compose run --rm --no-deps \
 Details und Formeln siehe „Kalkulation (`calc.py`)“ oben.
 - **Produktverpackung**: 1:1 Durchreichung pro Stück ohne Marge (z.B. Schutzhülle, Kartonversteifung)
 - **Verkaufspreis (VK)**: Entweder manuell gesetzter VK (`selling_price`) oder automatisch Richtwert-VK
-- **Einstellungen**: Strompreis (€/kWh), Standard-Stundensatz, Marge und Firmendaten unter `/settings`; dort auch Kategorien und Maschinentypen (eine pro Zeile, `| Bogen` schlägt Abrechnung pro Bogen vor). Kategorien/Typen, die noch verwendet werden, bleiben erhalten.
+- **Einstellungen**: Strompreis (€/kWh), Standard-Stundensatz, Marge und Firmendaten unter `/settings`; dort auch die Maschinentypen (eine pro Zeile, `| Bogen` schlägt Abrechnung pro Bogen vor). Typen, die noch von Maschinen verwendet werden, bleiben erhalten. Produkte haben keine Kategorie (entfernt mit Migration `0002`).
 
 ### Produkt-Formular (`form_universal.html`)
 - Ein Formular für alle Produkte (Neu und Bearbeiten), Rezept- und Ausbeuteprinzip, Live-Kalkulation rechts
 - Materialien und Maschinen können direkt im Formular per Dialog angelegt werden (`POST /api/materials`, `POST /api/machines`); das Ergebnis erscheint sofort in allen Dropdowns
 - Materialmengen werden in der Eingabe-Einheit erfasst (Gramm bei kg-Preis), Stückmaterial wird mit `1` vorbelegt
 - Materialien und Maschinen, die in Produkten verwendet werden, lassen sich nicht löschen (Hinweis statt Fehler)
+
+### Listen: Sortieren und Filtern in den Spaltenköpfen
+- Die Listen (Produkte, Materialien, Materialtypen, Maschinen, Feedback) haben **kein** eigenes Such-/Filterformular. Die Router liefern alle Zeilen (sortiert nach Name), Sortieren und Filtern passiert im Browser (`assets/js/table-tools.js`, `css/table-tools.css`, in `base.html` eingebunden).
+- Neue Tabelle: `<table class="data-table">` und im `<th>` `data-col="text"` (Werteliste + Suchfeld) `data-col="number"` (von/bis) oder `data-col="date"` (von/bis mit Datumsauswahl, Sortierwert als ISO-Datum in `data-sort`); `data-list="off"` bei langen Texten; Spalten ohne `data-col` (z. B. Aktionen) bleiben unberührt.
+- Zellen: `data-sort="…"` liefert den Sortierwert (Zahlen mit Punkt, Datum als ISO-String, leer = kein Wert, landet immer am Ende), `data-value="…"` den Filterwert. Checkboxen zählen als Ja/Nein. Die Tabelle sendet `dt:filtered`, wenn sich die sichtbaren Zeilen ändern.
+- Nicht betroffen: die Kartenlisten (Events, gespeicherte SVG-Konvertierungen) haben weiterhin ihre eigene Suche.
 
 ## Database Migrations (Alembic)
 
@@ -331,7 +337,7 @@ Alembic liegt in `app/alembic/` (eine einzige Kopie, im Container unter `/app/al
 ```
 
 ### Wichtig
-- Baseline ist Revision `0001` (Neuaufbau am 2026-09-18). Die früheren Migrationen einer Vorgängerversion wurden entfernt.
+- Baseline ist Revision `0001` (Neuaufbau am 2026-09-18), `0002` entfernt die Produkt-Kategorien. Die früheren Migrationen einer Vorgängerversion wurden entfernt.
 - **Bestehende Datenbanken** (Produktion) haben eine unbekannte `alembic_version` und das alte Schema und müssen einmalig zurückgesetzt werden: Backup ziehen, dann `reset-prod.sh` (löscht die DB-Daten). Die App legt das neue Schema beim Start selbst an; danach Materialien, Maschinen und Einstellungen neu erfassen.
 - Die `env.py` liest `DATABASE_URL` aus den Umgebungsvariablen
 

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from calc import dec
 from models import (
-    Category, Config, Machine, MachineType, Material, MaterialType,
+    Config, Machine, MachineType, Material, MaterialType,
 )
 from units import MATERIAL_UNITS, unit_factor
 
@@ -52,10 +52,6 @@ def set_config_value(db: Session, key: str, value: str, description: str = None,
             cfg.category = category
         cfg.updated_at = datetime.utcnow()
     db.commit()
-
-
-def get_categories(db: Session) -> list[Category]:
-    return db.query(Category).order_by(Category.sort_order, Category.name).all()
 
 
 def get_machine_types(db: Session) -> list[MachineType]:

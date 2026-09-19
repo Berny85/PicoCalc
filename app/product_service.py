@@ -10,14 +10,13 @@ from sqlalchemy.orm import Session, selectinload
 
 import calc
 from common import (
-    bad_request, get_categories, get_config_value, get_machine_types, get_material_types, machine_to_json,
+    bad_request, get_config_value, get_machine_types, get_material_types, machine_to_json,
     material_to_json, parse_money,
 )
 from models import (
-    Category, Machine, Material, Product, ProductLabor, ProductMachine, ProductMaterial, ProductPackaging,
+    Machine, Material, Product, ProductLabor, ProductMachine, ProductMaterial, ProductPackaging,
     load_calc_settings, machine_type_label,
 )
-from seed import FALLBACK_CATEGORY
 from units import units_for_json
 
 
@@ -91,7 +90,6 @@ def preview_costs(db: Session, data: CalculationIn) -> dict:
 
 
 PRODUCT_LOAD_OPTIONS = (
-    selectinload(Product.category),
     selectinload(Product.material_links).selectinload(ProductMaterial.material),
     selectinload(Product.machine_links).selectinload(ProductMachine.machine).options(
         selectinload(Machine.machine_type), selectinload(Machine.time_costs), selectinload(Machine.sheet_costs),
@@ -102,7 +100,7 @@ PRODUCT_LOAD_OPTIONS = (
 
 
 def parse_product_form(
-    db: Session, *, name, category_id, notes, batch_yield, shipping_cost, selling_price, is_for_market,
+    db: Session, *, name, notes, batch_yield, shipping_cost, selling_price, is_for_market,
     used_material_id, used_material_amount, used_machine_id, used_machine_value,
     used_labor_description, used_labor_minutes, used_labor_rate, used_packaging_id, used_packaging_amount,
 ) -> dict:
@@ -114,12 +112,6 @@ def parse_product_form(
     yield_qty = int(parse_money(batch_yield, "Ausbeute", default=Decimal(1)))
     if yield_qty < 1:
         bad_request("Die Ausbeute muss mindestens 1 sein.")
-
-    category = None
-    if category_id:
-        category = db.query(Category).filter(Category.id == category_id).first()
-    if not category:
-        category = db.query(Category).filter(Category.name == FALLBACK_CATEGORY).first()
 
     def collect(ids, values, model, label):
         rows = []
@@ -154,7 +146,6 @@ def parse_product_form(
 
     return {
         "name": name,
-        "category_id": category.id if category else None,
         "notes": notes,
         "yield_qty": yield_qty,
         "shipping_cost": parse_money(shipping_cost, "Versandkosten"),
@@ -168,7 +159,7 @@ def parse_product_form(
 
 
 def apply_product_form(product: Product, data: dict) -> None:
-    for key in ("name", "category_id", "notes", "yield_qty", "shipping_cost", "selling_price", "is_for_market"):
+    for key in ("name", "notes", "yield_qty", "shipping_cost", "selling_price", "is_for_market"):
         setattr(product, key, data[key])
     product.material_links = [
         ProductMaterial(material_id=mid, amount=amount, sort_order=i)
@@ -199,7 +190,6 @@ def product_form_context(db: Session, request: Request, product: Product | None 
     context = {
         "request": request,
         "product": product,
-        "categories": get_categories(db),
         "material_types": get_material_types(db),
         "machine_types": get_machine_types(db),
         "units": units_for_json(),

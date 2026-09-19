@@ -86,11 +86,11 @@ Auf dem NUC läuft noch die Compose-Datei vom Umzug (`docker-compose.yml`, lokal
 3. `git pull origin main` – holt Skripte und Compose-Datei. Die laufenden Container bleiben unberührt (der Code steckt im Image).
 4. **Leeren, App bleibt aus:** `bash reset-prod.sh --ohne-start`
    Sichert die DB (Dump im Home-Verzeichnis), stoppt `picocalc-app`, löscht das Schema.
-5. **Neue Version starten:** `bash deploy.sh` – die App legt das Schema selbst an (Revision `0001`, Standard-Stammdaten).
-6. **Stammdaten neu erfassen:** `/settings` (Strompreis, Stundensatz, Marge, Kategorien, Maschinentypen), `/materials`,
+5. **Neue Version starten:** `bash deploy.sh` – die App legt das Schema selbst an (aktuelle Revision, Standard-Stammdaten).
+6. **Stammdaten neu erfassen:** `/settings` (Strompreis, Stundensatz, Marge, Maschinentypen), `/materials`,
    `/machines`, danach die Produkte.
 
-Der komplette Ablauf (alte DB → `deploy.sh` scheitert mit Hinweis → `reset-prod.sh --ohne-start` → `deploy.sh` → Revision `0001`)
+Der komplette Ablauf (alte DB → `deploy.sh` scheitert mit Hinweis → `reset-prod.sh --ohne-start` → `deploy.sh` → aktuelle Revision)
 wurde mit den echten Containernamen in einer Testumgebung durchgespielt.
 
 **Variante B** (erst deployen, dann leeren): `bash deploy.sh` bricht gegen die alte DB mit dem Hinweis auf `reset-prod.sh` ab
@@ -134,7 +134,7 @@ Postgres ist auf dem NUC nur an `127.0.0.1:5432` gebunden, vom PC aus geht es pe
 
 ## Datenbank-Migrationen (Alembic)
 
-- Migrationen liegen in `app/alembic/versions/`, die Baseline ist Revision `0001`.
+- Migrationen liegen in `app/alembic/versions/`, die Baseline ist Revision `0001`, danach `0002` (Produkt-Kategorien entfernt).
 - Neue Migration erzeugen (Entwicklung): `./migrate.sh create "Beschreibung"` bzw. `.\migrate.ps1 -Command create -Message "..."`
 - Auf dem Server laufen Migrationen automatisch beim Start der App.
 - Ein Test (`test_migration_matches_models`) schlägt an, wenn Models und Migrationen auseinanderlaufen.

@@ -19,48 +19,13 @@ router = APIRouter()
 
 
 @router.get("/products", response_class=HTMLResponse)
-async def list_products(
-    request: Request,
-    market_filter: str = "",
-    search: str = "",
-    sort_by: str = "name",
-    sort_order: str = "asc",
-    db: Session = Depends(get_db)
-):
-    """Liste aller Produkte"""
-    query = db.query(Product).options(*PRODUCT_LOAD_OPTIONS)
-
-    if market_filter == "market":
-        query = query.filter(Product.is_for_market.is_(True))
-    elif market_filter == "non_market":
-        query = query.filter(Product.is_for_market.is_(False))
-    if search:
-        query = query.filter(Product.name.ilike(f"%{search}%"))
-
-    if sort_by == "updated_at":
-        query = query.order_by(Product.updated_at.asc() if sort_order == "asc" else Product.updated_at.desc())
-    else:
-        query = query.order_by(Product.name.desc() if sort_order == "desc" and sort_by == "name" else Product.name.asc())
-
+async def list_products(request: Request, db: Session = Depends(get_db)):
+    """Liste aller Produkte; Sortieren und Filtern passiert im Browser (Spaltenköpfe)."""
+    products = db.query(Product).options(*PRODUCT_LOAD_OPTIONS).order_by(Product.name).all()
     settings = load_calc_settings(db)
-    products_with_costs = [{'product': p, 'costs': p.calculate_costs(settings)} for p in query.all()]
-
-    # Python-seitige Sortierung für abgeleitete/berechnete Felder
-    descending = sort_order == "desc"
-    if sort_by == "type":
-        products_with_costs.sort(key=lambda x: x['product'].type_label.lower(), reverse=descending)
-    elif sort_by == "purchase_price":
-        products_with_costs.sort(key=lambda x: x['costs']['purchase_price'], reverse=descending)
-    elif sort_by == "selling_price":
-        products_with_costs.sort(key=lambda x: x['costs']['selling_price'], reverse=descending)
-
     return templates.TemplateResponse("products/list.html", {
         "request": request,
-        "products": products_with_costs,
-        "market_filter": market_filter,
-        "search": search,
-        "sort_by": sort_by,
-        "sort_order": sort_order
+        "products": [{'product': p, 'costs': p.calculate_costs(settings)} for p in products]
     })
 
 
@@ -118,7 +83,6 @@ async def new_product_form(request: Request, db: Session = Depends(get_db)):
 async def create_product(
     request: Request,
     name: str = Form(...),
-    category_id: int = Form(None),
     notes: str = Form(""),
     batch_yield: str = Form("1"),
     shipping_cost: str = Form("0"),
@@ -137,7 +101,7 @@ async def create_product(
 ):
     """Neues Produkt aus dem Kalkulator erstellen"""
     data = parse_product_form(
-        db, name=name, category_id=category_id, notes=notes, batch_yield=batch_yield,
+        db, name=name, notes=notes, batch_yield=batch_yield,
         shipping_cost=shipping_cost, selling_price=selling_price, is_for_market=is_for_market,
         used_material_id=used_material_id, used_material_amount=used_material_amount,
         used_machine_id=used_machine_id, used_machine_value=used_machine_value,
@@ -192,7 +156,6 @@ async def update_product(
     product_id: int,
     request: Request,
     name: str = Form(...),
-    category_id: int = Form(None),
     notes: str = Form(""),
     batch_yield: str = Form("1"),
     shipping_cost: str = Form("0"),
@@ -215,7 +178,7 @@ async def update_product(
         raise HTTPException(status_code=404, detail="Produkt nicht gefunden")
 
     data = parse_product_form(
-        db, name=name, category_id=category_id, notes=notes, batch_yield=batch_yield,
+        db, name=name, notes=notes, batch_yield=batch_yield,
         shipping_cost=shipping_cost, selling_price=selling_price, is_for_market=is_for_market,
         used_material_id=used_material_id, used_material_amount=used_material_amount,
         used_machine_id=used_machine_id, used_machine_value=used_machine_value,

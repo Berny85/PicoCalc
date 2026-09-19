@@ -15,7 +15,7 @@ from common import (
 from core import templates
 from database import get_db
 from models import (
-    Machine, MachineTimeCost, MachineType, ProductMachine, load_calc_settings,
+    Machine, MachineType, ProductMachine, load_calc_settings,
 )
 
 router = APIRouter()
@@ -70,43 +70,15 @@ def apply_machine_form(machine: Machine, values: dict) -> None:
     machine.set_sheet_cost(values["sheet_price"])
 
 @router.get("/machines", response_class=HTMLResponse)
-async def list_machines(
-    request: Request,
-    search: str = "",
-    sort_by: str = "name",
-    sort_order: str = "asc",
-    error: str = "",
-    db: Session = Depends(get_db)
-):
-    """Liste aller Maschinen"""
-    query = (db.query(Machine).join(MachineType, Machine.machine_type_id == MachineType.id)
-             .outerjoin(MachineTimeCost, MachineTimeCost.machine_id == Machine.id)
-             .options(selectinload(Machine.machine_type), selectinload(Machine.time_costs), selectinload(Machine.sheet_costs)))
-
-    if search:
-        query = query.filter(
-            (Machine.name.ilike(f"%{search}%")) |
-            (Machine.description.ilike(f"%{search}%"))
-        )
-
-    sort_col = Machine.name
-    if sort_by == "type":
-        sort_col = MachineType.name
-    elif sort_by == "depreciation":
-        sort_col = MachineTimeCost.depreciation_euro
-
-    if sort_order == "desc":
-        query = query.order_by(sort_col.desc())
-    else:
-        query = query.order_by(sort_col.asc())
-
+async def list_machines(request: Request, error: str = "", db: Session = Depends(get_db)):
+    """Liste aller Maschinen; Sortieren und Filtern passiert im Browser (Spaltenköpfe)."""
+    machines = (db.query(Machine)
+                .options(selectinload(Machine.machine_type), selectinload(Machine.time_costs), selectinload(Machine.sheet_costs))
+                .order_by(Machine.name).all())
     return templates.TemplateResponse("machines/list.html", {
         "request": request,
-        "machines": query.all(),
+        "machines": machines,
         "electricity_price": load_calc_settings(db).electricity_price_kwh,
-        "search": search,
-        "sort_by": sort_by,
-        "sort_order": sort_order,
         "error_msg": error
     })
 

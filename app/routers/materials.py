@@ -55,47 +55,14 @@ def apply_material_form(db: Session, material: Material, values: dict) -> None:
     material.set_price(values["price"])
 
 @router.get("/materials", response_class=HTMLResponse)
-async def list_materials(
-    request: Request,
-    material_type: str = "",
-    search: str = "",
-    sort_by: str = "name",
-    sort_order: str = "asc",
-    error: str = "",
-    db: Session = Depends(get_db)
-):
-    """Liste aller Materialien"""
-    query = (db.query(Material).join(MaterialType, Material.material_type_id == MaterialType.id)
-             .outerjoin(Brand, Material.brand_id == Brand.id).options(selectinload(Material.brand)))
-    if material_type:
-        query = query.filter(MaterialType.key == material_type)
-    if search:
-        query = query.filter(
-            (Material.name.ilike(f"%{search}%")) |
-            (Brand.name.ilike(f"%{search}%")) |
-            (Material.color.ilike(f"%{search}%"))
-        )
-
-    sort_col = Material.name
-    if sort_by == "type":
-        sort_col = MaterialType.name
-    elif sort_by == "price":
-        sort_col = Material.price_per_unit
-
-    if sort_order == "desc":
-        query = query.order_by(sort_col.desc())
-    else:
-        query = query.order_by(sort_col.asc())
-
+async def list_materials(request: Request, error: str = "", db: Session = Depends(get_db)):
+    """Liste aller Materialien; Sortieren und Filtern passiert im Browser (Spaltenköpfe)."""
+    materials = (db.query(Material).options(selectinload(Material.brand), selectinload(Material.material_type))
+                 .order_by(Material.name).all())
     return templates.TemplateResponse("materials/list.html", {
         "request": request,
-        "materials": query.all(),
-        "material_type": material_type,
-        "material_types": get_material_types(db, only_active=False),
+        "materials": materials,
         "units": MATERIAL_UNITS,
-        "search": search,
-        "sort_by": sort_by,
-        "sort_order": sort_order,
         "error_msg": error
     })
 
@@ -226,40 +193,13 @@ async def delete_material(material_id: int, db: Session = Depends(get_db)):
 # =============================================================================
 
 @router.get("/material-types", response_class=HTMLResponse)
-async def list_material_types(
-    request: Request,
-    search: str = "",
-    sort_by: str = "name",
-    sort_order: str = "asc",
-    db: Session = Depends(get_db)
-):
+async def list_material_types(request: Request, db: Session = Depends(get_db)):
     """Liste aller Materialtypen"""
-    query = db.query(MaterialType)
-
-    if search:
-        query = query.filter(
-            (MaterialType.name.ilike(f"%{search}%")) |
-            (MaterialType.key.ilike(f"%{search}%"))
-        )
-
-    sort_col = MaterialType.name
-    if sort_by == "sort_order":
-        sort_col = MaterialType.sort_order
-    elif sort_by == "key":
-        sort_col = MaterialType.key
-
-    if sort_order == "desc":
-        query = query.order_by(sort_col.desc())
-    else:
-        query = query.order_by(sort_col.asc())
-
-    material_types = query.all()
+    material_types = db.query(MaterialType).order_by(MaterialType.name).all()
     return templates.TemplateResponse("materials/type_list.html", {
         "request": request,
         "material_types": material_types,
-        "search": search,
-        "sort_by": sort_by,
-        "sort_order": sort_order
+        "title": "Materialtypen"
     })
 
 

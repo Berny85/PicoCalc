@@ -2,7 +2,7 @@
 from sqlalchemy.orm import Session
 
 from calc import BILLING_TIME, BILLING_SHEET
-from models import Category, MachineType, MaterialType
+from models import MachineType, MaterialType
 
 DEFAULT_MATERIAL_TYPES = [
     ("filament", "3D-Filament (€/kg)", "Filament für 3D-Drucker", 1),
@@ -20,13 +20,6 @@ DEFAULT_MACHINE_TYPES = [
     ("Sonstiges", BILLING_TIME),
 ]
 
-DEFAULT_CATEGORIES = [
-    "Dekoration", "Technik", "Ersatzteile", "Spielzeug",
-    "Werkzeuge", "Sticker", "Papierprodukte", "Sonstiges",
-]
-
-FALLBACK_CATEGORY = "Sonstiges"
-
 
 def seed_defaults(db: Session) -> None:
     if not db.query(MaterialType).first():
@@ -36,9 +29,5 @@ def seed_defaults(db: Session) -> None:
     if not db.query(MachineType).first():
         for i, (name, mode) in enumerate(DEFAULT_MACHINE_TYPES):
             db.add(MachineType(name=name, default_billing_mode=mode, sort_order=i))
-
-    if not db.query(Category).first():
-        for i, name in enumerate(DEFAULT_CATEGORIES):
-            db.add(Category(name=name, sort_order=i))
 
     db.commit()

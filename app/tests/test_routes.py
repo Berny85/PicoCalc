@@ -30,6 +30,26 @@ def machine_type_id(db, name="3D-Drucker"):
     return db.query(MachineType).filter(MachineType.name == name).one().id
 
 
+def assert_column_tools(html, numeric, dates=frozenset()):
+    """Listen filtern und sortieren über die Spaltenköpfe (static/js/table-tools.js): Tabelle ist markiert,
+    genau die erwarteten Spalten sind numerisch bzw. Datum, 'Aktionen' bleibt unberührt, und es gibt kein
+    eigenes Suchformular."""
+    assert 'class="data-table"' in html
+    assert 'name="search"' not in html and 'name="sort_by"' not in html
+    headers = re.findall(r"<th(\s[^>]*)?>(.*?)</th>", html, re.S)
+    assert headers
+    kinds = {}
+    for attrs, content in headers:
+        label = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", content)).strip()
+        kind = re.search(r'data-col="(\w+)"', attrs or "")
+        kinds[label] = kind.group(1) if kind else None
+    assert kinds["Aktionen"] is None
+    assert {label for label, kind in kinds.items() if kind == "number"} == numeric
+    assert {label for label, kind in kinds.items() if kind == "date"} == dates
+    assert all(kind == "text" for label, kind in kinds.items()
+               if label != "Aktionen" and label not in numeric and label not in dates)
+
+
 def add_material(client, db, name="PLA", unit="kg", price="20", type_key="filament"):
     r = client.post("/api/materials", data={
         "name": name, "material_type_id": material_type_id(db, type_key), "unit": unit, "price_per_unit": price,
@@ -87,6 +107,13 @@ def test_all_pages_render_on_an_empty_database(client):
         assert response.status_code == 200, f"{page}: {response.status_code}"
 
 
+def test_column_tool_assets_are_served_and_linked(client):
+    page = client.get("/materials").text
+    for path in ("/static/js/table-tools.js", "/static/css/table-tools.css"):
+        assert path in page
+        assert client.get(path).status_code == 200, path
+
+
 def test_unknown_ids_return_404(client):
     for page in ["/materials/99/edit", "/machines/99/edit", "/products/99", "/products/99/edit", "/events/99",
                  "/events/99/print", "/feedback-ideas/99/edit", "/material-types/99/edit"]:
@@ -107,7 +134,7 @@ def test_material_crud_and_delete_guard(client, db):
 
     assert "Testfilament" in client.get("/materials").text
     assert "Testfilament" in client.get(f"/materials/{material.id}/edit").text
-    assert client.get("/materials?material_type=filament&sort_by=type&sort_order=desc").status_code == 200
+    assert_column_tools(client.get("/materials").text, numeric={"Preis/Einheit"})
 
     r = client.post(f"/materials/{material.id}/update", data={
         "name": "Umbenannt", "material_type_id": material_type_id(db), "unit": "sheet", "price_per_unit": "0.2355",
@@ -152,7 +179,9 @@ def test_material_types_lifecycle(client, db):
     r = client.post("/material-types", data={"key": "textil", "name": "Textilien", "sort_order": "5"})
     assert r.status_code == 303
     type_id = db.query(MaterialType).filter(MaterialType.key == "textil").one().id
-    assert "Textilien" in client.get("/material-types").text
+    listing = client.get("/material-types").text
+    assert "Textilien" in listing
+    assert_column_tools(listing, numeric={"Sortierung"})
     assert client.post(f"/material-types/{type_id}/update", data={"key": "textil", "name": "Stoffe", "sort_order": "5", "is_active": "1"}).status_code == 303
 
     # Typ in Verwendung -> nur deaktivieren
@@ -178,7 +207,7 @@ def test_machine_crud_and_guards(client, db):
     machine = db.query(Machine).one()
     assert float(machine.power_w) == 100 and machine.billing_mode == "time"
     assert "Testdrucker" in client.get("/machines").text
-    assert client.get("/machines?sort_by=type&sort_order=desc").status_code == 200
+    assert_column_tools(client.get("/machines").text, numeric={"Abschreibung", "Lebensdauer", "Strom (W)", "Kosten"})
     assert client.get(f"/machines/{machine.id}/edit").status_code == 200
 
     r = client.post(f"/machines/{machine.id}/update", data={
@@ -243,9 +272,12 @@ def test_product_lifecycle(client, db):
     detail = client.get(f"/products/{product_id}").text
     assert "Sticker-Bogen" not in detail and "Manuell festgelegt" in detail and "Nur Kalkulation" in detail
 
-    for query in ["", "?search=Test", "?market_filter=market", "?market_filter=non_market", "?sort_by=type",
-                  "?sort_by=purchase_price&sort_order=desc", "?sort_by=selling_price", "?sort_by=updated_at"]:
-        assert client.get("/products" + query).status_code == 200, query
+    listing = client.get("/products").text
+    assert "Testprodukt" in listing
+    assert_column_tools(listing, numeric={"EK", "VK"}, dates={"Angelegt"})
+    assert 'data-sort="2.64"' in listing  # Zahl für die Spaltensortierung, unabhängig von der Anzeige
+    created = db.get(Product, product_id).created_at
+    assert f'data-sort="{created.isoformat()}"' in listing and created.strftime("%d.%m.%Y") in listing
     assert client.get("/api/products/search?q=Test").json()[0]["name"] == "Testprodukt"
 
     r = client.post(f"/products/{product_id}/toggle-market")
@@ -458,25 +490,23 @@ def test_feedback_lifecycle(client):
     assert client.get(f"/feedback-ideas/{item_id}/edit").status_code == 200
     assert client.post(f"/feedback-ideas/{item_id}/update", data={"description": "Noch mehr Farben"}).status_code == 303
     assert client.post(f"/feedback-ideas/{item_id}/status").status_code == 303
-    assert client.get("/feedback-ideas?status_filter=done").status_code == 200
+    assert 'data-value="Fertig"' in client.get("/feedback-ideas").text
+    assert_column_tools(client.get("/feedback-ideas").text, numeric=set(), dates={"Datum"})
     assert client.post(f"/feedback-ideas/{item_id}/delete").status_code == 303
 
 
-def test_settings_sync_categories_and_machine_types(client, db):
-    product_id, ids = create_recipe_product(client, db)  # Kategorie 'Sonstiges' wird verwendet
+def test_settings_sync_machine_types_and_prices(client, db):
+    product_id, ids = create_recipe_product(client, db)
     r = client.post("/settings", data={
         "electricity_price_kwh": "0,30", "labor_rate_per_hour": "22", "margin_multiplier": "2,5",
         "company_name": "Shop",
-        "product_categories": "Dekoration\nNeu",
         "machine_types": "3D-Drucker\nSchneideplotter | Bogen\nStickmaschine | Bogen",
     })
     assert r.status_code == 303
     page = client.get("/settings").text
-    categories = re.search(r'<textarea id="product_categories"[^>]*>(.*?)</textarea>', page, re.S).group(1)
+    assert "product_categories" not in page and "Kategorie" not in client.get("/products/new").text
     machine_types = re.search(r'<textarea id="machine_types"[^>]*>(.*?)</textarea>', page, re.S).group(1)
-    assert "Neu" in categories and "Stickmaschine | Bogen" in machine_types
-    assert "Sonstiges" in categories                    # in Verwendung -> bleibt trotz Streichung
-    assert "Technik" not in categories                  # ungenutzt -> entfernt
+    assert "Stickmaschine | Bogen" in machine_types
     assert "Tintenstrahl-Drucker" not in machine_types
     assert "3D-Drucker" in machine_types                # von einer Maschine verwendet
     assert client.get("/machines/new").status_code == 200

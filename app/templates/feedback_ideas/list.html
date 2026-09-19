@@ -9,65 +9,14 @@
         <a href="/feedback-ideas/new" class="btn btn-primary">+ Neuer Eintrag</a>
     </div>
     
-    <!-- Tabs -->
-    <div style="display: flex; gap: 10px; margin: 25px 0 15px 0; border-bottom: 2px solid var(--color-bg-hover);">
-        <a href="/feedback-ideas?status_filter=" 
-           class="btn {% if not status_filter %}btn-primary{% else %}btn-secondary{% endif %}"
-           style="border-radius: 4px 4px 0 0; margin-bottom: -2px;">
-            Alle ({{ open_count + done_count }})
-        </a>
-        <a href="/feedback-ideas?status_filter=open" 
-           class="btn {% if status_filter == 'open' %}btn-primary{% else %}btn-secondary{% endif %}"
-           style="border-radius: 4px 4px 0 0; margin-bottom: -2px;">
-            🟡 Offen ({{ open_count }})
-        </a>
-        <a href="/feedback-ideas?status_filter=done" 
-           class="btn {% if status_filter == 'done' %}btn-primary{% else %}btn-secondary{% endif %}"
-           style="border-radius: 4px 4px 0 0; margin-bottom: -2px;">
-            🟢 Fertig ({{ done_count }})
-        </a>
-    </div>
-    
-    <!-- Suchleiste und Sortierung -->
-    <form method="GET" action="/feedback-ideas" style="margin-bottom: 20px;">
-        <input type="hidden" name="status_filter" value="{{ status_filter }}">
-        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: end;">
-            <div style="flex: 1; min-width: 200px;">
-                <label style="font-size: 0.85rem; color: var(--color-text-light);">Suche</label>
-                <input type="text" name="search" value="{{ search }}" placeholder="In Beschreibungen suchen..." style="width: 100%;">
-            </div>
-            <div>
-                <label style="font-size: 0.85rem; color: var(--color-text-light);">Sortierung</label>
-                <select name="sort_by">
-                    <option value="created_at" {% if sort_by == 'created_at' %}selected{% endif %}>Erstellt am</option>
-                    <option value="updated_at" {% if sort_by == 'updated_at' %}selected{% endif %}>Zuletzt geändert</option>
-                    <option value="status" {% if sort_by == 'status' %}selected{% endif %}>Status</option>
-                </select>
-            </div>
-            <div>
-                <label style="font-size: 0.85rem; color: var(--color-text-light);">Reihenfolge</label>
-                <select name="sort_order">
-                    <option value="desc" {% if sort_order == 'desc' %}selected{% endif %}>Neueste zuerst</option>
-                    <option value="asc" {% if sort_order == 'asc' %}selected{% endif %}>Älteste zuerst</option>
-                </select>
-            </div>
-            <div>
-                <button type="submit" class="btn btn-primary">Anwenden</button>
-                {% if search or sort_by != 'created_at' or sort_order != 'desc' %}
-                <a href="/feedback-ideas?status_filter={{ status_filter }}" class="btn btn-secondary">Zurücksetzen</a>
-                {% endif %}
-            </div>
-        </div>
-    </form>
-    
     {% if items %}
     <div class="table-responsive">
-        <table>
+        <table class="data-table">
             <thead>
                 <tr>
-                    <th>Beschreibung</th>
-                    <th>Status</th>
-                    <th>Datum</th>
+                    <th data-col="text" data-list="off">Beschreibung</th>
+                    <th data-col="text">Status</th>
+                    <th data-col="date">Datum</th>
                     <th style="text-align: right;">Aktionen</th>
                 </tr>
             </thead>
@@ -77,14 +26,14 @@
                     <td style="white-space: normal;">
                         {{ item.description }}
                     </td>
-                    <td>
+                    <td data-value="{% if item.status == 'done' %}Fertig{% else %}Offen{% endif %}">
                         {% if item.status == 'done' %}
                         <span style="color: #28a745; font-weight: bold;">🟢 Fertig</span>
                         {% else %}
                         <span style="color: #ffc107; font-weight: bold;">🟡 Offen</span>
                         {% endif %}
                     </td>
-                    <td style="font-size: 0.85rem; color: var(--color-text-light);">
+                    <td data-sort="{{ item.created_at.isoformat() }}" style="font-size: 0.85rem; color: var(--color-text-light);">
                         {{ item.created_at.strftime('%d.%m.%Y %H:%M') }}
                     </td>
                     <td style="text-align: right;">
@@ -108,14 +57,8 @@
     </div>
     {% else %}
     <p style="text-align: center; padding: 40px; color: var(--color-text-light);">
-        {% if status_filter == 'open' %}
-        Keine offenen Einträge. 🎉
-        {% elif status_filter == 'done' %}
-        Noch keine erledigten Einträge.
-        {% else %}
         Noch keine Einträge vorhanden.
         <a href="/feedback-ideas/new">Ersten Eintrag anlegen</a>
-        {% endif %}
     </p>
     {% endif %}
 </div>

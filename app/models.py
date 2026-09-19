@@ -48,19 +48,6 @@ def machine_type_label(machines) -> str:
     return " + ".join(names) if names else "Handarbeit"
 
 
-class Category(Base):
-    """Produktkategorien (Dekoration, Sticker, ...)"""
-    __tablename__ = "categories"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), nullable=False, unique=True)
-    sort_order = Column(Integer, nullable=False, default=0)
-
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    def __repr__(self):
-        return self.name
-
 
 class MachineType(Base):
     """Maschinentypen (3D-Drucker, Schneideplotter, ...). Der Typ ist nur ein Etikett; wie eine
@@ -311,7 +298,6 @@ class Product(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
-    category_id = Column(Integer, ForeignKey("categories.id", ondelete="SET NULL"), nullable=True)
     notes = Column(Text, nullable=True)
 
     # Wie viele Verkaufseinheiten entstehen aus einer Charge
@@ -326,7 +312,6 @@ class Product(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    category = relationship("Category")
     material_links = relationship(
         "ProductMaterial", back_populates="product", cascade="all, delete-orphan",
         order_by="ProductMaterial.sort_order",
