@@ -72,13 +72,15 @@ Auf dem NUC läuft noch die Compose-Datei vom Umzug (`docker-compose.yml`, lokal
    cd /srv/containers/picocalc
    git status --short
    ```
-   Erwartet sind nur `docker-compose.yml` (neu, `??`) und ggf. eine gelöschte `docker-compose.yaml` (` D`). Die laufende Datei
-   sichern und den Zustand herstellen, den `git pull` erwartet:
+   Erwartet sind ` D docker-compose.yaml` (lokal gelöscht) und `?? docker-compose.yml` (die Datei vom Umzug), dazu untracked
+   Ordner/Dateien wie `.env`, `logs/`, `storage/`, `pgadmin/`, `picocalc_dump.sql`. Die Warnungen zu `db_data/pgdata/` sind
+   harmlos (gehört dem Postgres-Benutzer). Die laufende Datei in Sicherheit bringen und den Zustand herstellen, den
+   `git pull` erwartet:
    ```bash
-   cp docker-compose.yml ~/docker-compose.picocalc-nuc.bak
-   git checkout -- docker-compose.yaml 2>/dev/null || true
-   mv docker-compose.yml docker-compose.yml.alt        # verhindert, dass Compose zwei Dateien findet
+   mv docker-compose.yml ~/docker-compose.picocalc-nuc.yml   # Sicherung; verhindert außerdem zwei Compose-Dateien im Ordner
+   git checkout -- docker-compose.yaml                        # sonst bricht der Pull wegen der gelöschten Datei ab
    ```
+   Die laufenden Container bleiben davon unberührt.
    Zeigt `git status` weitere geänderte Dateien, erst ansehen (`git diff --stat`) und klären. **Nicht** `git clean` oder
    `git stash -u` verwenden: `db_data/` enthält die Datenbank.
 3. `git pull origin main` – holt Skripte und Compose-Datei. Die laufenden Container bleiben unberührt (der Code steckt im Image).
