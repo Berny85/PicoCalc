@@ -284,7 +284,7 @@ docker compose run --rm --no-deps \
 ## Security Considerations
 
 1. **Keine sensiblen Daten im Code** - Passwörter in der `.env` auf dem Server (steht in `.gitignore`)
-2. **Datenbank** - PostgreSQL im Docker-Netzwerk, Port 5432 auf dem Host erreichbar (nur im lokalen Netz betreiben)
+2. **Datenbank** - PostgreSQL im Docker-Netzwerk, Port 5432 ist in Produktion nur an `127.0.0.1` des NUC gebunden (Zugriff von außen per SSH-Tunnel)
 3. **Keine Authentifizierung** - Die App hat keine Benutzeranmeldung (nur interner Gebrauch, nicht ins Internet freigeben)
 4. **Dev-Standardzugänge** - `docker-compose.yaml` enthält `printuser/printpass` und pgAdmin `admin@admin.com/admin` (nur lokal)
 

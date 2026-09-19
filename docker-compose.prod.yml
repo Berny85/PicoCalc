@@ -25,7 +25,7 @@ services:
       - POSTGRES_PASSWORD=${DB_PASSWORD:?DB_PASSWORD fehlt in der .env}
       - PGDATA=/var/lib/postgresql/data/pgdata
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"   # nur der NUC selbst; von außen per SSH-Tunnel (siehe DEPLOYMENT.md)
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U printuser -d printcalc"]
       interval: 5s

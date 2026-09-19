@@ -124,6 +124,14 @@ docker start picocalc-app
 ```
 
 > Auf dem Debian-Server lief bisher **kein** automatisches Backup (der frühere `offen/docker-volume-backup`-Dienst gehörte zur Unraid-Compose). Das OMV-Backup ersetzt ihn.
+## Datenbank-Zugriff von außen (pgAdmin)
+
+Postgres ist auf dem NUC nur an `127.0.0.1:5432` gebunden, vom PC aus geht es per SSH-Tunnel:
+
+- **pgAdmin:** beim Server im Reiter *SSH Tunnel* aktivieren (Host `192.168.50.8`, Port `22`, Benutzer `berny`); unter *Connection*
+  Host `localhost`, Port `5432`, Datenbank `printcalc`, Benutzer `printuser`, Passwort = `DB_PASSWORD` aus der `.env`.
+- **Von Hand:** `ssh -L 5433:localhost:5432 berny@192.168.50.8` (Fenster offen lassen), pgAdmin dann auf `localhost:5433`.
+
 ## Datenbank-Migrationen (Alembic)
 
 - Migrationen liegen in `app/alembic/versions/`, die Baseline ist Revision `0001`.
