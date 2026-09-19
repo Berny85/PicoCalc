@@ -25,14 +25,15 @@ Der NUC bindet dort schon `192.168.50.202:/export/accounting` ein. Für PicoCalc
    *Extra-Optionen* wie beim Share `accounting` (bei dem das Schreiben vom NUC aus bereits funktioniert). Als `root` schreibt
    der NUC standardmäßig nicht auf einen NFS-Share: entweder `no_root_squash` in den Extra-Optionen (im reinen Heimnetz
    vertretbar) oder die Rechte des Ordners für den NFS-Benutzer passend setzen. *Speichern*, *Änderungen übernehmen*.
-3. Der Exportpfad folgt dem Muster des vorhandenen Shares: `/export/picocalc-backup` (im OMV unter *NFS → Freigaben* prüfen).
+3. Der Exportpfad des Shares (im OMV unter *NFS → Freigaben*, mit `showmount -e 192.168.50.202` vom NUC aus prüfbar) ist hier
+   `/export/backup`. Das Skript legt darin selbst den Unterordner `picocalc/` an, der Share kann also auch andere Backups aufnehmen.
 
 ### 2. NUC: Share einbinden
 `nfs-common` ist wegen des `accounting`-Mounts schon installiert. Mountpunkt anlegen und in `/etc/fstab` eintragen (gleiche Optionen
 wie die vorhandene Zeile):
 ```bash
 sudo mkdir -p /mnt/omv-backup
-echo '192.168.50.202:/export/picocalc-backup /mnt/omv-backup nfs defaults,_netdev,nofail 0 0' | sudo tee -a /etc/fstab
+echo '192.168.50.202:/export/backup /mnt/omv-backup nfs defaults,_netdev,nofail 0 0' | sudo tee -a /etc/fstab
 sudo systemctl daemon-reload
 sudo mount /mnt/omv-backup
 mountpoint /mnt/omv-backup && sudo touch /mnt/omv-backup/test && sudo rm /mnt/omv-backup/test && echo "Schreiben OK"

@@ -66,9 +66,12 @@ log "Datenbank $DB_NAME aus $DB_CONTAINER sichern -> $DB_FILE"
 TMP_FILES+=("$DB_FILE.part")
 docker exec "$DB_CONTAINER" pg_dump -U "$DB_USER" -Fc "$DB_NAME" > "$DB_FILE.part"
 [[ -s "$DB_FILE.part" ]] || fail "Der Datenbank-Dump ist leer."
-# Prüfung: pg_restore muss das Inhaltsverzeichnis des Dumps lesen können
-docker exec -i "$DB_CONTAINER" pg_restore --list < "$DB_FILE.part" | grep -q "TABLE public" \
-    || fail "Der Datenbank-Dump ist nicht lesbar oder enthält keine Tabellen."
+# Prüfung: pg_restore muss das Inhaltsverzeichnis des Dumps lesen können. Die Ausgabe wird erst komplett
+# gesammelt: "| grep -q" würde die Pipe beim ersten Treffer schließen, pg_restore bekäme SIGPIPE und
+# scheiterte unter pipefail (je nach Timing) trotz gültigem Dump.
+DUMP_LIST=$(docker exec -i "$DB_CONTAINER" pg_restore --list < "$DB_FILE.part") \
+    || fail "pg_restore kann den Datenbank-Dump nicht lesen."
+grep -q "TABLE public" <<<"$DUMP_LIST" || fail "Der Datenbank-Dump enthält keine Tabellen."
 mv -- "$DB_FILE.part" "$DB_FILE"
 log "  OK ($(du -h "$DB_FILE" | cut -f1))"
 
