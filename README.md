@@ -34,7 +34,7 @@ docker compose run --rm --no-deps \
 .\backup-to-local.ps1   # Datenbank-Dump und Dateien vom NUC auf den lokalen Rechner sichern
 ```
 
-Einzelheiten, Wiederherstellung und die einmalige Umstellung auf das neue Datenbankschema stehen in
+Einzelheiten, Wiederherstellung und die Regeln für die Live-Datenbank (Migrationen immer mit Datenerhalt) stehen in
 [DEPLOYMENT.md](DEPLOYMENT.md). Architektur, Datenmodell und Konventionen für die Weiterentwicklung stehen in
 [AGENTS.md](AGENTS.md).
 
@@ -46,6 +46,6 @@ Einzelheiten, Wiederherstellung und die einmalige Umstellung auf das neue Datenb
 | `docker-compose.yaml` | Entwicklungsumgebung |
 | `deploy-to-nuc.ps1`, `backup-to-local.ps1` | Deployment und Backup für den Debian-NUC |
 | `migrate.sh`, `migrate.ps1` | Alembic-Hilfsskripte für die Entwicklung |
-| `reset-prod.sh` | Datenbank auf dem Server zurücksetzen (einmalig nach dem Schema-Umbau) |
+| `reset-prod.sh` | gesperrt (löscht die Datenbank); nur mit `PICOCALC_ALLOW_DATA_LOSS=yes` für den Notfall |
 | `scripts/backup/` | Automatisches Backup auf den OMV (NFS, systemd-Timer) |
 | `scripts/migration/` | Einmal-Skripte vom Umzug Unraid → Debian |

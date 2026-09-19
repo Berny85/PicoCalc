@@ -27,9 +27,20 @@
 # Datenbank zurückgespielt werden.
 #
 # Andere Containernamen:  APP_CONTAINER=... DB_CONTAINER=... ./reset-prod.sh [--ohne-start]
+#
+# !!! SEIT 2026-09-19 GESPERRT: Die Live-Datenbank enthält echte Daten, die nie mehr gelöscht werden
+# !!! sollen. Schema-Änderungen laufen ausschließlich als Alembic-Migration mit Datenerhalt.
+# !!! Das Skript läuft nur noch mit  PICOCALC_ALLOW_DATA_LOSS=yes  (Notfall, z. B. defekte Datenbank).
 # =============================================================================
 
 set -euo pipefail
+
+if [[ "${PICOCALC_ALLOW_DATA_LOSS:-}" != "yes" ]]; then
+    echo "GESPERRT: Dieses Skript löscht die komplette Datenbank, und die Live-Daten sollen erhalten bleiben."
+    echo "Schema-Änderungen laufen über Alembic-Migrationen mit Datenerhalt (siehe DEPLOYMENT.md)."
+    echo "Nur im Notfall, bewusst:  PICOCALC_ALLOW_DATA_LOSS=yes bash reset-prod.sh"
+    exit 1
+fi
 
 START_APP=1
 case "${1:-}" in

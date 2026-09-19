@@ -5,9 +5,10 @@
 #   ssh berny@192.168.50.8
 #   cd /srv/containers/picocalc && bash deploy.sh
 #
-# Ablauf: Code aus GitHub holen -> Container stoppen -> neu bauen und starten -> auf Datenbank und
-# App warten -> Status zeigen. Die App legt/aktualisiert das Datenbankschema beim Start selbst (Alembic).
-# Daten (./db_data, ./storage) bleiben erhalten.
+# Ablauf: Code aus GitHub holen -> Datenbank sichern (Dump nach ~/picocalc-predeploy, letzte 10 bleiben)
+# -> Container stoppen -> neu bauen und starten -> auf Datenbank und App warten -> Status zeigen.
+# Die App legt/aktualisiert das Datenbankschema beim Start selbst (Alembic, immer mit Datenerhalt).
+# Daten (./db_data, ./storage) bleiben erhalten; dieses Skript löscht nie Daten.
 # =============================================================================
 
 set -euo pipefail
@@ -31,7 +32,7 @@ echo "========================================"
 [ -f "$COMPOSE_FILE" ] || { error "$COMPOSE_FILE nicht gefunden - liegt das Skript im Projektordner?"; exit 1; }
 [ -f .env ] || { error ".env fehlt (DB_PASSWORD wird benötigt)"; exit 1; }
 
-log "[1/5] Aktualisiere Code aus GitHub..."
+log "[1/6] Aktualisiere Code aus GitHub..."
 if ! git pull origin main; then
     error "git pull ist fehlgeschlagen."
     warning "Bei 'dubiose Besitzverhältnisse' einmalig:  git config --global --add safe.directory $(pwd)"
@@ -40,15 +41,34 @@ if ! git pull origin main; then
 fi
 success "Code aktualisiert ($(git log --oneline -1))"
 
-log "[2/5] Stoppe alte Container (Daten bleiben erhalten)..."
+log "[2/6] Sichere die Datenbank vor dem Deploy (Migrationen laufen beim App-Start)..."
+PREDEPLOY_DIR="${PREDEPLOY_BACKUP_DIR:-$HOME/picocalc-predeploy}"
+KEEP_PREDEPLOY=10
+if [ "$(docker inspect -f '{{.State.Running}}' picocalc-db 2>/dev/null || true)" = "true" ]; then
+    mkdir -p "$PREDEPLOY_DIR"
+    PREDEPLOY_FILE="$PREDEPLOY_DIR/picocalc_$(date +%Y-%m-%d_%H%M%S).dump"
+    if $DC exec -T db pg_dump -U printuser -Fc printcalc > "$PREDEPLOY_FILE" && [ -s "$PREDEPLOY_FILE" ]; then
+        success "Dump: $PREDEPLOY_FILE ($(du -h "$PREDEPLOY_FILE" | cut -f1))"
+        # nur die letzten $KEEP_PREDEPLOY Dumps behalten
+        ls -1t "$PREDEPLOY_DIR"/picocalc_*.dump | tail -n +$((KEEP_PREDEPLOY + 1)) | xargs -r rm -f --
+    else
+        rm -f "$PREDEPLOY_FILE"
+        error "Der Datenbank-Dump vor dem Deploy ist fehlgeschlagen - Deploy abgebrochen, es wurde nichts verändert."
+        exit 1
+    fi
+else
+    warning "Datenbank-Container läuft nicht - kein Dump (normal beim allerersten Deploy)."
+fi
+
+log "[3/6] Stoppe alte Container (Daten bleiben erhalten)..."
 $DC down
 success "Container gestoppt"
 
-log "[3/5] Baue und starte neue Container..."
+log "[4/6] Baue und starte neue Container..."
 $DC up --build -d
 success "Container gestartet"
 
-log "[4/5] Warte auf Datenbank und App (max. 90 Sekunden)..."
+log "[5/6] Warte auf Datenbank und App (max. 90 Sekunden)..."
 for i in $(seq 1 45); do
     if $DC exec -T db pg_isready -U printuser -d printcalc >/dev/null 2>&1; then
         break
@@ -69,14 +89,14 @@ if [ "$APP_OK" = "1" ]; then
 else
     error "App antwortet nicht. Letzte Log-Zeilen:"
     $DC logs web --tail 25
-    warning "Typische Ursache nach dem Schema-Umbau: alte Datenbank -> ./reset-prod.sh (siehe DEPLOYMENT.md)"
+    warning "Startet die App wegen einer fehlerhaften Migration nicht, bleiben die Daten unberührt. Der Dump vor dem Deploy liegt in $PREDEPLOY_DIR (Wiederherstellung: DEPLOYMENT.md)."
     exit 1
 fi
 
 echo -n "Schema-Revision: "
 $DC exec -T db psql -U printuser -d printcalc -At -c "SELECT version_num FROM alembic_version;" || true
 
-log "[5/5] Container-Status:"
+log "[6/6] Container-Status:"
 $DC ps
 
 echo ""

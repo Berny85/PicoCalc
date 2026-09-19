@@ -68,7 +68,7 @@ PicoCalc/
 ├── deploy.sh                     # Deployment, wird AUF dem NUC ausgeführt (bash deploy.sh)
 ├── deploy-to-nuc.ps1             # Deployment auf den Debian-NUC (PowerShell)
 ├── backup-to-local.ps1           # Voll-Backup vom NUC auf den lokalen Rechner
-├── reset-prod.sh                 # DB auf dem Server zurücksetzen, Option --ohne-start (⚠️ löscht Daten, siehe DEPLOYMENT.md)
+├── reset-prod.sh                 # GESPERRT: löscht die DB (Live-Daten!); läuft nur mit PICOCALC_ALLOW_DATA_LOSS=yes
 ├── README.md                     # Projekt-Übersicht (Deutsch)
 └── DEPLOYMENT.md                 # Deployment, Backup, Umstellung, Fehlersuche (Deutsch)
 ```
@@ -203,7 +203,7 @@ docker-compose up -d
 .\deploy-to-nuc.ps1     # committen (optional), pushen, auf dem NUC `bash deploy.sh` ausführen
 .\backup-to-local.ps1   # Voll-Backup vom NUC herunterladen
 ```
-Auf dem NUC (`/srv/containers/picocalc`): `bash deploy.sh`, `docker logs picocalc-app`, `docker logs picocalc-db`, `bash reset-prod.sh`.
+Auf dem NUC (`/srv/containers/picocalc`): `bash deploy.sh`, `docker logs picocalc-app`, `docker logs picocalc-db`. Kein Reset der Live-Datenbank (siehe Migrationen).
 Ablauf, Wiederherstellung und die einmalige Schema-Umstellung: siehe `DEPLOYMENT.md`.
 
 ## Development Workflow
@@ -338,7 +338,11 @@ Alembic liegt in `app/alembic/` (eine einzige Kopie, im Container unter `/app/al
 
 ### Wichtig
 - Baseline ist Revision `0001` (Neuaufbau am 2026-09-18), `0002` entfernt die Produkt-Kategorien. Die früheren Migrationen einer Vorgängerversion wurden entfernt.
-- **Bestehende Datenbanken** (Produktion) haben eine unbekannte `alembic_version` und das alte Schema und müssen einmalig zurückgesetzt werden: Backup ziehen, dann `reset-prod.sh` (löscht die DB-Daten). Die App legt das neue Schema beim Start selbst an; danach Materialien, Maschinen und Einstellungen neu erfassen.
+- **⚠️ Live-Daten (seit 2026-09-19): Die Produktivdatenbank enthält echte Daten und wird nie mehr geleert.** Schema-Änderungen nur als Migration **mit Datenerhalt**:
+  - ausgelieferte Migrationen (`0001`, `0002`, …) nie ändern, immer eine neue anlegen;
+  - neue Spalten `nullable` oder mit `server_default`; Umbauten in Schritten (neu anlegen → Daten per `op.execute` kopieren → erst dann alte Spalte/Tabelle löschen); nichts mit Nutzerdaten löschen, ohne es vorher zu übernehmen;
+  - jede Migration, die bestehende Zeilen berührt, bekommt einen Test nach dem Muster `test_migration_0002_removes_categories_and_keeps_products` (Vorgängerstand, Daten einfügen, `head`, prüfen);
+  - `reset-prod.sh` ist gesperrt (nur mit `PICOCALC_ALLOW_DATA_LOSS=yes`), niemals `db_data/` löschen oder `docker compose down -v` auf dem NUC ausführen; `deploy.sh` sichert vor jedem Deploy per Dump nach `~/picocalc-predeploy/`.
 - Die `env.py` liest `DATABASE_URL` aus den Umgebungsvariablen
 
 ## Common Tasks
@@ -384,15 +388,11 @@ docker-compose down -v  # Entfernt Volumes
 docker-compose up -d    # Erstellt neu
 ```
 
-### Production Reset (⚠️ Zerstört alle Daten)
-```bash
-# Nur auf dem NUC in /srv/containers/picocalc, NACH dem Deployment der neuen Version.
-# Legt vorher selbst einen Dump im Home-Verzeichnis an. Ablauf: siehe DEPLOYMENT.md
-./reset-prod.sh
-```
-
-Typische Fehlermeldungen einer alten Datenbank: `Can't locate revision identified by '...'` (fremde Alembic-Revision) oder
-`relation "..." already exists` (Tabellen ohne Alembic-Revision). Beides behebt der Reset.
+### Production: kein Reset mehr
+Die Produktivdatenbank enthält seit 2026-09-19 echte Daten (siehe „Wichtig“ bei den Migrationen). `reset-prod.sh` ist gesperrt und nur
+für den Notfall einer defekten Datenbank gedacht (`PICOCALC_ALLOW_DATA_LOSS=yes`). Bei `Can't locate revision identified by '...'` läuft
+ein älterer Code-Stand gegen eine neuere Datenbank → den aktuellen Code deployen. Bei `relation "..." already exists` fehlt die Alembic-Revision
+→ Log lesen und die Migration bzw. `alembic_version` anpassen, nichts löschen.
 
 ## Important Notes for AI Agents
 
